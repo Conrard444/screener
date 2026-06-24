@@ -14,6 +14,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  // Firebase-config (mag openbaar zijn; beveiliging zit in de Firestore-regels)
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyBE5MdwAbiWwksN49LQUr_KEMo6kp19sIo",
+    authDomain: "conrardscreener.firebaseapp.com",
+    projectId: "conrardscreener",
+    storageBucket: "conrardscreener.firebasestorage.app",
+    messagingSenderId: "506797816771",
+    appId: "1:506797816771:web:1b07e8b760445c880e1b76"
+  };
+</script>
 <style>
   :root{
     --bg:#0e1116;--panel:#161b22;--panel-2:#1c232d;--line:#2a323d;
@@ -287,6 +301,11 @@
     <p class="sub" style="margin-top:18px">Hier legt de tool vast wat je screende en meet achteraf hoe accuraat de scores bleken. Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien.</p>
     <div class="disclaimer">&#9888;&#65039; Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een ietwat betrouwbaar beeld, en zelfs dan blijft verleden geen garantie voor de toekomst. Gebruik dit om te leren, niet om zekerheid te claimen.</div>
 
+    <div class="snap" id="syncBar" style="border-left:3px solid var(--blue);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span id="syncStatus" style="flex:1;min-width:200px;font-size:13px;color:var(--muted)">&#9729;&#65039; Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.</span>
+      <button class="btn-ghost" id="loginBtn">Inloggen met Google</button>
+      <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
+    </div>
     <div class="track-actions">
       <button class="btn-save" id="snapshot">&#128190; Huidige screening vastleggen</button>
       <button class="btn-ghost" id="export">&#8595; Exporteer geschiedenis (bestand)</button>
@@ -1040,6 +1059,7 @@ function takeSnapshot(){
     weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value},items:items});
   tStat("Vastgelegd: "+items.length+" aandelen op "+new Date().toLocaleDateString()+(isDemo?" (let op: demodata)":"")+".");
   renderSnapList();
+  if(typeof saveCloud==="function")saveCloud();
 }
 
 // accuratesse meten: haal huidige koersen op voor aandelen in snapshots, vergelijk met toenmalige
@@ -1200,6 +1220,7 @@ function importHistory(file){
       HISTORY.sort(function(a,b){return a.ts-b.ts;});
       tStat("Geschiedenis ge\u00efmporteerd \u2014 nu "+HISTORY.length+" momentopnamen.");
       renderSnapList();
+      if(typeof saveCloud==="function")saveCloud();
     }catch(err){tStat("Importeren mislukte: ongeldig bestand.",true);}
   };
   reader.readAsText(file);
@@ -1210,7 +1231,70 @@ $('measure').onclick=measureAccuracy;
 $('export').onclick=exportHistory;
 $('importBtn').onclick=function(){$('importFile').click();};
 $('importFile').onchange=function(e){if(e.target.files[0])importHistory(e.target.files[0]);};
-$('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.length+" momentopnamen wissen?")){HISTORY=[];renderSnapList();$('kpiWrap').innerHTML='';$('factorWrap').innerHTML='';$('scatterWrap').innerHTML='';tStat("Geschiedenis gewist.");}};
+$('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.length+" momentopnamen wissen?")){HISTORY=[];renderSnapList();$('kpiWrap').innerHTML='';$('factorWrap').innerHTML='';$('scatterWrap').innerHTML='';tStat("Geschiedenis gewist.");saveCloud();}};
+
+// ---- Firebase cloud-sync ----
+var FB={app:null,auth:null,db:null,user:null,ready:false};
+function syncMsg(t){var e=$('syncStatus');if(e)e.innerHTML=t;}
+(function initFirebase(){
+  if(typeof firebase==="undefined"||!window.FIREBASE_CONFIG){
+    syncMsg("\u2601\ufe0f Cloud-sync niet beschikbaar (Firebase niet geladen \u2014 werkt alleen op de online versie).");
+    return;
+  }
+  try{
+    FB.app=firebase.initializeApp(FIREBASE_CONFIG);
+    FB.auth=firebase.auth();
+    FB.db=firebase.firestore();
+    FB.ready=true;
+    FB.auth.onAuthStateChanged(function(user){
+      FB.user=user;
+      if(user){
+        $('loginBtn').style.display="none";
+        $('logoutBtn').style.display="";
+        syncMsg("\u2601\ufe0f Ingelogd als <b>"+(user.displayName||user.email)+"</b> \u2014 synchroniseren\u2026");
+        loadCloud();
+      }else{
+        $('loginBtn').style.display="";
+        $('logoutBtn').style.display="none";
+        syncMsg("\u2601\ufe0f Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.");
+      }
+    });
+  }catch(e){
+    syncMsg("\u2601\ufe0f Cloud-sync kon niet starten: "+(e&&e.message||e));
+  }
+})();
+
+$('loginBtn').onclick=function(){
+  if(!FB.ready){syncMsg("Cloud-sync werkt alleen op de online (https) versie van de pagina.");return;}
+  var prov=new firebase.auth.GoogleAuthProvider();
+  FB.auth.signInWithPopup(prov).catch(function(e){syncMsg("Inloggen mislukt: "+(e&&e.message||e));});
+};
+$('logoutBtn').onclick=function(){if(FB.auth)FB.auth.signOut();};
+
+// merge: voeg twee snapshot-lijsten samen, dedupe op ts
+function mergeHistory(a,b){
+  var seen={},out=[];
+  (a||[]).concat(b||[]).forEach(function(s){if(s&&s.ts&&!seen[s.ts]){seen[s.ts]=1;out.push(s);}});
+  out.sort(function(x,y){return x.ts-y.ts;});
+  return out;
+}
+function loadCloud(){
+  if(!FB.user)return;
+  FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var cloud=(doc.exists&&doc.data().history)||[];
+    var before=HISTORY.length;
+    HISTORY=mergeHistory(HISTORY,cloud);
+    renderSnapList();
+    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen (cloud: "+cloud.length+", lokaal was: "+before+").");
+    if(HISTORY.length>cloud.length)saveCloud(); // lokale extra's terugschrijven
+  }).catch(function(e){syncMsg("Ophalen uit cloud mislukt: "+(e&&e.message||e));});
+}
+function saveCloud(){
+  if(!FB.user||!FB.ready)return;
+  FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()}).then(function(){
+    syncMsg("\u2601\ufe0f Opgeslagen in cloud als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen.");
+  }).catch(function(e){syncMsg("Opslaan in cloud mislukt: "+(e&&e.message||e));});
+}
 
 CURRENT=DEMO;
 $('status').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel. Vul een sleutel in en klik "Screen het universum" voor live resultaten.';
