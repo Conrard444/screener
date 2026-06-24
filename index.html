@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Screener">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Markt-screener — Momentum × Waardering × Groei</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230e1116'/%3E%3Cpath d='M40 120 L70 90 L100 105 L140 60' stroke='%23d4a843' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='140' cy='60' r='9' fill='%2346c08a'/%3E%3C/svg%3E">
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Markt-screener%22%2C%22short_name%22%3A%22Screener%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230e1116%22%2C%22theme_color%22%3A%22%230e1116%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D%2527http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2527%2520viewBox%253D%25270%25200%2520180%2520180%2527%253E%253Crect%2520width%253D%2527180%2527%2520height%253D%2527180%2527%2520rx%253D%252740%2527%2520fill%253D%2527%25230e1116%2527%252F%253E%253Cpath%2520d%253D%2527M40%2520120%2520L70%252090%2520L100%2520105%2520L140%252060%2527%2520stroke%253D%2527%2523d4a843%2527%2520stroke-width%253D%252710%2527%2520fill%253D%2527none%2527%2520stroke-linecap%253D%2527round%2527%2520stroke-linejoin%253D%2527round%2527%252F%253E%253Ccircle%2520cx%253D%2527140%2527%2520cy%253D%252760%2527%2520r%253D%25279%2527%2520fill%253D%2527%252346c08a%2527%252F%253E%253C%252Fsvg%253E%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1116;--panel:#161b22;--panel-2:#1c232d;--line:#2a323d;
+    --ink:#e8eef5;--muted:#8a97a6;--accent:#d4a843;--green:#46c08a;
+    --red:#e0635f;--blue:#5aa9e6;--radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 85% -10%, rgba(212,168,67,.06), transparent 60%),var(--bg);
+    color:var(--ink);font-family:'IBM Plex Sans',sans-serif;line-height:1.5;padding:32px 20px 80px;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+  header{margin-bottom:24px;border-bottom:1px solid var(--line);padding-bottom:20px}
+  h1{font-family:'Fraunces',serif;font-weight:900;font-size:33px;letter-spacing:-.02em;line-height:1.05}
+  h1 .x{color:var(--accent);font-style:italic}
+  .sub{color:var(--muted);font-size:14px;margin-top:8px;max-width:660px}
+  .disclaimer{margin-top:14px;font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px}
+  .bar-top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:20px 0 14px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  input[type=text],input[type=password],input[type=number],select{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+    padding:9px 11px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  input[type=number]{width:92px}
+  button{cursor:pointer;border:none;border-radius:7px;font-family:'IBM Plex Sans';font-weight:600;font-size:13px;padding:10px 18px;transition:.15s}
+  .btn-go{background:var(--accent);color:#1a1206}
+  .btn-go:hover{filter:brightness(1.08)}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .btn-ghost:hover{color:var(--ink);border-color:var(--muted)}
+  .filters{display:flex;flex-wrap:wrap;gap:18px 22px;align-items:flex-end;margin:0 0 14px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .filters .grp{display:flex;flex-direction:column;gap:6px}
+  .filters .grp > span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:600}
+  .filters .row{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+  .weights{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 16px;font-size:12px;color:var(--muted);align-items:center;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .weights .wlabel{font-family:'IBM Plex Mono'}
+  .weights input[type=range]{accent-color:var(--accent);width:110px;vertical-align:middle}
+  .status{font-size:13px;color:var(--muted);margin:12px 2px;min-height:18px;font-family:'IBM Plex Mono'}
+  .status.err{color:var(--red)}
+  .demo-flag{color:var(--accent);font-family:'IBM Plex Mono'}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}
+  th:hover{color:var(--ink)}
+  th .q{display:inline-block;margin-left:3px;font-size:9px;width:13px;height:13px;line-height:13px;text-align:center;border-radius:50%;background:var(--panel-2);color:var(--muted);font-weight:600;vertical-align:middle;cursor:help}
+  th:hover .q{background:var(--accent);color:#1a1206}
+  th.l,td.l{text-align:left}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--panel)}
+  .tk{font-family:'IBM Plex Mono';font-weight:600;font-size:14px}
+  .nm{color:var(--muted);font-size:11.5px;display:block;margin-top:2px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mkt{display:inline-block;font-size:9.5px;padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono';letter-spacing:.05em;margin-left:6px;vertical-align:middle}
+  .mkt.US{background:rgba(90,169,230,.15);color:var(--blue)}
+  .mkt.EU{background:rgba(212,168,67,.15);color:var(--accent)}
+  .pos{color:var(--green)}.neg{color:var(--red)}
+  .num{font-family:'IBM Plex Mono'}
+  .scorecell{font-family:'IBM Plex Mono';font-weight:600;font-size:15px}
+  .bar{position:relative;height:6px;border-radius:3px;background:var(--panel-2);margin-top:5px;overflow:hidden}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--accent),var(--green))}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:'IBM Plex Mono'}
+  .badge.strong{background:rgba(70,192,138,.16);color:var(--green)}
+  .badge.mid{background:rgba(212,168,67,.16);color:var(--accent)}
+  .badge.weak{background:rgba(224,99,95,.16);color:var(--red)}
+  .trap{font-size:10px;padding:3px 8px;border-radius:5px;font-weight:600;font-family:'IBM Plex Mono';cursor:help;white-space:nowrap}
+  .trap.ok{background:rgba(70,192,138,.14);color:var(--green)}
+  .trap.warn{background:rgba(212,168,67,.16);color:var(--accent)}
+  .trap.danger{background:rgba(224,99,95,.18);color:var(--red)}
+  .panel-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto}
+  .legend{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.7}
+  .legend b{color:var(--ink);font-weight:600}
+  .legend code{font-family:'IBM Plex Mono';background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:11.5px}
+  details{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:4px 18px}
+  summary{cursor:pointer;font-weight:600;padding:12px 0;font-size:14px}
+  details p{font-size:13px;color:var(--muted);margin:8px 0}
+  details code{font-family:'IBM Plex Mono';color:var(--accent);font-size:12px}
+  .tabs{display:flex;gap:4px;margin:18px 0 0;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;color:var(--muted);padding:11px 18px;font-family:'IBM Plex Sans';font-weight:600;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;border-radius:0;margin-bottom:-1px}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabpane{display:none}
+  .tabpane.active{display:block}
+  .track-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0}
+  .btn-save{background:var(--green);color:#06231a}
+  .btn-save:hover{filter:brightness(1.08)}
+  .kpi-row{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0}
+  .kpi{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .kpi .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .kpi .val{font-family:'IBM Plex Mono';font-size:26px;font-weight:600;margin-top:6px}
+  .kpi .val.pos{color:var(--green)}.kpi .val.neg{color:var(--red)}
+  .kpi .sub2{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .snap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin:10px 0}
+  .snap h4{font-family:'IBM Plex Mono';font-size:13px;font-weight:600;margin-bottom:4px}
+  .snap .meta{font-size:11.5px;color:var(--muted)}
+  .empty{color:var(--muted);font-size:13px;padding:30px 4px;text-align:center}
+  .factor-bar{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12.5px}
+  .factor-bar .fn{width:90px;color:var(--muted)}
+  .factor-bar .ft{flex:1;height:8px;background:var(--panel-2);border-radius:4px;overflow:hidden;position:relative}
+  .factor-bar .ft i{position:absolute;top:0;bottom:0;border-radius:4px}
+  .factor-bar .fv{width:54px;text-align:right;font-family:'IBM Plex Mono'}
+
+  /* ---- Mobiel: smalle schermen ---- */
+  @media (max-width:680px){
+    body{padding:16px 12px 60px}
+    h1{font-size:24px}
+    .sub{font-size:13px}
+    .bar-top,.filters{padding:12px;gap:10px}
+    .bar-top .field,.filters .grp{width:100%}
+    .bar-top input[type=password],.bar-top select,.field select,.field input{width:100%;min-width:0}
+    .bar-top button,.track-actions button{flex:1;min-width:130px;padding:12px 14px;font-size:14px}
+    .weights{gap:10px 14px;padding:12px}
+    .weights input[type=range]{width:100%}
+    .weights .wlabel{width:100%;display:flex;justify-content:space-between}
+    /* tabel horizontaal schuifbaar met momentum */
+    .panel-card{-webkit-overflow-scrolling:touch}
+    table{font-size:12px;min-width:680px}
+    th,td{padding:8px 8px}
+    .nm{max-width:120px}
+    .tabs{overflow-x:auto}
+    .tab{padding:10px 14px;font-size:13px;white-space:nowrap}
+    .kpi{min-width:calc(50% - 7px)}
+    .scrollhint{display:block}
+  }
+  .scrollhint{display:none;font-size:11px;color:var(--muted);margin:6px 2px;font-family:'IBM Plex Mono'}
+  /* installatie-tip balk */
+  .pwa-tip{display:none;margin:14px 0;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:8px;font-size:13px;color:var(--muted)}
+  .pwa-tip b{color:var(--ink)}
+  .pwa-tip button{background:none;border:1px solid var(--line);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:12px;margin-left:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Markt-screener <span class="x">×</span> Momentum · Waardering · Groei</h1>
+    <p class="sub">Doorzoekt een ingebouwd universum van grote VS- en EU-aandelen, scoort de kandidaten op momentum, waardering en groei, en zet de sterkste bovenaan — met een waarschuwing voor mogelijke waarde-vallen.</p>
+    <div class="disclaimer">&#9888;&#65039; Analyse-instrument, geen financieel advies en geen winstgarantie. De screener vindt aandelen die op papier aan je criteria voldoen &mdash; of ze stijgen blijft onzeker, want de markt heeft diezelfde cijfers al gezien. Een hoge score is een startpunt voor eigen onderzoek, geen koopsignaal.</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="screener">Screener</button>
+    <button class="tab" data-tab="tracking">Tracking &amp; accuratesse</button>
+  </div>
+
+  <div class="tabpane active" id="tab-screener">
+
+  <div class="pwa-tip" id="pwaTip">
+    <b>&#128241; Op je telefoon installeren:</b> open dit bestand online (via een https-link), tik dan op iPhone in Safari op <b>Deel &rarr; Zet op beginscherm</b>, of op Android in Chrome op <b>&#8942; &rarr; App installeren</b>. De screener verschijnt dan als icoon, opent schermvullend, en je bewaarde sleutels blijven op dat toestel.
+    <button id="pwaTipClose">verberg</button>
+  </div>
+
+  <div class="bar-top">
+    <div class="field">
+      <label>Databron</label>
+      <select id="source">
+        <option value="finnhub" selected>Finnhub (ruime gratis tier, VS)</option>
+        <option value="fmp">Financial Modeling Prep</option>
+        <option value="eodhd">EODHD</option>
+      </select>
+    </div>
+    <div class="field">
+      <label id="keylabel">API-sleutel</label>
+      <input type="password" id="apikey" placeholder="laat leeg = demodata" autocomplete="off" style="min-width:200px">
+    </div>
+    <button class="btn-ghost" id="saveKey" title="Bewaart de sleutel in deze browser zodat je hem niet steeds opnieuw hoeft te plakken">&#128190; Bewaar sleutel</button>
+    <div class="field">
+      <label>Universum (meer = meer API-calls)</label>
+      <select id="exchange">
+        <option value="ALL_SMALL" selected>VS + EU compact (~20 aandelen)</option>
+        <option value="US_SMALL">VS compact (~15)</option>
+        <option value="EU_SMALL">EU compact (~12)</option>
+        <option value="US_ALL">VS volledig (~75)</option>
+        <option value="EU_ALL">EU volledig (~45)</option>
+        <option value="ALL">VS + EU alles (~120)</option>
+        <option value="SP500">S&amp;P 500 grootste ~200 \u2014 met vooranalyse</option>
+        <option value="SCANDI">Scandinavi\u00eb (~29)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Toon top</label>
+      <select id="limit">
+        <option value="15">15</option>
+        <option value="25" selected>25</option>
+        <option value="40">40</option>
+      </select>
+    </div>
+    <div class="field">
+      <label title="Stijgers: rangschikt op de vier factoren met jouw weging. Overdreven dalers: zoekt aandelen die hard zijn gedaald maar fundamenteel gezond bleven (30% dalingsdiepte + 35% kwaliteit + 35% waardering, weegregelaars gelden niet).">Zoekmodus</label>
+      <select id="mode">
+        <option value="stijgers" selected>Stijgers (momentum)</option>
+        <option value="herstel">Overdreven dalers (herstel)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label title="Korte termijn: jouw eigen weging, relatieve scores, geen demping \u2014 reageert snel maar schommelt. Lange termijn: zware nadruk op trage fundamenten (kwaliteit + waardering), momentum laag, absolute scores en demping over je opgeslagen metingen \u2014 veel stabieler.">Horizon</label>
+      <select id="horizon">
+        <option value="kort" selected>Korte termijn (reactief)</option>
+        <option value="lang">Lange termijn (stabiel)</option>
+      </select>
+    </div>
+    <button class="btn-go" id="run">Screen het universum</button>
+    <button class="btn-ghost" id="demo">Laad demo</button>
+    <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">&#8595; CSV</button>
+  </div>
+
+  <div class="filters">
+    <div class="grp">
+      <span>Omvang</span>
+      <div class="row">Marktwaarde &gt; <input type="number" id="mcap" value="0"> mld $</div>
+    </div>
+    <div class="grp">
+      <span>Waardering</span>
+      <div class="row">P/E lager dan <input type="number" id="pemax" value="40"></div>
+    </div>
+  </div>
+
+  <div class="weights">
+    <span style="color:var(--ink);font-weight:600">Score-weging:<span id="wnote" style="color:var(--accent);font-weight:400;font-size:11px"></span></span>
+    <span class="wlabel">Momentum <b id="wm-v">30</b>%</span><input type="range" id="wm" min="0" max="100" value="30">
+    <span class="wlabel">Waardering <b id="wv-v">25</b>%</span><input type="range" id="wv" min="0" max="100" value="25">
+    <span class="wlabel">Groei <b id="wg-v">15</b>%</span><input type="range" id="wg" min="0" max="100" value="15">
+    <span class="wlabel">Kwaliteit <b id="wq-v">30</b>%</span><input type="range" id="wq" min="0" max="100" value="30">
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="scrollhint">&#8596; veeg horizontaal om alle kolommen te zien</div>
+  <div class="panel-card">
+    <table>
+      <thead>
+        <tr>
+          <th class="l" data-k="symbol" title="Het beurssymbool (ticker) en de bedrijfsnaam. Aandelen met een puntsuffix zoals .AS of .PA zijn Europees.">Ticker<span class="q">?</span></th>
+          <th class="l" data-k="sector" title="De sector waarin het bedrijf actief is. De waarderingsscore (P/E, PEG, K/B) wordt berekend t.o.v. andere aandelen in dezelfde sector, want wat 'duur' of 'goedkoop' is verschilt sterk per sector.">Sector<span class="q">?</span></th>
+          <th data-k="price" title="De huidige aandelenkoers. Op de gratis databron is dit meestal de slotkoers van de vorige handelsdag, niet realtime.">Koers<span class="q">?</span></th>
+          <th data-k="chg" title="Hoeveel de koers vandaag is veranderd, in procent. Groen = gestegen, rood = gedaald.">&Delta; Dag<span class="q">?</span></th>
+          <th data-k="mom" title="Momentum over circa 1 maand: hoe ver de koers boven of onder het gemiddelde van de laatste 50 handelsdagen ligt. Positief = stijgende trend, negatief = dalende trend.">Mom. 1M<span class="q">?</span></th>
+          <th data-k="dd" title="Daling vanaf de hoogste koers van de afgelopen 52 weken, in procent. Een diepe daling kan een overdreven (macro-gedreven) afstraffing zijn óf een terecht signaal. Het label eronder vergelijkt met het sectorgemiddelde: 'met sector mee' wijst op een brede (macro) beweging, 'eigen probleem?' betekent dat dit aandeel veel harder viel dan sectorgenoten — dan weet de markt mogelijk iets bedrijfsspecifieks.">V.a. top<span class="q">?</span></th>
+          <th data-k="pe" title="Koers/winst-verhouding (Price/Earnings). Hoeveel je betaalt per euro winst. Lager = goedkoper gewaardeerd. Bv. 15 betekent: 15x de jaarwinst. Erg hoog kan duur of sterk groeiverwachting betekenen.">P/E<span class="q">?</span></th>
+          <th data-k="peg" title="PEG-ratio: de P/E gedeeld door de winstgroei. Corrigeert de waardering voor groei. Onder 1 geldt klassiek als aantrekkelijk; boven 2-3 als duur t.o.v. de groei.">PEG<span class="q">?</span></th>
+          <th data-k="pb" title="Koers/boekwaarde (Price/Book). De koers gedeeld door de nettowaarde van het bedrijf op de balans. Lager = je betaalt minder boven de boekwaarde. Bij tech vaak hoog, bij banken vaak laag.">K/B<span class="q">?</span></th>
+          <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
+          <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
+          <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
+          <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
+          <th data-k="score" title="Gecombineerde score 0-100, samengesteld uit momentum, waardering en groei volgens de weegregelaars hierboven. Hoger = stijgt én relatief goedkoop én groeiend. Een startpunt voor onderzoek, geen koopsignaal.">Score<span class="q">?</span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <p class="legend">
+    <b>Werkwijze &mdash; onderbouwd door factoronderzoek.</b> De vier pijlers volgen de academisch best gedocumenteerde aandelenfactoren: <b>momentum</b> (recente winnaars presteren historisch vaker door; het sterkst onderbouwde effect, over 150 jaar en 46 landen), <b>waardering</b> (goedkoop t.o.v. fundamentals, sector-relatief berekend), <b>kwaliteit</b> (hoge winstgevendheid, gezonde marges, lage schulden &mdash; veerkrachtig in volatiele markten) en <b>groei</b>. Eerlijke noot: groei op zichzelf is de zwakst onderbouwde van de vier &mdash; snelgroeiende bedrijven leveren historisch g&eacute;&eacute;n premie, winstg&eacute;vende wel; daarom staat de standaardweging van groei laag en die van kwaliteit en momentum hoog.<br>
+    <b>Herstel-modus (overdreven dalers):</b> zoekt aandelen die hard daalden vanaf hun 52-weeks top maar fundamenteel gezond bleven — score = 30% dalingsdiepte + 35% kwaliteit + 35% waardering, en de val-trap filtert terecht gestrafte aandelen weg. Het label bij de daling onderscheidt macro-brede dalingen ("met sector mee") van bedrijfsspecifieke ("eigen probleem?"). Eerlijke noot: onderzoek waarschuwt dat dalers op 6-12 maanden gemiddeld dóór dalen; herstel-effecten spelen vooral op jaren. Deze modus zoekt kwaliteit die goedkoop werd, geen bodem — die kan niemand timen.<br>
+    <b>Val-trap weegt mee:</b> een rode <span class="trap danger">val-trap</span> kost 25% van de totaalscore, een oranje <span class="trap warn">let op</span> 10%.<br>
+    <b>Belangrijk:</b> ook gedocumenteerde factoren zijn historische gemiddelden met lange periodes van tegenwind &mdash; geen voorspelling. De score rangschikt aandelen op publieke cijfers die de markt al kent; het blijft een onderzoeksfilter, geen koopsignaal.
+  </p>
+
+  <details>
+    <summary>&#128273; Databronnen, gratis sleutels &amp; eerlijke grenzen</summary>
+    <p>Kies bovenaan je databron, plak je sleutel en klik "Bewaar sleutel" &mdash; de sleutel blijft dan in deze browser bewaard (per bron apart). Daarna "Screen het universum".</p>
+    <p><b>Finnhub</b> (aanrader voor gratis): <code>finnhub.io</code> &mdash; ruime gratis tier (60 calls/min), 2 calls per aandeel, goede dekking voor de <b>VS-markt</b>. Bij grote universa pauzeert de tool automatisch ~1 minuut zodra de snelheidslimiet nadert, en gaat dan door &mdash; zo kun je het volledige universum doorlopen (let op: laat het tabblad open; ~120 aandelen duurt zo'n 4 minuten). PEG wordt zelf berekend (P/E gedeeld door winstgroei) en momentum benaderd via de positie in de 52-weeks koersrange. Europese aandelen zijn op de gratis tier beperkt &mdash; gebruik daarvoor het VS-universum. Finnhub heeft ook een maandlimiet; een paar volledige runs per dag is prima.</p>
+    <p><b>Financial Modeling Prep</b>: <code>financialmodelingprep.com</code> &mdash; gratis tier beperkt de symbolen (veel aandelen geven "not available") en heeft een dag-limiet; de tool slaat geblokkeerde aandelen over.</p>
+    <p><b>EODHD</b>: <code>eodhd.com</code> &mdash; gratis tier geeft maar 20 calls/dag en fundamentals vereisen een betaald pakket; in de praktijk beperkt bruikbaar.</p>
+    <p><b>Grote universa &amp; vooranalyse:</b> bij universa groter dan 60 aandelen (S&amp;P 500, VS+EU alles) gebruikt de tool automatisch een twee-traps trechter: eerst een goedkope scan van het dagmomentum (1 call per aandeel), waarna alleen de top-kandidaten (3x je toonlimiet) de volledige vier-factor analyse krijgen. Zo screen je ~200 aandelen voor ~350 calls i.p.v. dat elke analyse op alles draait. Met Finnhub-throttling duurt de S&amp;P-run zo'n 6-7 minuten; laat het tabblad open. Let op: de vooranalyse selecteert op dagstijging, dus dalers vallen af v&oacute;&oacute;r de factoranalyse \u2014 het is een momentum-trechter, geen volledige rangschikking.</p>
+    <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
+    <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
+  </details>
+  </div><!-- /tab-screener -->
+
+  <div class="tabpane" id="tab-tracking">
+    <p class="sub" style="margin-top:18px">Hier legt de tool vast wat je screende en meet achteraf hoe accuraat de scores bleken. Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien.</p>
+    <div class="disclaimer">&#9888;&#65039; Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een ietwat betrouwbaar beeld, en zelfs dan blijft verleden geen garantie voor de toekomst. Gebruik dit om te leren, niet om zekerheid te claimen.</div>
+
+    <div class="track-actions">
+      <button class="btn-save" id="snapshot">&#128190; Huidige screening vastleggen</button>
+      <button class="btn-ghost" id="export">&#8595; Exporteer geschiedenis (bestand)</button>
+      <button class="btn-ghost" id="importBtn">&#8593; Importeer geschiedenis</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+      <button class="btn-ghost" id="measure">&#128202; Meet accuratesse nu</button>
+      <button class="btn-ghost" id="clearHist" style="color:var(--red)">Wis geschiedenis</button>
+    </div>
+    <div class="status" id="trackStatus"></div>
+
+    <div id="kpiWrap"></div>
+    <div id="factorWrap"></div>
+    <div id="scatterWrap"></div>
+
+    <h3 style="font-family:'Fraunces',serif;font-size:20px;margin:24px 0 10px">Opgeslagen momentopnamen</h3>
+    <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening op het Screener-tabblad en klik hier op "Huidige screening vastleggen".</div></div>
+  </div><!-- /tab-tracking -->
+</div>
+
+<script>
+const DEMO=[
+  {symbol:"NVDA", name:"NVIDIA Corp.",     market:"US",sector:"Technologie",roe:91.9,margin:55.0,de:0.41,dd:-5.2,price:128.7,chg:5.4,mom1m:18.9,pe:54.8,peg:1.1,pb:46.1,revG:78.0,epsG:88.0},
+  {symbol:"GOOGL",name:"Alphabet Inc.",    market:"US",sector:"Communicatie",roe:32.1,margin:28.6,de:0.10,dd:-8.1,price:178.9,chg:2.1,mom1m:8.4, pe:24.6,peg:1.3,pb:7.1, revG:13.4,epsG:31.0},
+  {symbol:"MSFT", name:"Microsoft Corp.",  market:"US",sector:"Technologie",roe:35.6,margin:35.4,de:0.31,dd:-12.3,price:441.2,chg:0.9,mom1m:4.1, pe:36.4,peg:2.1,pb:12.9,revG:15.2,epsG:20.0},
+  {symbol:"AAPL", name:"Apple Inc.",       market:"US",sector:"Technologie",roe:115.1,margin:27.2,de:0.80,dd:-3.4,price:212.4,chg:1.8,mom1m:6.2, pe:32.1,peg:2.6,pb:48.2,revG:4.9, epsG:7.1},
+  {symbol:"ASML.AS",name:"ASML Holding",   market:"EU",sector:"Technologie",roe:47.8,margin:26.8,de:0.30,dd:-18.5,price:642.0,chg:3.2,mom1m:11.0,pe:38.2,peg:1.6,pb:18.4,revG:9.8, epsG:14.5},
+  {symbol:"SAP.DE",name:"SAP SE",          market:"EU",sector:"Technologie",roe:13.2,margin:17.0,de:0.25,dd:-10.2,price:218.5,chg:1.1,mom1m:5.7, pe:44.0,peg:2.4,pb:5.9, revG:8.1, epsG:18.2},
+  {symbol:"INTC", name:"Intel Corp.",      market:"US",sector:"Technologie",roe:-3.3,margin:-9.2,de:0.46,dd:-45.8,price:31.2, chg:2.4,mom1m:7.8, pe:11.2,peg:0.8,pb:1.2, revG:-8.4,epsG:-22.0},
+  {symbol:"BAYN.DE",name:"Bayer AG",       market:"EU",sector:"Gezondheidszorg",roe:-8.1,margin:-6.5,de:1.10,dd:-52.3,price:27.8, chg:1.1,mom1m:6.1, pe:9.4, peg:0.7,pb:0.9, revG:-1.2,epsG:-15.0},
+  {symbol:"MC.PA",name:"LVMH",             market:"EU",sector:"Consument",roe:18.4,margin:16.2,de:0.55,dd:-28.4,price:610.3,chg:-0.6,mom1m:-2.1,pe:21.3,peg:2.9,pb:5.2, revG:2.1, epsG:-1.4},
+  {symbol:"NESN.SW",name:"Nestle SA",      market:"EU",sector:"Consument",roe:30.5,margin:11.6,de:1.30,dd:-15.7,price:83.7, chg:0.3,mom1m:1.2, pe:18.9,peg:3.5,pb:6.0, revG:1.8, epsG:3.0},
+];
+
+// --- Absolute normalisatie (fallback wanneer er te weinig peers zijn) ---
+function norm(v,lo,hi,invert){
+  if(v==null||isNaN(v))return 40;
+  var t=(v-lo)/(hi-lo); t=Math.max(0,Math.min(1,t));
+  return Math.round((invert?1-t:t)*100);
+}
+
+// --- Relatieve scoring: rangschik elk aandeel t.o.v. de peers in het universum ---
+// percentielrang van waarde v binnen array arr (0..100); invert=true -> lager is beter
+function pctRank(v,arr,invert){
+  if(v==null||isNaN(v))return 40;
+  var vals=arr.filter(function(x){return x!=null&&!isNaN(x);});
+  if(vals.length<4) return null; // te weinig peers -> signaleer fallback
+  var below=0,equal=0;
+  for(var i=0;i<vals.length;i++){if(vals[i]<v)below++;else if(vals[i]===v)equal++;}
+  var pr=(below+equal/2)/vals.length*100;
+  return Math.round(invert?100-pr:pr);
+}
+
+// peer-arrays: universum-breed EN per sector. Waardering scoort sector-relatief.
+var PEERS=null, SECTOR_PEERS=null, SECTOR_DD=null;
+function fieldArr(set,f){return set.map(function(d){return d[f];});}
+function buildPeers(set){
+  PEERS={
+    chg:fieldArr(set,'chg'),mom1m:fieldArr(set,'mom1m'),pe:fieldArr(set,'pe'),
+    peg:fieldArr(set,'peg'),pb:fieldArr(set,'pb'),revG:fieldArr(set,'revG'),epsG:fieldArr(set,'epsG'),
+    roe:fieldArr(set,'roe'),margin:fieldArr(set,'margin'),de:fieldArr(set,'de'),dd:fieldArr(set,'dd')
+  };
+  // groepeer per sector
+  SECTOR_PEERS={};
+  set.forEach(function(d){
+    var s=d.sector||"Overig";
+    if(!SECTOR_PEERS[s])SECTOR_PEERS[s]={pe:[],peg:[],pb:[],revG:[],epsG:[],chg:[],mom1m:[],roe:[],margin:[],de:[],dd:[]};
+    ['pe','peg','pb','revG','epsG','chg','mom1m','roe','margin','de','dd'].forEach(function(f){SECTOR_PEERS[s][f].push(d[f]);});
+  });
+  // gemiddelde daling per sector (voor macro-vs-eigen-probleem indicator)
+  SECTOR_DD={};
+  Object.keys(SECTOR_PEERS).forEach(function(s){
+    var v=SECTOR_PEERS[s].dd.filter(function(x){return x!=null&&!isNaN(x);});
+    SECTOR_DD[s]=v.length?v.reduce(function(a,b){return a+b;},0)/v.length:null;
+  });
+}
+// kies sector-peers als de sector genoeg leden heeft, anders universum-breed
+function peerArr(d,f){
+  var s=d.sector||"Overig";
+  if(SECTOR_PEERS&&SECTOR_PEERS[s]){
+    var arr=SECTOR_PEERS[s][f].filter(function(x){return x!=null&&!isNaN(x);});
+    if(arr.length>=4) return SECTOR_PEERS[s][f];
+  }
+  return PEERS?PEERS[f]:[];
+}
+
+function currentHorizon(){var el=document.getElementById('horizon');return el?el.value:'kort';}
+function isLong(){return currentHorizon()==='lang';}
+
+function momentumScore(d){
+  if(!isLong()&&PEERS){var a=pctRank(d.chg,PEERS.chg,false),b=pctRank(d.mom1m,PEERS.mom1m,false);
+    if(a!=null&&b!=null)return Math.round(a*0.4+b*0.6);}
+  return Math.round(norm(d.chg,-5,8,false)*0.4+norm(d.mom1m,-15,25,false)*0.6);
+}
+function valuationScore(d){
+  // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels (selectie-onafhankelijk)
+  if(!isLong()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
+    if(a!=null&&b!=null&&c!=null)return Math.round(a*0.4+b*0.4+c*0.2);}
+  return Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2);
+}
+function growthScore(d){
+  if(!isLong()&&PEERS){var a=pctRank(d.revG,PEERS.revG,false),b=pctRank(d.epsG,PEERS.epsG,false);
+    if(a!=null&&b!=null)return Math.round(a*0.45+b*0.55);}
+  return Math.round(norm(d.revG,-5,40,false)*0.45+norm(d.epsG,-10,60,false)*0.55);
+}
+// Kwaliteit (academisch best onderbouwd na momentum): winstgevendheid hoog, marge hoog, schuld laag.
+function qualityScore(d){
+  if(!isLong()&&SECTOR_PEERS){
+    var a=pctRank(d.roe,peerArr(d,'roe'),false),
+        b=pctRank(d.margin,peerArr(d,'margin'),false),
+        c=pctRank(d.de,peerArr(d,'de'),true); // lagere schuld = beter
+    if(a!=null&&b!=null&&c!=null)return Math.round(a*0.4+b*0.35+c*0.25);
+  }
+  return Math.round(norm(d.roe,0,40,false)*0.4+norm(d.margin,0,30,false)*0.35+norm(d.de,0,2,true)*0.25);
+}
+function weights(){
+  // lange termijn: vaste weging op trage fundamenten, momentum laag
+  if(isLong()) return {wm:0.10,wv:0.30,wg:0.15,wq:0.45};
+  var wm=+wmEl.value,wv=+wvEl.value,wg=+wgEl.value,wq=+wqEl.value;var s=wm+wv+wg+wq||1;
+  return {wm:wm/s,wv:wv/s,wg:wg/s,wq:wq/s};
+}
+// diepte van de daling, relatief: dieper gevallen dan peers = hogere herstelpotentie-score
+function drawdownScore(d){
+  if(!isLong()&&PEERS){var a=pctRank(d.dd,PEERS.dd,true);if(a!=null)return a;}
+  return norm(d.dd,-60,0,true);
+}
+function currentMode(){var el=document.getElementById('mode');return el?el.value:'stijgers';}
+// demping: middel de ruwe score met eerdere opgeslagen metingen van hetzelfde aandeel (alleen langetermijn)
+function dampedScore(d,raw){
+  if(!isLong()||typeof HISTORY==="undefined"||!HISTORY.length) return raw;
+  var prev=[];
+  HISTORY.forEach(function(s){if(s.items)s.items.forEach(function(it){if(it.symbol===d.symbol&&it.score!=null)prev.push(it.score);});});
+  if(!prev.length) return raw;
+  // voortschrijdend gemiddelde: nieuwe meting weegt mee met de laatste paar (max 4) opgeslagen
+  var recent=prev.slice(-4);
+  var all=recent.concat([raw]);
+  var avg=all.reduce(function(a,b){return a+b;},0)/all.length;
+  return Math.round(avg);
+}
+// ruwe (ongedempte) totaalscore
+function rawScore(d){
+  var base;
+  if(currentMode()==='herstel'){
+    base=drawdownScore(d)*0.30+qualityScore(d)*0.35+valuationScore(d)*0.35;
+  }else{
+    var w=weights();
+    base=momentumScore(d)*w.wm+valuationScore(d)*w.wv+growthScore(d)*w.wg+qualityScore(d)*w.wq;
+  }
+  var t=valueTrap(d);
+  var penalty=t.level===2?0.75:(t.level===1?0.90:1);
+  return Math.round(base*penalty);
+}
+// totaalscore: ruwe score, in langetermijn gedempt met opgeslagen metingen
+function totalScore(d){
+  return dampedScore(d,rawScore(d));
+}
+function valueTrap(d){
+  var r=[],lvl=0;
+  var cheap=(d.pe!=null&&d.pe<15)||(d.peg!=null&&d.peg<1)||(d.pb!=null&&d.pb<1.5);
+  if(cheap&&d.epsG!=null&&d.epsG<0){lvl=2;r.push("oogt goedkoop maar winst krimpt");}
+  if(cheap&&d.revG!=null&&d.revG<0){lvl=Math.max(lvl,2);r.push("oogt goedkoop maar omzet krimpt");}
+  if(d.mom1m!=null&&d.mom1m>5&&d.epsG!=null&&d.epsG<0){lvl=Math.max(lvl,2);r.push("koers stijgt op dalende winst");}
+  if(d.peg!=null&&d.peg>3&&d.epsG!=null&&d.epsG<5){lvl=Math.max(lvl,1);r.push("hoge PEG, weinig groei");}
+  if(d.mom1m!=null&&d.mom1m<-5&&d.epsG!=null&&d.epsG>10){lvl=Math.max(lvl,1);r.push("dalende koers ondanks groei");}
+  if(d.pe!=null&&d.pe>40&&d.epsG!=null&&d.epsG<10){lvl=Math.max(lvl,1);r.push("hoge P/E, magere groei");}
+  if(lvl===0)r.push("pijlers bevestigen elkaar");
+  return {level:lvl,reason:r.join(" \u00b7 ")};
+}
+
+var CURRENT=[],SCORESET=null,sortKey="score",sortDir=-1;
+function $(id){return document.getElementById(id);}
+var wmEl=$('wm'),wvEl=$('wv'),wgEl=$('wg'),wqEl=$('wq');
+function fmt(v,s){return (v==null||isNaN(v))?"\u2014":(v+(s||""));}
+function signed(v){return (v==null||isNaN(v))?"\u2014":((v>0?"+":"")+v.toFixed(1)+"%");}
+function cls(v){return v>0?"pos":(v<0?"neg":"");}
+
+function render(){
+  buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT); // relatief t.o.v. volledige gescreende set
+  var rows=CURRENT.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
+  var km={symbol:"symbol",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",qual:"_q",trap:"_trap",score:"_s"};
+  var k=km[sortKey]||"_s";
+  rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
+  $('tbody').innerHTML=rows.map(function(d){
+    var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
+    var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
+    return '<tr>'+
+      '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span><span class="nm">'+(d.name||"")+'</span></td>'+
+      '<td class="l" style="color:var(--muted);font-size:12px">'+(d.sector||"\u2014")+'</td>'+
+      '<td class="num">'+fmt(d.price)+'</td>'+
+      '<td class="num '+cls(d.chg)+'">'+signed(d.chg)+'</td>'+
+      '<td class="num '+cls(d.mom1m)+'">'+signed(d.mom1m)+'</td>'+
+      (function(){
+        var v=d.dd!=null?signed(d.dd):'\u2014';
+        var lbl='';
+        if(d.dd!=null&&d.dd<=-15&&SECTOR_DD){
+          var savg=SECTOR_DD[d.sector||'Overig'];
+          if(savg!=null){
+            var rel=d.dd-savg;
+            lbl=rel<=-15
+              ?'<span style="display:block;font-size:9.5px;color:var(--red)">eigen probleem?</span>'
+              :'<span style="display:block;font-size:9.5px;color:var(--muted)">met sector mee</span>';
+          }
+        }
+        return '<td class="num '+cls(d.dd)+'">'+v+lbl+'</td>';
+      })()+
+      '<td class="num">'+fmt(d.pe)+'</td>'+
+      '<td class="num">'+(d.peg==null?"\u2014":d.peg.toFixed(2))+'</td>'+
+      '<td class="num">'+fmt(d.pb)+'</td>'+
+      '<td class="num '+cls(d.revG)+'">'+signed(d.revG)+'</td>'+
+      '<td class="num '+cls(d.epsG)+'">'+signed(d.epsG)+'</td>'+
+      '<td class="num" title="ROE: '+(d.roe!=null?d.roe+'%':'\u2014')+' \u00b7 marge: '+(d.margin!=null?d.margin+'%':'\u2014')+' \u00b7 schuld/EV: '+(d.de!=null?d.de:'\u2014')+'" style="cursor:help">'+d._q+'</td>'+
+      '<td>'+trap+'</td>'+
+      '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
+    '</tr>';
+  }).join("");
+}
+
+var BASE="https://financialmodelingprep.com/stable";
+var FINNHUB_BASE="https://finnhub.io/api/v1";
+var EODHD_BASE="https://eodhd.com/api";
+function currentSource(){return $('source').value;}
+
+// Ingebouwd universum (de markt-screener is premium; dit werkt op de gratis tier).
+// Ruime selectie grote VS- en Euronext/EU-aandelen.
+var UNIVERSE_US=["AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","AVGO","ORCL","ADBE",
+  "CRM","AMD","INTC","QCOM","TXN","CSCO","IBM","NOW","INTU","AMAT","MU","ADI","LRCX","KLAC",
+  "JPM","BAC","WFC","GS","MS","C","BLK","SCHW","AXP","V","MA","PYPL",
+  "JNJ","UNH","LLY","PFE","MRK","ABBV","TMO","ABT","DHR","BMY","AMGN","GILD",
+  "WMT","COST","HD","LOW","NKE","MCD","SBUX","TGT","PG","KO","PEP","PM","MDLZ",
+  "XOM","CVX","COP","SLB","DIS","NFLX","CMCSA","T","VZ","BA","CAT","GE","HON","UNP","UPS","LMT"];
+var UNIVERSE_EU=["ASML.AS","SAP.DE","MC.PA","OR.PA","SU.PA","AIR.PA","SAN.PA","BNP.PA","AI.PA",
+  "TTE.PA","RMS.PA","EL.PA","CS.PA","DG.PA","BN.PA","KER.PA","SIE.DE","ALV.DE","DTE.DE","BAS.DE",
+  "BAYN.DE","BMW.DE","VOW3.DE","MBG.DE","ADS.DE","MUV2.DE","IFX.DE","DPW.DE","RWE.DE",
+  "INGA.AS","ADYEN.AS","PRX.AS","WKL.AS","PHIA.AS","HEIA.AS","DSM.AS","NN.AS",
+  "ABI.BR","KBC.BR","UCB.BR","NESN.SW","NOVN.SW","ROG.SW","UBSG.SW","ZURN.SW","ABBN.SW"];
+
+// S&P 500 uitbreiding: ~130 extra grote namen bovenop UNIVERSE_US (samen ~200, dekt het gros van de S&P-beurswaarde)
+var UNIVERSE_SP_EXTRA=[
+  "ACN","ANET","PANW","CRWD","SNPS","CDNS","MSI","NXPI","MCHP","ON","HPQ","DELL","FTNT","WDAY","PLTR",
+  "TMUS","CHTR","EA","TTWO","OMC","WBD",
+  "PGR","CB","MMC","AON","ICE","CME","SPGI","MCO","COF","USB","PNC","TFC","BK","AIG","MET","PRU","ALL","TRV","FIS",
+  "ISRG","SYK","BSX","MDT","ELV","CI","CVS","HCA","VRTX","REGN","ZTS","BDX","EW","IDXX","IQV","MCK",
+  "ORLY","AZO","ROST","TJX","DG","DLTR","YUM","CMG","MAR","HLT","BKNG","ABNB","GM","F",
+  "KMB","GIS","KHC","STZ","HSY","CL","MNST","KDP","SYY",
+  "EOG","MPC","PSX","VLO","OXY","WMB","KMI","HAL","BKR",
+  "RTX","DE","EMR","ETN","ITW","PH","GD","NOC","MMM","CSX","NSC","FDX","WM","RSG","PCAR","CMI","JCI","CARR","OTIS","ROK","AME","DOV",
+  "LIN","APD","SHW","ECL","FCX","NEM","NUE","DOW","DD",
+  "PLD","AMT","EQIX","CCI","PSA","SPG","O","WELL","DLR",
+  "NEE","DUK","SO","D","AEP","EXC","SRE","XEL","ED","WEC"];
+
+// Scandinavië: grote namen uit Zweden (.ST), Denemarken (.CO), Noorwegen (.OL), Finland (.HE)
+var UNIVERSE_SCANDI=[
+  "NOVO-B.CO","MAERSK-B.CO","DSV.CO","CARL-B.CO","COLO-B.CO","VWS.CO","ORSTED.CO","NZYM-B.CO",
+  "VOLV-B.ST","ERIC-B.ST","ATCO-A.ST","INVE-B.ST","SEB-A.ST","SWED-A.ST","HM-B.ST","SAND.ST","ESSITY-B.ST","EVO.ST",
+  "EQNR.OL","DNB.OL","TEL.OL","NHY.OL","MOWI.OL",
+  "NOKIA.HE","KNEBV.HE","SAMPO.HE","FORTUM.HE","NESTE.HE","UPM.HE"];
+
+// Sector per symbool (vast, dus geen extra API-calls). Brede categorieën.
+var SECTOR={
+  // US Tech & Communication
+  AAPL:"Technologie",MSFT:"Technologie",NVDA:"Technologie",AVGO:"Technologie",ORCL:"Technologie",
+  ADBE:"Technologie",CRM:"Technologie",AMD:"Technologie",INTC:"Technologie",QCOM:"Technologie",
+  TXN:"Technologie",CSCO:"Technologie",IBM:"Technologie",NOW:"Technologie",INTU:"Technologie",
+  AMAT:"Technologie",MU:"Technologie",ADI:"Technologie",LRCX:"Technologie",KLAC:"Technologie",
+  GOOGL:"Communicatie",META:"Communicatie",NFLX:"Communicatie",CMCSA:"Communicatie",T:"Communicatie",
+  VZ:"Communicatie",DIS:"Communicatie",
+  // US Financials
+  JPM:"Financieel",BAC:"Financieel",WFC:"Financieel",GS:"Financieel",MS:"Financieel",C:"Financieel",
+  BLK:"Financieel",SCHW:"Financieel",AXP:"Financieel",V:"Financieel",MA:"Financieel",PYPL:"Financieel",
+  // US Healthcare
+  JNJ:"Gezondheidszorg",UNH:"Gezondheidszorg",LLY:"Gezondheidszorg",PFE:"Gezondheidszorg",
+  MRK:"Gezondheidszorg",ABBV:"Gezondheidszorg",TMO:"Gezondheidszorg",ABT:"Gezondheidszorg",
+  DHR:"Gezondheidszorg",BMY:"Gezondheidszorg",AMGN:"Gezondheidszorg",GILD:"Gezondheidszorg",
+  // US Consumer
+  WMT:"Consument",COST:"Consument",HD:"Consument",LOW:"Consument",NKE:"Consument",MCD:"Consument",
+  SBUX:"Consument",TGT:"Consument",PG:"Consument",KO:"Consument",PEP:"Consument",PM:"Consument",
+  MDLZ:"Consument",AMZN:"Consument",TSLA:"Consument",
+  // US Energy & Industrials
+  XOM:"Energie",CVX:"Energie",COP:"Energie",SLB:"Energie",
+  BA:"Industrie",CAT:"Industrie",GE:"Industrie",HON:"Industrie",UNP:"Industrie",UPS:"Industrie",LMT:"Industrie",
+  // EU Tech & Communication
+  "ASML.AS":"Technologie","SAP.DE":"Technologie","ADYEN.AS":"Technologie","IFX.DE":"Technologie",
+  "PRX.AS":"Technologie","WKL.AS":"Technologie","PHIA.AS":"Technologie","DTE.DE":"Communicatie",
+  // EU Consumer & Luxury
+  "MC.PA":"Consument","OR.PA":"Consument","RMS.PA":"Consument","EL.PA":"Consument","KER.PA":"Consument",
+  "BN.PA":"Consument","ADS.DE":"Consument","HEIA.AS":"Consument","ABI.BR":"Consument","NESN.SW":"Consument",
+  // EU Financials
+  "BNP.PA":"Financieel","CS.PA":"Financieel","ALV.DE":"Financieel","MUV2.DE":"Financieel",
+  "INGA.AS":"Financieel","NN.AS":"Financieel","KBC.BR":"Financieel","UBSG.SW":"Financieel","ZURN.SW":"Financieel",
+  // EU Healthcare
+  "SAN.PA":"Gezondheidszorg","BAYN.DE":"Gezondheidszorg","UCB.BR":"Gezondheidszorg",
+  "NOVN.SW":"Gezondheidszorg","ROG.SW":"Gezondheidszorg",
+  // EU Industrials & Materials & Energy
+  "AIR.PA":"Industrie","SU.PA":"Industrie","DG.PA":"Industrie","SIE.DE":"Industrie","ABBN.SW":"Industrie",
+  "DPW.DE":"Industrie","BMW.DE":"Consument","VOW3.DE":"Consument","MBG.DE":"Consument",
+  "AI.PA":"Materialen","BAS.DE":"Materialen","DSM.AS":"Materialen",
+  "TTE.PA":"Energie","RWE.DE":"Energie",
+  // S&P uitbreiding
+  ACN:"Technologie",ANET:"Technologie",PANW:"Technologie",CRWD:"Technologie",SNPS:"Technologie",
+  CDNS:"Technologie",MSI:"Technologie",NXPI:"Technologie",MCHP:"Technologie",ON:"Technologie",
+  HPQ:"Technologie",DELL:"Technologie",FTNT:"Technologie",WDAY:"Technologie",PLTR:"Technologie",
+  TMUS:"Communicatie",CHTR:"Communicatie",EA:"Communicatie",TTWO:"Communicatie",OMC:"Communicatie",WBD:"Communicatie",
+  PGR:"Financieel",CB:"Financieel",MMC:"Financieel",AON:"Financieel",ICE:"Financieel",CME:"Financieel",
+  SPGI:"Financieel",MCO:"Financieel",COF:"Financieel",USB:"Financieel",PNC:"Financieel",TFC:"Financieel",
+  BK:"Financieel",AIG:"Financieel",MET:"Financieel",PRU:"Financieel",ALL:"Financieel",TRV:"Financieel",FIS:"Financieel",
+  ISRG:"Gezondheidszorg",SYK:"Gezondheidszorg",BSX:"Gezondheidszorg",MDT:"Gezondheidszorg",ELV:"Gezondheidszorg",
+  CI:"Gezondheidszorg",CVS:"Gezondheidszorg",HCA:"Gezondheidszorg",VRTX:"Gezondheidszorg",REGN:"Gezondheidszorg",
+  ZTS:"Gezondheidszorg",BDX:"Gezondheidszorg",EW:"Gezondheidszorg",IDXX:"Gezondheidszorg",IQV:"Gezondheidszorg",MCK:"Gezondheidszorg",
+  ORLY:"Consument",AZO:"Consument",ROST:"Consument",TJX:"Consument",DG:"Consument",DLTR:"Consument",
+  YUM:"Consument",CMG:"Consument",MAR:"Consument",HLT:"Consument",BKNG:"Consument",ABNB:"Consument",
+  GM:"Consument",F:"Consument",KMB:"Consument",GIS:"Consument",KHC:"Consument",STZ:"Consument",
+  HSY:"Consument",CL:"Consument",MNST:"Consument",KDP:"Consument",SYY:"Consument",
+  EOG:"Energie",MPC:"Energie",PSX:"Energie",VLO:"Energie",OXY:"Energie",WMB:"Energie",KMI:"Energie",HAL:"Energie",BKR:"Energie",
+  RTX:"Industrie",DE:"Industrie",EMR:"Industrie",ETN:"Industrie",ITW:"Industrie",PH:"Industrie",
+  GD:"Industrie",NOC:"Industrie",MMM:"Industrie",CSX:"Industrie",NSC:"Industrie",FDX:"Industrie",
+  WM:"Industrie",RSG:"Industrie",PCAR:"Industrie",CMI:"Industrie",JCI:"Industrie",CARR:"Industrie",
+  OTIS:"Industrie",ROK:"Industrie",AME:"Industrie",DOV:"Industrie",
+  LIN:"Materialen",APD:"Materialen",SHW:"Materialen",ECL:"Materialen",FCX:"Materialen",NEM:"Materialen",
+  NUE:"Materialen",DOW:"Materialen",DD:"Materialen",
+  PLD:"Vastgoed",AMT:"Vastgoed",EQIX:"Vastgoed",CCI:"Vastgoed",PSA:"Vastgoed",SPG:"Vastgoed",O:"Vastgoed",WELL:"Vastgoed",DLR:"Vastgoed",
+  NEE:"Nuts",DUK:"Nuts",SO:"Nuts",D:"Nuts",AEP:"Nuts",EXC:"Nuts",SRE:"Nuts",XEL:"Nuts",ED:"Nuts",WEC:"Nuts",
+  // Scandinavië
+  "NOVO-B.CO":"Gezondheidszorg","COLO-B.CO":"Gezondheidszorg","NZYM-B.CO":"Gezondheidszorg",
+  "MAERSK-B.CO":"Industrie","DSV.CO":"Industrie","VWS.CO":"Industrie","KNEBV.HE":"Industrie",
+  "ATCO-A.ST":"Industrie","SAND.ST":"Industrie","VOLV-B.ST":"Industrie",
+  "CARL-B.CO":"Consument","HM-B.ST":"Consument","ESSITY-B.ST":"Consument","MOWI.OL":"Consument","EVO.ST":"Consument",
+  "ERIC-B.ST":"Technologie","NOKIA.HE":"Technologie",
+  "INVE-B.ST":"Financieel","SEB-A.ST":"Financieel","SWED-A.ST":"Financieel","DNB.OL":"Financieel","SAMPO.HE":"Financieel",
+  "EQNR.OL":"Energie","NESTE.HE":"Energie","ORSTED.CO":"Nuts","FORTUM.HE":"Nuts",
+  "TEL.OL":"Communicatie","NHY.OL":"Materialen","UPM.HE":"Materialen"
+};
+function sectorOf(sym){return SECTOR[sym]||"Overig";}
+
+function chosenUniverse(){
+  var ex=$('exchange').value;
+  var us,eu;
+  if(ex==="SP500"){return UNIVERSE_US.concat(UNIVERSE_SP_EXTRA);}
+  if(ex==="SCANDI"){return UNIVERSE_SCANDI;}
+  if(ex==="EU_ALL"){us=[];eu=UNIVERSE_EU;}
+  else if(ex==="US_ALL"){us=UNIVERSE_US;eu=[];}
+  else if(ex==="ALL"){us=UNIVERSE_US;eu=UNIVERSE_EU;}
+  // compacte varianten (alleen de grootste namen) om API-calls te sparen
+  else if(ex==="EU_SMALL"){us=[];eu=UNIVERSE_EU.slice(0,12);}
+  else if(ex==="US_SMALL"){us=UNIVERSE_US.slice(0,15);eu=[];}
+  else {us=UNIVERSE_US.slice(0,12);eu=UNIVERSE_EU.slice(0,8);} // ALL_SMALL (default)
+  return us.concat(eu);
+}
+
+// lokale filter op de verrijkte data, met jouw criteria
+function passesFilters(d){
+  var mcap=(+$('mcap').value||0)*1e9;
+  var pemax=+$('pemax').value;
+  // marktwaarde checken we via prijs*aandelen niet beschikbaar hier; gebruik mcap uit quote indien aanwezig
+  if(d._mcap!=null && mcap>0 && d._mcap<mcap) return false;
+  if(!isNaN(pemax) && d.pe!=null && d.pe>pemax) return false;
+  return true;
+}
+
+// Algemene JSON-helper met foutdetectie
+function getJson(url){
+  return fetch(url).then(function(r){return r.text();}).then(function(txt){
+    var data;
+    try{ data=JSON.parse(txt); }
+    catch(e){ throw {kind:"text",msg:txt.slice(0,140)}; }
+    if(data && !Array.isArray(data) && (data["Error Message"]||data.error||(data.message&&!data.metric&&!data.c))){
+      throw {kind:"api",msg:(data["Error Message"]||data.error||data.message)};
+    }
+    return data;
+  });
+}
+
+// dispatcher: kiest de juiste bron
+function enrich(symbol,key){
+  var src=currentSource();
+  if(src==="finnhub") return enrichFinnhub(symbol,key);
+  if(src==="eodhd")   return enrichEODHD(symbol,key);
+  return enrichFMP(symbol,key);
+}
+
+// Goedkope vooranalyse: 1 call per aandeel, alleen koers + dagverandering
+function quoteOnly(symbol,key){
+  var src=currentSource();
+  if(src==="finnhub"){
+    return getJson(FINNHUB_BASE+"/quote?symbol="+encodeURIComponent(symbol)+"&token="+key)
+      .then(function(q){
+        if(q==null||q.c==null||q.c===0) throw {kind:"api",msg:"geen data"};
+        return {symbol:symbol,price:+(+q.c).toFixed(2),chg:q.dp!=null?+(+q.dp).toFixed(2):null};
+      });
+  }
+  if(src==="eodhd"){
+    var sym=symbol.indexOf(".")>-1?symbol:symbol+".US";
+    return getJson(EODHD_BASE+"/real-time/"+sym+"?api_token="+key+"&fmt=json")
+      .then(function(rt){
+        var p=(rt&&rt.close!=null&&rt.close!=="NA")?+(+rt.close).toFixed(2):null;
+        if(p==null) throw {kind:"api",msg:"geen data"};
+        return {symbol:symbol,price:p,chg:(rt.change_p!=null&&rt.change_p!=="NA")?+(+rt.change_p).toFixed(2):null};
+      });
+  }
+  return getJson(BASE+"/quote?symbol="+symbol+"&apikey="+key)
+    .then(function(d){
+      var q=(Array.isArray(d)?d[0]:d)||{};
+      if(q.price==null) throw {kind:"api",msg:"geen data"};
+      return {symbol:symbol,price:+(+q.price).toFixed(2),chg:q.changePercentage!=null?+(+q.changePercentage).toFixed(2):null,dd:(q.yearHigh!=null&&q.yearHigh>0)?+(((q.price-q.yearHigh)/q.yearHigh)*100).toFixed(1):null};
+    });
+}
+
+// --- Finnhub: 2 calls (quote + basic financials). VS-symbolen zonder suffix. ---
+function enrichFinnhub(symbol,key){
+  // Finnhub gebruikt kale US-tickers; EU-symbolen met suffix werken beperkt op gratis tier
+  var fsym=symbol; // .DE/.PA etc. laten we staan; gratis tier dekt vooral US
+  return Promise.all([
+    getJson(FINNHUB_BASE+"/quote?symbol="+encodeURIComponent(fsym)+"&token="+key),
+    getJson(FINNHUB_BASE+"/stock/metric?symbol="+encodeURIComponent(fsym)+"&metric=all&token="+key)
+  ]).then(function(res){
+    var q=res[0]||{}, mWrap=res[1]||{}, m=(mWrap&&mWrap.metric)||{};
+    // Finnhub quote: c=current, dp=dagverandering%. 52w high/low voor momentum-benadering.
+    var price=(q.c!=null&&q.c!==0)?+(+q.c).toFixed(2):null;
+    var chg=q.dp!=null?+(+q.dp).toFixed(2):null;
+    var hi=m["52WeekHigh"],lo=m["52WeekLow"];
+    // momentum: positie in de 52-weeks range, omgezet naar een -/+ schaal rond het midden
+    var mom=null;
+    if(price!=null&&hi!=null&&lo!=null&&hi>lo){mom=+(((price-(hi+lo)/2)/((hi-lo)/2))*15).toFixed(1);}
+    // daling vanaf 52-weeks top (negatief getal)
+    var dd=(price!=null&&hi!=null&&hi>0)?+(((price-hi)/hi)*100).toFixed(1):null;
+    var pe=m.peTTM!=null?m.peTTM:(m.peBasicExclExtraTTM!=null?m.peBasicExclExtraTTM:m.peAnnual);
+    var pb=m.pbAnnual!=null?m.pbAnnual:m.pbQuarterly;
+    var revG=m.revenueGrowthTTMYoy!=null?m.revenueGrowthTTMYoy:m.revenueGrowth3Y;
+    var epsG=m.epsGrowthTTMYoy!=null?m.epsGrowthTTMYoy:m.epsGrowth3Y;
+    var mcap=m.marketCapitalization!=null?m.marketCapitalization*1e6:null; // Finnhub geeft in miljoenen
+    // PEG zelf berekenen indien mogelijk
+    var peg=(pe!=null&&epsG!=null&&epsG>0)?+(pe/epsG).toFixed(2):null;
+    // kwaliteitsfactoren: ROE, nettomarge, schuld/eigen vermogen
+    var roe=m.roeTTM!=null?m.roeTTM:m.roeRfy;
+    var margin=m.netProfitMarginTTM!=null?m.netProfitMarginTTM:m.netProfitMarginAnnual;
+    var de=m["totalDebt/totalEquityQuarterly"]!=null?m["totalDebt/totalEquityQuarterly"]:m["totalDebt/totalEquityAnnual"];
+    return {
+      symbol:symbol,name:symbol,market:symbol.indexOf(".")>-1?"EU":"US",sector:sectorOf(symbol),
+      _mcap:mcap,
+      price:price,chg:chg,mom1m:mom,
+      pe:pe!=null?+(+pe).toFixed(1):null,
+      peg:peg,
+      pb:pb!=null?+(+pb).toFixed(1):null,
+      revG:revG!=null?+(+revG).toFixed(1):null,  // Finnhub geeft groei al in procent
+      epsG:epsG!=null?+(+epsG).toFixed(1):null,
+      roe:roe!=null?+(+roe).toFixed(1):null,
+      margin:margin!=null?+(+margin).toFixed(1):null,
+      de:de!=null?+(+de).toFixed(2):null,
+      dd:dd
+    };
+  });
+}
+
+// --- FMP: 3 calls (stable endpoints) ---
+function enrichFMP(symbol,key){
+  return Promise.all([
+    getJson(BASE+"/quote?symbol="+symbol+"&apikey="+key),
+    getJson(BASE+"/ratios-ttm?symbol="+symbol+"&apikey="+key),
+    getJson(BASE+"/financial-growth?symbol="+symbol+"&limit=1&apikey="+key)
+  ]).then(function(res){
+    var q=(Array.isArray(res[0])?res[0][0]:res[0])||{};
+    var ra=(Array.isArray(res[1])?res[1][0]:res[1])||{};
+    var g=(Array.isArray(res[2])?res[2][0]:res[2])||{};
+    var pe=ra.priceToEarningsRatioTTM;
+    var peg=ra.priceToEarningsGrowthRatioTTM;
+    var pb=ra.priceToBookRatioTTM;
+    var revG=g.revenueGrowth;
+    var epsG=g.epsgrowth;
+    var ma50=q.priceAvg50!=null?q.priceAvg50:null;
+    // kwaliteit: marge en schuldgraad direct; ROE afgeleid uit winst/boekwaarde per aandeel
+    var margin=ra.netProfitMarginTTM!=null?ra.netProfitMarginTTM*100:null;
+    var de=ra.debtToEquityRatioTTM!=null?+ra.debtToEquityRatioTTM:null;
+    var roe=(ra.netIncomePerShareTTM!=null&&ra.bookValuePerShareTTM!=null&&ra.bookValuePerShareTTM>0)
+      ? (ra.netIncomePerShareTTM/ra.bookValuePerShareTTM*100) : null;
+    var ddF=(q.price!=null&&q.yearHigh!=null&&q.yearHigh>0)?+(((q.price-q.yearHigh)/q.yearHigh)*100).toFixed(1):null;
+    return {
+      symbol:symbol,name:q.name||symbol,market:symbol.indexOf(".")>-1?"EU":"US",
+      sector:sectorOf(symbol),
+      _mcap:q.marketCap!=null?+q.marketCap:null,
+      price:q.price!=null?+(+q.price).toFixed(2):null,
+      chg:q.changePercentage!=null?+(+q.changePercentage).toFixed(2):null,
+      mom1m:(q.price&&ma50)?+(((q.price-ma50)/ma50)*100).toFixed(1):null,
+      pe:pe!=null?+(+pe).toFixed(1):null,
+      peg:peg!=null?+(+peg).toFixed(2):null,
+      pb:pb!=null?+(+pb).toFixed(1):null,
+      revG:revG!=null?+(+revG*100).toFixed(1):null,
+      epsG:epsG!=null?+(+epsG*100).toFixed(1):null,
+      roe:roe!=null?+roe.toFixed(1):null,
+      margin:margin!=null?+margin.toFixed(1):null,
+      de:de!=null?+de.toFixed(2):null,
+      dd:ddF
+    };
+  });
+}
+
+// --- EODHD: real-time + fundamentals (fundamentals vereist betaald pakket; valt anders leeg) ---
+function enrichEODHD(symbol,key){
+  var sym=symbol.indexOf(".")>-1?symbol:symbol+".US";
+  return Promise.all([
+    getJson(EODHD_BASE+"/real-time/"+sym+"?api_token="+key+"&fmt=json"),
+    getJson(EODHD_BASE+"/fundamentals/"+sym+"?api_token="+key).catch(function(){return {};})
+  ]).then(function(res){
+    var rt=res[0]||{}, f=res[1]||{};
+    var H=(f&&f.Highlights)||{}, V=(f&&f.Valuation)||{}, T=(f&&f.Technicals)||{};
+    var price=(rt.close!=null&&rt.close!=="NA")?+(+rt.close).toFixed(2):null;
+    var chg=(rt.change_p!=null&&rt.change_p!=="NA")?+(+rt.change_p).toFixed(2):null;
+    var ma50=T&&T["50DayMA"]!=null?+T["50DayMA"]:null;
+    var hi52=T&&T["52WeekHigh"]!=null?+T["52WeekHigh"]:null;
+    var ddE=(price!=null&&hi52!=null&&hi52>0)?+(((price-hi52)/hi52)*100).toFixed(1):null;
+    return {
+      symbol:sym,name:(f&&f.General&&f.General.Name)||sym,market:sym.endsWith(".US")?"US":"EU",sector:sectorOf(symbol),
+      _mcap:(H.MarketCapitalization!=null)?+H.MarketCapitalization:null,
+      price:price,chg:chg,
+      mom1m:(price&&ma50)?+(((price-ma50)/ma50)*100).toFixed(1):null,
+      pe:H.PERatio!=null&&H.PERatio!==""?+(+H.PERatio).toFixed(1):null,
+      peg:H.PEGRatio!=null&&H.PEGRatio!==""?+(+H.PEGRatio).toFixed(2):null,
+      pb:V.PriceBookMRQ!=null&&V.PriceBookMRQ!==""?+(+V.PriceBookMRQ).toFixed(1):null,
+      revG:H.QuarterlyRevenueGrowthYOY!=null&&H.QuarterlyRevenueGrowthYOY!==""?+(+H.QuarterlyRevenueGrowthYOY*100).toFixed(1):null,
+      epsG:H.QuarterlyEarningsGrowthYOY!=null&&H.QuarterlyEarningsGrowthYOY!==""?+(+H.QuarterlyEarningsGrowthYOY*100).toFixed(1):null,
+      roe:H.ReturnOnEquityTTM!=null&&H.ReturnOnEquityTTM!==""?+(+H.ReturnOnEquityTTM*100).toFixed(1):null,
+      margin:H.ProfitMargin!=null&&H.ProfitMargin!==""?+(+H.ProfitMargin*100).toFixed(1):null,
+      de:null,
+      dd:ddE
+    };
+  });
+}
+
+function run(){
+  var key=$('apikey').value.trim();
+  var st=$('status');
+  if(!key){st.className="status";st.innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 geen sleutel ingevuld. Cijfers zijn illustratief, niet actueel.';CURRENT=DEMO;render();return;}
+  var universe=chosenUniverse();
+  var limit=+$('limit').value;
+  var src=currentSource();
+  var throttle=(src==="finnhub");
+  var CALLS_FULL=(src==="finnhub")?2:(src==="fmp"?3:2);
+  var MAX_CALLS_PER_MIN=55;
+  var state={callsInWindow:0,dayLimit:null,skipped:[]};
+
+  function countdown(seconds,reason){
+    return new Promise(function(resolve){
+      var left=seconds;
+      function tick(){
+        if(left<=0){resolve();return;}
+        st.className="status";
+        st.textContent="\u23f3 "+reason+" \u2014 pauze ("+left+"s)\u2026";
+        left--;setTimeout(tick,1000);
+      }
+      tick();
+    });
+  }
+
+  // generieke gethrottlede wachtrij: verwerkt symbolen sequentieel met call-budget per minuut
+  function runQueue(symbols,callsPer,fetchFn,label){
+    var seq=Promise.resolve([]);
+    symbols.forEach(function(sym,i){
+      seq=seq.then(function(acc){
+        if(state.dayLimit)return acc;
+        var pre=Promise.resolve();
+        if(throttle && state.callsInWindow+callsPer>MAX_CALLS_PER_MIN){
+          pre=countdown(61,"Snelheidslimiet nadert").then(function(){state.callsInWindow=0;});
+        }
+        return pre.then(function(){
+          return fetchFn(sym,key).then(function(e){
+            acc.push(e);state.callsInWindow+=callsPer;
+            if(i%4===0)st.textContent=label+"\u2026 "+(i+1)+"/"+symbols.length;
+            return acc;
+          }).catch(function(err){
+            var msg=(err&&err.msg)||"";
+            if(throttle && /429|rate limit|too many/i.test(msg)){
+              return countdown(61,"Snelheidslimiet geraakt").then(function(){
+                state.callsInWindow=0;
+                return fetchFn(sym,key).then(function(e){acc.push(e);state.callsInWindow+=callsPer;return acc;})
+                  .catch(function(err2){
+                    var m2=(err2&&err2.msg)||"";
+                    if(/limit|exceed|monthly|reached/i.test(m2))state.dayLimit=m2;
+                    else state.skipped.push(sym);
+                    return acc;
+                  });
+              });
+            }
+            if(/limit reached|daily|monthly|exceed|429/i.test(msg))state.dayLimit=msg;
+            else state.skipped.push(sym);
+            return acc;
+          });
+        });
+      });
+    });
+    return seq;
+  }
+
+  // Twee-traps trechter bij grote universa: trap 1 = goedkope vooranalyse (1 call), trap 2 = volledige analyse
+  var useFunnel=universe.length>60;
+  var stage1;
+  if(useFunnel){
+    st.className="status";
+    st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)\u2026";
+    stage1=runQueue(universe,1,quoteOnly,"Vooranalyse").then(function(quotes){
+      // rangschik op dagverandering, neem de top (3x de toonlimiet, min 40)
+      var keep=Math.max(limit*3,40);
+      if(currentMode()==='herstel'){
+        // grootste dalers eerst: op 52w-daling indien beschikbaar (FMP), anders op dagdaling
+        quotes.sort(function(a,b){
+          var ka=(a.dd!=null?a.dd:(a.chg!=null?a.chg:999)),kb=(b.dd!=null?b.dd:(b.chg!=null?b.chg:999));
+          return ka-kb;
+        });
+      }else{
+        quotes.sort(function(a,b){return (b.chg!=null?b.chg:-999)-(a.chg!=null?a.chg:-999);});
+      }
+      var survivors=quotes.slice(0,keep).map(function(q){return q.symbol;});
+      st.textContent="Vooranalyse klaar: "+quotes.length+" gescand, top "+survivors.length+" door naar volledige analyse\u2026";
+      return survivors;
+    });
+  }else{
+    stage1=Promise.resolve(universe);
+  }
+
+  stage1.then(function(symbols){
+    if(state.dayLimit)return [];
+    return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
+  }).then(function(all){
+    var passed=all.filter(passesFilters);
+    SCORESET=passed.slice();
+    buildPeers(SCORESET);
+    passed.sort(function(a,b){return totalScore(b)-totalScore(a);});
+    CURRENT=passed.slice(0,limit);
+    var skipped=state.skipped;
+    if(state.dayLimit){
+      st.className="status err";
+      var srcName={finnhub:"Finnhub",fmp:"FMP",eodhd:"EODHD"}[currentSource()]||"databron";
+      var tip=currentSource()!=="finnhub"?" Tip: schakel bovenaan over op Finnhub voor een veel ruimere gratis limiet.":" Mogelijk je maandlimiet; probeer later of een kleiner universum.";
+      st.innerHTML="\u26a0\ufe0f Limiet van je "+srcName+"-sleutel bereikt \u2014 melding: \""+
+        String(state.dayLimit).replace(/</g,"&lt;")+"\"."+tip+" Hieronder zie je wat al binnenkwam.";
+    }else if(CURRENT.length===0){
+      st.className="status";
+      var ex=skipped.length?" ("+skipped.length+" aandeel(en) overgeslagen wegens tier-beperking)":"";
+      st.textContent="Geen aandelen voldoen aan deze filters"+ex+". Versoepel P/E of marktwaarde.";
+    }else{
+      st.className="status";
+      var fun=useFunnel?" (via vooranalyse-trechter)":"";
+      var extra=skipped.length?" "+skipped.length+" overgeslagen (niet beschikbaar op je tier: "+skipped.slice(0,6).join(", ")+(skipped.length>6?"\u2026":"")+").":"";
+      st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+" Sorteer via de kolomtitels.";
+    }
+    render();
+  });
+}
+
+$('run').onclick=run;
+$('demo').onclick=function(){$('status').className="status";$('status').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel.';CURRENT=DEMO;render();};
+$('csv').onclick=function(){
+  if(!CURRENT.length){$('status').className="status";$('status').textContent="Niets te exporteren \u2014 draai eerst een screening.";return;}
+  buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT);
+  var head=["symbool","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","valtrap","totaalscore"];
+  function esc(v){if(v==null)return"";var s=String(v);return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+  var rows=CURRENT.map(function(d){
+    var t=valueTrap(d);
+    return [d.symbol,d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.revG,d.epsG,d.roe,d.margin,d.de,
+      momentumScore(d),valuationScore(d),growthScore(d),qualityScore(d),
+      (t.level===2?"val-trap":t.level===1?"let op":"consistent"),totalScore(d)].map(esc).join(";");
+  });
+  var csv="\ufeff"+head.join(";")+"\n"+rows.join("\n"); // BOM voor Excel, puntkomma voor EU-locale
+  var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download="screening-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  $('status').className="status";$('status').textContent="CSV ge\u00ebxporteerd ("+CURRENT.length+" aandelen, puntkomma-gescheiden voor Excel).";
+};
+
+// ---- Sleutelbeheer per bron, met persistente opslag ----
+var KEYCACHE={}; // in-memory spiegel
+function keyStorageId(src){return "apikey_"+src;}
+function loadKeyFor(src){
+  // probeer eerst in-memory, dan persistente opslag
+  if(KEYCACHE[src]!=null){$('apikey').value=KEYCACHE[src];return;}
+  if(window.storage&&window.storage.get){
+    window.storage.get(keyStorageId(src)).then(function(r){
+      if(r&&r.value){KEYCACHE[src]=r.value;$('apikey').value=r.value;}
+      else $('apikey').value="";
+    }).catch(function(){$('apikey').value="";});
+  }
+}
+function updateKeyLabel(){
+  var src=$('source').value;
+  var names={finnhub:"Finnhub API-sleutel",fmp:"FMP API-sleutel",eodhd:"EODHD API-sleutel"};
+  $('keylabel').textContent=names[src]||"API-sleutel";
+}
+$('source').onchange=function(){updateKeyLabel();loadKeyFor($('source').value);};
+$('saveKey').onclick=function(){
+  var src=$('source').value, val=$('apikey').value.trim();
+  KEYCACHE[src]=val;
+  if(window.storage&&window.storage.set){
+    window.storage.set(keyStorageId(src),val).then(function(){
+      $('status').className="status";$('status').textContent="Sleutel voor "+src+" bewaard in deze browser.";
+    }).catch(function(){
+      $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie (persistente opslag niet beschikbaar).";
+    });
+  }else{
+    $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie.";
+  }
+};
+updateKeyLabel();
+loadKeyFor($('source').value);
+['wm','wv','wg','wq'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(CURRENT.length)render();};});
+// horizon/mode wisselen: herbereken en grijs de weegbalk uit als die niet geldt
+function syncWeightUI(){
+  var lang=$('horizon')&&$('horizon').value==='lang';
+  var herstel=$('mode')&&$('mode').value==='herstel';
+  var dim=lang||herstel; // weging geldt niet in deze gevallen
+  var wb=document.querySelector('.weights');
+  if(wb){wb.style.opacity=dim?0.4:1;wb.style.pointerEvents=dim?'none':'auto';
+    var note=document.getElementById('wnote');
+    if(note)note.textContent=lang?' (vast op fundamenten in langetermijn)':herstel?' (vast in herstel-modus)':'';
+  }
+}
+if($('horizon'))$('horizon').onchange=function(){syncWeightUI();if(CURRENT.length)render();};
+if($('mode'))$('mode').onchange=function(){syncWeightUI();if(CURRENT.length)render();};
+syncWeightUI();
+Array.prototype.forEach.call(document.querySelectorAll('th[data-k]'),function(th){
+  th.onclick=function(){
+    var k=th.dataset.k;
+    if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=(k==="symbol")?1:-1;}
+    Array.prototype.forEach.call(document.querySelectorAll('th[data-k]'),function(h){var a=h.querySelector('.arrow');if(a)a.remove();});
+    var ar=document.createElement('span');ar.className='arrow';ar.textContent=sortDir<0?' \u25be':' \u25b4';
+    th.appendChild(ar);
+    render();
+  };
+});
+
+// ============ TRACKING & ACCURATESSE ============
+var HISTORY=[]; // lijst van snapshots: {date, items:[{symbol,score,m,v,g,price}]}
+
+function tStat(msg,err){var s=$('trackStatus');s.className=err?"status err":"status";s.textContent=msg;}
+
+// tab-navigatie
+Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
+  tb.onclick=function(){
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
+    Array.prototype.forEach.call(document.querySelectorAll('.tabpane'),function(x){x.classList.remove('active');});
+    tb.classList.add('active');
+    $('tab-'+tb.dataset.tab).classList.add('active');
+    if(tb.dataset.tab==='tracking') renderSnapList();
+  };
+});
+
+// momentopname vastleggen van de huidige screening
+function takeSnapshot(){
+  if(!CURRENT.length){tStat("Geen screening om vast te leggen \u2014 draai eerst de screener.",true);return;}
+  var isDemo=$('apikey').value.trim()==="";
+  var items=CURRENT.map(function(d){
+    return {symbol:d.symbol,name:d.name,score:rawScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),price:d.price};
+  });
+  HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
+    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value},items:items});
+  tStat("Vastgelegd: "+items.length+" aandelen op "+new Date().toLocaleDateString()+(isDemo?" (let op: demodata)":"")+".");
+  renderSnapList();
+}
+
+// accuratesse meten: haal huidige koersen op voor aandelen in snapshots, vergelijk met toenmalige
+function measureAccuracy(){
+  var key=$('apikey').value.trim();
+  if(!key){tStat("Voor het meten zijn live koersen nodig \u2014 vul je FMP-sleutel in op het Screener-tabblad.",true);return;}
+  // verzamel snapshots ouder dan vandaag met niet-demo data
+  var old=HISTORY.filter(function(s){return !s.demo;});
+  if(old.length===0){tStat("Nog geen bruikbare (niet-demo) momentopnamen. Leg eerst een live screening vast en kom later terug.",true);return;}
+  // unieke symbolen
+  var syms={};old.forEach(function(s){s.items.forEach(function(it){syms[it.symbol]=1;});});
+  var symList=Object.keys(syms);
+  tStat("Huidige koersen ophalen voor "+symList.length+" aandelen\u2026");
+  var prices={},apiErr=null;
+  var seq=Promise.resolve();
+  symList.forEach(function(sym){
+    seq=seq.then(function(){
+      if(apiErr)return;
+      return fetch(BASE+"/quote?symbol="+sym+"&apikey="+key).then(function(r){return r.text();}).then(function(txt){
+        try{var d=JSON.parse(txt);var q=Array.isArray(d)?d[0]:d;if(q&&q.price!=null)prices[sym]=+q.price;}
+        catch(e){apiErr=txt.slice(0,100);}
+      }).catch(function(){});
+    });
+  });
+  seq.then(function(){
+    if(apiErr){tStat("Koersen ophalen mislukte \u2014 FMP-melding: \""+apiErr+"\". Mogelijk je dag-limiet.",true);return;}
+    computeAndShowAccuracy(old,prices);
+  });
+}
+
+// bereken: hangt hogere score samen met hoger werkelijk rendement?
+function computeAndShowAccuracy(snaps,prices){
+  var pairs=[]; // {score,m,v,g,ret}
+  snaps.forEach(function(s){
+    s.items.forEach(function(it){
+      if(prices[it.symbol]!=null && it.price!=null && it.price>0){
+        var ret=((prices[it.symbol]-it.price)/it.price)*100;
+        pairs.push({score:it.score,m:it.m,v:it.v,g:it.g,q:(it.q!=null?it.q:50),ret:ret});
+      }
+    });
+  });
+  if(pairs.length<3){tStat("Te weinig vergelijkbare datapunten ("+pairs.length+"). Leg meer momentopnamen vast over de tijd.",true);return;}
+  // gemiddeld rendement hoge vs lage score (mediaan-split)
+  var sorted=pairs.slice().sort(function(a,b){return b.score-a.score;});
+  var half=Math.floor(sorted.length/2);
+  var hi=sorted.slice(0,half),lo=sorted.slice(sorted.length-half);
+  var avg=function(arr,f){return arr.reduce(function(s,x){return s+f(x);},0)/arr.length;};
+  var hiRet=avg(hi,function(x){return x.ret;}),loRet=avg(lo,function(x){return x.ret;});
+  // correlatie (Pearson) tussen elke factor en rendement
+  function corr(f){
+    var xs=pairs.map(f),ys=pairs.map(function(x){return x.ret;});
+    var mx=avg(pairs,f),my=avg(pairs,function(x){return x.ret;});
+    var num=0,dx=0,dy=0;
+    for(var i=0;i<pairs.length;i++){var a=xs[i]-mx,b=ys[i]-my;num+=a*b;dx+=a*a;dy+=b*b;}
+    if(dx===0||dy===0)return 0;
+    return num/Math.sqrt(dx*dy);
+  }
+  var cTot=corr(function(x){return x.score;}),cM=corr(function(x){return x.m;}),cV=corr(function(x){return x.v;}),cG=corr(function(x){return x.g;}),cQ=corr(function(x){return x.q;});
+  tStat("Gemeten over "+pairs.length+" datapunten uit "+snaps.length+" momentopname(n).");
+  renderKPIs(hiRet,loRet,cTot,pairs.length);
+  renderFactors(cM,cV,cG,cQ);
+  renderScatter(pairs);
+}
+
+function renderKPIs(hiRet,loRet,cTot,n){
+  var spread=hiRet-loRet;
+  function cell(lbl,val,sub,sign){
+    var cl=sign>0?"pos":(sign<0?"neg":"");
+    return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val '+cl+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';
+  }
+  var verdict = cTot>0.2?"De score voorspelde tot nu toe iets \u2014 voorzichtig positief.":
+                cTot<-0.2?"De score wees de verkeerde kant op \u2014 mogelijk overweegt momentum verkeerd.":
+                "Geen duidelijk verband \u2014 binnen ruis. Meer data nodig.";
+  $('kpiWrap').innerHTML=
+    cell("Rendement hoge scores","+0".replace("+0",(hiRet>=0?"+":"")+hiRet.toFixed(1)+"%"),"gem. top-helft sinds vastlegging",hiRet)+
+    cell("Rendement lage scores",(loRet>=0?"+":"")+loRet.toFixed(1)+"%","gem. onderste helft",loRet)+
+    cell("Verschil (spread)",(spread>=0?"+":"")+spread.toFixed(1)+"%","hoog minus laag \u2014 idealiter positief",spread)+
+    cell("Correlatie score\u2194rendement",cTot.toFixed(2),"-1 t/m +1; "+verdict,cTot);
+}
+
+function renderFactors(cM,cV,cG,cQ){
+  function bar(name,c){
+    var pct=Math.min(100,Math.abs(c)*100);
+    var col=c>=0?"var(--green)":"var(--red)";
+    var dir=c>=0?"left:50%":"right:50%";
+    return '<div class="factor-bar"><span class="fn">'+name+'</span><span class="ft"><i style="'+dir+';width:'+(pct/2)+'%;background:'+col+'"></i><span style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)"></span></span><span class="fv">'+c.toFixed(2)+'</span></div>';
+  }
+  $('factorWrap').innerHTML='<h3 style="font-family:\'Fraunces\',serif;font-size:20px;margin:24px 0 6px">Welke factor voorspelde het best?</h3>'+
+    '<p class="sub" style="margin-bottom:12px">Correlatie van elke factor met het werkelijke rendement (-1 t/m +1). Positief = die factor wees de goede kant op. Stuur hiermee je weging op het Screener-tabblad bij \u2014 maar wees voorzichtig: weinig data = onbetrouwbaar.</p>'+
+    bar("Momentum",cM)+bar("Waardering",cV)+bar("Groei",cG)+bar("Kwaliteit",cQ!=null?cQ:0);
+}
+
+
+// Spreidingsdiagram: elke stip is één aandeel-meting (x = score destijds, y = werkelijk rendement sindsdien)
+function renderScatter(pairs){
+  var W=640,H=320,P=44; // breedte, hoogte, padding
+  var xs=pairs.map(function(p){return p.score;}),ys=pairs.map(function(p){return p.ret;});
+  var xmin=0,xmax=100;
+  var ymin=Math.min.apply(null,ys),ymax=Math.max.apply(null,ys);
+  var pad=Math.max(2,(ymax-ymin)*0.1);ymin-=pad;ymax+=pad;
+  if(ymin>-2)ymin=-2;if(ymax<2)ymax=2; // nullijn altijd in beeld
+  function X(v){return P+(v-xmin)/(xmax-xmin)*(W-2*P);}
+  function Y(v){return H-P-(v-ymin)/(ymax-ymin)*(H-2*P);}
+  // eenvoudige kleinste-kwadraten trendlijn
+  var n=pairs.length,sx=0,sy=0,sxy=0,sxx=0;
+  pairs.forEach(function(p){sx+=p.score;sy+=p.ret;sxy+=p.score*p.ret;sxx+=p.score*p.score;});
+  var slope=(n*sxy-sx*sy)/Math.max(1e-9,(n*sxx-sx*sx));
+  var icept=(sy-slope*sx)/n;
+  var dots=pairs.map(function(p){
+    var col=p.ret>=0?"var(--green)":"var(--red)";
+    return '<circle cx="'+X(p.score).toFixed(1)+'" cy="'+Y(p.ret).toFixed(1)+'" r="4" fill="'+col+'" fill-opacity="0.65"><title>score '+p.score+' \u2192 '+(p.ret>=0?"+":"")+p.ret.toFixed(1)+'%</title></circle>';
+  }).join("");
+  // y-as labels: min, 0, max
+  function lbl(v,y){return '<text x="'+(P-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">'+(v>=0?"+":"")+v.toFixed(0)+'%</text>';}
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:'+W+'px;background:var(--panel);border:1px solid var(--line);border-radius:10px">'
+    +'<line x1="'+P+'" y1="'+Y(0)+'" x2="'+(W-P)+'" y2="'+Y(0)+'" stroke="var(--line)" stroke-width="1.5"/>'
+    +'<line x1="'+P+'" y1="'+(H-P)+'" x2="'+(W-P)+'" y2="'+(H-P)+'" stroke="var(--line)"/>'
+    +'<line x1="'+X(xmin)+'" y1="'+Y(slope*xmin+icept)+'" x2="'+X(xmax)+'" y2="'+Y(slope*xmax+icept)+'" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6 4"/>'
+    +dots
+    +lbl(ymin,Y(ymin))+lbl(0,Y(0))+lbl(ymax,Y(ymax))
+    +'<text x="'+(W/2)+'" y="'+(H-10)+'" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono">score bij vastlegging \u2192</text>'
+    +'<text x="14" y="'+(H/2)+'" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono" transform="rotate(-90 14 '+(H/2)+')">werkelijk rendement</text>'
+    +'</svg>';
+  document.getElementById('scatterWrap').innerHTML=
+    '<h3 style="font-family:\'Fraunces\',serif;font-size:20px;margin:24px 0 6px">Score versus werkelijk rendement</h3>'
+    +'<p class="sub" style="margin-bottom:12px">Elke stip is \u00e9\u00e9n aandeel-meting. Loopt de gestippelde trendlijn omhoog, dan hingen hogere scores samen met hoger rendement. Loopt hij vlak of omlaag \u2014 of liggen de stippen als hagel verspreid \u2014 dan voorspelde de score (nog) niets. Bij weinig stippen domineert toeval.</p>'
+    +svg;
+}
+
+function renderSnapList(){
+  var el=$('snapList');
+  if(HISTORY.length===0){el.innerHTML='<div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Huidige screening vastleggen".</div>';return;}
+  el.innerHTML=HISTORY.slice().reverse().map(function(s,idx){
+    var top=s.items.slice(0,5).map(function(it){return it.symbol+" ("+it.score+")";}).join(", ");
+    return '<div class="snap"><h4>'+new Date(s.ts).toLocaleDateString()+(s.demo?' \u2014 <span style="color:var(--accent)">demodata</span>':'')+'</h4>'+
+      '<div class="meta">'+s.items.length+' aandelen \u00b7 weging M'+s.weights.wm+'/W'+s.weights.wv+'/G'+s.weights.wg+' \u00b7 top: '+top+'</div></div>';
+  }).join("");
+}
+
+function exportHistory(){
+  if(HISTORY.length===0){tStat("Niets om te exporteren.",true);return;}
+  var blob=new Blob([JSON.stringify(HISTORY,null,2)],{type:"application/json"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download="screener-geschiedenis-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  tStat("Geschiedenis ge\u00ebxporteerd ("+HISTORY.length+" momentopnamen).");
+}
+
+function importHistory(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!Array.isArray(data))throw new Error("verkeerd formaat");
+      // samenvoegen i.p.v. overschrijven, dedupe op ts
+      var seen={};HISTORY.forEach(function(s){seen[s.ts]=1;});
+      data.forEach(function(s){if(s.ts&&!seen[s.ts]){HISTORY.push(s);seen[s.ts]=1;}});
+      HISTORY.sort(function(a,b){return a.ts-b.ts;});
+      tStat("Geschiedenis ge\u00efmporteerd \u2014 nu "+HISTORY.length+" momentopnamen.");
+      renderSnapList();
+    }catch(err){tStat("Importeren mislukte: ongeldig bestand.",true);}
+  };
+  reader.readAsText(file);
+}
+
+$('snapshot').onclick=takeSnapshot;
+$('measure').onclick=measureAccuracy;
+$('export').onclick=exportHistory;
+$('importBtn').onclick=function(){$('importFile').click();};
+$('importFile').onchange=function(e){if(e.target.files[0])importHistory(e.target.files[0]);};
+$('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.length+" momentopnamen wissen?")){HISTORY=[];renderSnapList();$('kpiWrap').innerHTML='';$('factorWrap').innerHTML='';$('scatterWrap').innerHTML='';tStat("Geschiedenis gewist.");}};
+
+CURRENT=DEMO;
+$('status').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel. Vul een sleutel in en klik "Screen het universum" voor live resultaten.';
+(function(){var sc=document.querySelector('th[data-k="score"]');if(sc){var ar=document.createElement('span');ar.className='arrow';ar.textContent=' \u25be';sc.appendChild(ar);}})();
+
+// ---- PWA / mobiel ----
+(function(){
+  var tip=$('pwaTip'); if(!tip)return;
+  // detecteer of de app al "geinstalleerd" (standalone) draait
+  var standalone = window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var hidden = false;
+  try{ hidden = (window.storage? false : false); }catch(e){}
+  if(isMobile && !standalone){ tip.style.display="block"; }
+  $('pwaTipClose').onclick=function(){tip.style.display="none";};
+  // Android: vang de installeerbaar-prompt op en bied een echte installeerknop
+  window.addEventListener('beforeinstallprompt',function(e){
+    e.preventDefault();
+    var btn=document.createElement('button');
+    btn.textContent="\ud83d\udce5 Nu installeren";
+    btn.onclick=function(){e.prompt();};
+    tip.appendChild(btn); tip.style.display="block";
+  });
+})();
+
+render();
+</script>
+</body>
+</html>
