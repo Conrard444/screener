@@ -306,6 +306,12 @@
       <button class="btn-ghost" id="loginBtn">Inloggen met Google</button>
       <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
     </div>
+    <div class="snap" id="keySyncBar" style="border-left:3px solid var(--accent);font-size:12.5px;color:var(--muted)">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+        <input type="checkbox" id="syncKeys" style="margin-top:3px">
+        <span>Ook mijn API-sleutels meenemen in de cloud-sync (handig: dan hoef je ze niet per apparaat opnieuw in te geven). <b style="color:var(--accent)">Waarschuwing:</b> een API-sleutel is een wachtwoord. Doe dit alleen voor gratis sleutels \u2014 bewaar hier g\u00e9\u00e9n sleutels van betaalde abonnementen, want bij lekken kan dat geld kosten.</span>
+      </label>
+    </div>
     <div class="track-actions">
       <button class="btn-save" id="snapshot">&#128190; Huidige screening vastleggen</button>
       <button class="btn-ghost" id="export">&#8595; Exporteer geschiedenis (bestand)</button>
@@ -1003,6 +1009,8 @@ $('saveKey').onclick=function(){
   }else{
     $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie.";
   }
+  // ook naar cloud als ingelogd én sync-keuze aanstaat
+  if(typeof saveKeysCloud==="function")saveKeysCloud();
 };
 updateKeyLabel();
 loadKeyFor($('source').value);
@@ -1270,6 +1278,13 @@ $('loginBtn').onclick=function(){
   FB.auth.signInWithPopup(prov).catch(function(e){syncMsg("Inloggen mislukt: "+(e&&e.message||e));});
 };
 $('logoutBtn').onclick=function(){if(FB.auth)FB.auth.signOut();};
+if($('syncKeys'))$('syncKeys').onchange=function(){
+  if(!FB.user){syncMsg("Log eerst in om sleutels te synchroniseren.");$('syncKeys').checked=false;return;}
+  saveKeysCloud();
+  syncMsg($('syncKeys').checked
+    ? "\u2601\ufe0f Sleutels worden nu meegesynchroniseerd. Bewaar hier g\u00e9\u00e9n betaalde sleutels."
+    : "\u2601\ufe0f Sleutel-sync uit \u2014 sleutels uit de cloud verwijderd. Lokale sleutels blijven op dit apparaat.");
+};
 
 // merge: voeg twee snapshot-lijsten samen, dedupe op ts
 function mergeHistory(a,b){
@@ -1281,19 +1296,44 @@ function mergeHistory(a,b){
 function loadCloud(){
   if(!FB.user)return;
   FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
-    var cloud=(doc.exists&&doc.data().history)||[];
+    var data=doc.exists?doc.data():{};
+    var cloud=data.history||[];
     var before=HISTORY.length;
     HISTORY=mergeHistory(HISTORY,cloud);
     renderSnapList();
-    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen (cloud: "+cloud.length+", lokaal was: "+before+").");
-    if(HISTORY.length>cloud.length)saveCloud(); // lokale extra's terugschrijven
+    // sleutels uit cloud overnemen indien aanwezig
+    var gotKeys=0;
+    if(data.keys){
+      $('syncKeys').checked=true; // er stonden sleutels in de cloud -> sync stond aan
+      ['finnhub','fmp','eodhd'].forEach(function(src){
+        if(data.keys[src]){KEYCACHE[src]=data.keys[src];gotKeys++;
+          if(window.storage&&window.storage.set)window.storage.set(keyStorageId(src),data.keys[src]).catch(function(){});
+        }
+      });
+      loadKeyFor($('source').value); // toon de sleutel van de huidige bron
+    }
+    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+(gotKeys?", "+gotKeys+" sleutel(s)":"")+" (cloud: "+cloud.length+", lokaal was: "+before+").");
+    if(HISTORY.length>cloud.length)saveCloud();
   }).catch(function(e){syncMsg("Ophalen uit cloud mislukt: "+(e&&e.message||e));});
 }
 function saveCloud(){
   if(!FB.user||!FB.ready)return;
-  FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()}).then(function(){
+  FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()},{merge:true}).then(function(){
     syncMsg("\u2601\ufe0f Opgeslagen in cloud als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen.");
   }).catch(function(e){syncMsg("Opslaan in cloud mislukt: "+(e&&e.message||e));});
+}
+// sleutels apart naar cloud schrijven, alleen als de opt-in checkbox aanstaat
+function saveKeysCloud(){
+  if(!FB.user||!FB.ready)return;
+  var on=$('syncKeys')&&$('syncKeys').checked;
+  if(on){
+    var keys={};
+    ['finnhub','fmp','eodhd'].forEach(function(src){if(KEYCACHE[src])keys[src]=KEYCACHE[src];});
+    FB.db.collection("users").doc(FB.user.uid).set({keys:keys},{merge:true}).catch(function(){});
+  }else{
+    // checkbox uit -> sleutels uit de cloud verwijderen
+    FB.db.collection("users").doc(FB.user.uid).set({keys:firebase.firestore.FieldValue.delete()},{merge:true}).catch(function(){});
+  }
 }
 
 CURRENT=DEMO;
