@@ -1305,12 +1305,17 @@ function loadCloud(){
     var gotKeys=0;
     if(data.keys){
       $('syncKeys').checked=true; // er stonden sleutels in de cloud -> sync stond aan
+      var firstWithKey=null;
       ['finnhub','fmp','eodhd'].forEach(function(src){
         if(data.keys[src]){KEYCACHE[src]=data.keys[src];gotKeys++;
+          if(firstWithKey===null)firstWithKey=src;
           if(window.storage&&window.storage.set)window.storage.set(keyStorageId(src),data.keys[src]).catch(function(){});
         }
       });
-      loadKeyFor($('source').value); // toon de sleutel van de huidige bron
+      // schakel naar de bron waarvoor een sleutel bestaat (als de huidige er geen heeft) en vul het veld
+      var cur=$('source').value;
+      if(!KEYCACHE[cur] && firstWithKey){ $('source').value=firstWithKey; updateKeyLabel(); cur=firstWithKey; }
+      $('apikey').value=KEYCACHE[cur]||"";
     }
     syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+(gotKeys?", "+gotKeys+" sleutel(s)":"")+" (cloud: "+cloud.length+", lokaal was: "+before+").");
     if(HISTORY.length>cloud.length)saveCloud();
