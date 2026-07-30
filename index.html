@@ -372,6 +372,10 @@
     <p class="sub" style="margin-top:18px">Voer je eigen posities in. De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde &mdash; en waarschuwt als de fundamentele situatie merkbaar is veranderd.</p>
     <div class="disclaimer">&#9888;&#65039; Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet en kan geen koop- of verkoopbeslissing nemen. Bij elke waarschuwing: vraag jezelf af waaróm je deze positie ook alweer aanhield.</div>
 
+    <div class="snap" id="pfSourceBar" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
+      &#8505;&#65039; Posities worden gecheckt via de databron die bovenaan bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK, \u2026) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse. Wissel zo nodig van bron bij Screener en kom hierheen terug om opnieuw te checken.
+    </div>
+
     <div class="bar-top">
       <div class="field"><label>Ticker</label><input type="text" id="pfSymbol" placeholder="bv. AAPL" style="width:110px"></div>
       <div class="field"><label>Aantal</label><input type="number" id="pfQty" placeholder="10" style="width:90px"></div>
@@ -384,7 +388,38 @@
     </div>
 
     <div class="status" id="pfStatus"></div>
+
+    <div class="kpi-row" id="pfDashboard"></div>
     <div id="overlapWrap"></div>
+
+    <div class="filters" style="align-items:center">
+      <div class="grp">
+        <span>Sorteren op</span>
+        <div class="row">
+          <select id="pfSort">
+            <option value="alarm">Alarmniveau (rood eerst)</option>
+            <option value="score">Score (hoog \u2192 laag)</option>
+            <option value="scoreAsc">Score (laag \u2192 hoog)</option>
+            <option value="pl">Resultaat % (hoog \u2192 laag)</option>
+            <option value="plAsc">Resultaat % (laag \u2192 hoog)</option>
+            <option value="symbol">Ticker (A-Z)</option>
+            <option value="value">Positiewaarde (groot \u2192 klein)</option>
+          </select>
+        </div>
+      </div>
+      <div class="grp">
+        <span>Filter</span>
+        <div class="row">
+          <select id="pfFilter">
+            <option value="all">Alle posities</option>
+            <option value="red">Alleen rode alarmen</option>
+            <option value="orange">Rood + oranje</option>
+            <option value="unchecked">Nog niet gecheckt</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <div id="pfList"><div class="empty">Nog geen posities toegevoegd.</div></div>
   </div><!-- /tab-portfolio -->
 
@@ -787,14 +822,22 @@ function passesFilters(d){
 
 // Algemene JSON-helper met foutdetectie
 function getJson(url){
-  return fetch(url).then(function(r){return r.text();}).then(function(txt){
+  return fetch(url).then(function(r){
+    if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText}; }
+    return r.text();
+  }).then(function(txt){
     var data;
     try{ data=JSON.parse(txt); }
-    catch(e){ throw {kind:"text",msg:txt.slice(0,140)}; }
+    catch(e){ throw {kind:"text",msg:txt.slice(0,140)||"lege server-respons"}; }
     if(data && !Array.isArray(data) && (data["Error Message"]||data.error||(data.message&&!data.metric&&!data.c))){
       throw {kind:"api",msg:(data["Error Message"]||data.error||data.message)};
     }
     return data;
+  }).catch(function(e){
+    // fetch zelf kan falen (netwerk/CORS) zonder .msg -> alsnog een leesbare melding geven
+    if(e&&e.msg)throw e;
+    var m=(e&&e.message)?e.message:String(e);
+    throw {kind:"network",msg:/Failed to fetch|NetworkError|CORS/i.test(m)?"netwerkfout of CORS-blokkade (mogelijk verkeerde sleutel of niet-toegestaan domein)":m};
   });
 }
 
@@ -924,10 +967,11 @@ function enrichFMP(symbol,key){
 // --- EODHD: real-time + fundamentals (fundamentals vereist betaald pakket; valt anders leeg) ---
 function enrichEODHD(symbol,key){
   var sym=symbol.indexOf(".")>-1?symbol:symbol+".US";
-  return Promise.all([
-    getJson(EODHD_BASE+"/real-time/"+sym+"?api_token="+key+"&fmt=json"),
-    getJson(EODHD_BASE+"/fundamentals/"+sym+"?api_token="+key).catch(function(){return {};})
-  ]).then(function(res){
+  return getJson(EODHD_BASE+"/real-time/"+sym+"?api_token="+key+"&fmt=json").then(function(rt0){
+    return getJson(EODHD_BASE+"/fundamentals/"+sym+"?api_token="+key).catch(function(){return {};}).then(function(f0){
+      return [rt0,f0];
+    });
+  }).then(function(res){
     var rt=res[0]||{}, f=res[1]||{};
     var H=(f&&f.Highlights)||{}, V=(f&&f.Valuation)||{}, T=(f&&f.Technicals)||{};
     var price=(rt.close!=null&&rt.close!=="NA")?+(+rt.close).toFixed(2):null;
@@ -1113,7 +1157,7 @@ function updateKeyLabel(){
   var names={finnhub:"Finnhub API-sleutel",fmp:"FMP API-sleutel",eodhd:"EODHD API-sleutel"};
   $('keylabel').textContent=names[src]||"API-sleutel";
 }
-$('source').onchange=function(){updateKeyLabel();loadKeyFor($('source').value);};
+$('source').onchange=function(){updateKeyLabel();loadKeyFor($('source').value);if(typeof updateSourceBar==="function")updateSourceBar();};
 $('saveKey').onclick=function(){
   var src=$('source').value, val=$('apikey').value.trim();
   KEYCACHE[src]=val;
@@ -1327,16 +1371,78 @@ function classifyAlarm(pos,fresh){
   return {level:level, text:reasons.join(" \u00b7 ")};
 }
 
+function updateSourceBar(){
+  var el=$('pfSourceName'); if(!el)return;
+  var names={finnhub:"Finnhub",fmp:"Financial Modeling Prep",eodhd:"EODHD"};
+  el.textContent=names[currentSource()]||"onbekend";
+}
+
 function renderPortfolio(){
+  updateSourceBar();
   var el=$('pfList');
-  if(!PORTFOLIO.length){el.innerHTML='<div class="empty">Nog geen posities toegevoegd.</div>';renderOverlap();return;}
-  el.innerHTML=PORTFOLIO.map(function(p){
-    var pl = (p.buyPrice&&p._fresh&&p._fresh.price)? (((p._fresh.price-p.buyPrice)/p.buyPrice)*100) : null;
+  if(!PORTFOLIO.length){el.innerHTML='<div class="empty">Nog geen posities toegevoegd.</div>';$('pfDashboard').innerHTML="";renderOverlap();return;}
+
+  // ---- dashboard: totalen over de hele portefeuille ----
+  var checked=PORTFOLIO.filter(function(p){return p._fresh;});
+  var totalValue=0, totalCost=0, hasValue=false;
+  PORTFOLIO.forEach(function(p){
+    if(p._fresh&&p._fresh.price!=null){ totalValue+=p._fresh.price*p.qty; hasValue=true; }
+    if(p.buyPrice!=null){ totalCost+=p.buyPrice*p.qty; }
+  });
+  var totalPL=(hasValue&&totalCost>0)?((totalValue-totalCost)/totalCost*100):null;
+  var redCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="red";}).length;
+  var orangeCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="orange";}).length;
+  var avgScore=checked.length?Math.round(checked.reduce(function(s,p){return s+p._fresh.score;},0)/checked.length):null;
+
+  function kpi(lbl,val,sub,cls){return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';}
+  $('pfDashboard').innerHTML=
+    kpi("Posities",PORTFOLIO.length,checked.length+" gecheckt")+
+    kpi("Resultaat",totalPL!=null?((totalPL>=0?"+":"")+totalPL.toFixed(1)+"%"):"\u2014",hasValue?"o.b.v. actuele koers":"nog geen koersdata",totalPL!=null?(totalPL>=0?"pos":"neg"):"")+
+    kpi("Gem. score",avgScore!=null?avgScore:"\u2014","van gecheckte posities")+
+    kpi("Alarmen",redCount+orangeCount,redCount+" rood \u00b7 "+orangeCount+" oranje",redCount>0?"neg":(orangeCount>0?"":""));
+
+  // ---- sorteren ----
+  var sortKey=$('pfSort')?$('pfSort').value:"alarm";
+  var list=PORTFOLIO.slice();
+  var alarmRank={red:0,orange:1,green:2,undefined:3};
+  function plOf(p){return (p.buyPrice&&p._fresh&&p._fresh.price)?((p._fresh.price-p.buyPrice)/p.buyPrice*100):null;}
+  function valueOf(p){return (p._fresh&&p._fresh.price)?p._fresh.price*p.qty:-1;}
+  list.sort(function(a,b){
+    if(sortKey==="alarm"){
+      var ra=alarmRank[a._alarm&&a._alarm.level]; if(ra==null)ra=3;
+      var rb=alarmRank[b._alarm&&b._alarm.level]; if(rb==null)rb=3;
+      return ra-rb;
+    }
+    if(sortKey==="score")return (b._fresh?b._fresh.score:-1)-(a._fresh?a._fresh.score:-1);
+    if(sortKey==="scoreAsc")return (a._fresh?a._fresh.score:999)-(b._fresh?b._fresh.score:999);
+    if(sortKey==="pl"){var pa=plOf(a),pb=plOf(b);return (pb==null?-999:pb)-(pa==null?-999:pa);}
+    if(sortKey==="plAsc"){var pa2=plOf(a),pb2=plOf(b);return (pa2==null?999:pa2)-(pb2==null?999:pb2);}
+    if(sortKey==="symbol")return a.symbol.localeCompare(b.symbol);
+    if(sortKey==="value")return valueOf(b)-valueOf(a);
+    return 0;
+  });
+
+  // ---- filteren ----
+  var filterKey=$('pfFilter')?$('pfFilter').value:"all";
+  if(filterKey==="red")list=list.filter(function(p){return p._alarm&&p._alarm.level==="red";});
+  else if(filterKey==="orange")list=list.filter(function(p){return p._alarm&&(p._alarm.level==="red"||p._alarm.level==="orange");});
+  else if(filterKey==="unchecked")list=list.filter(function(p){return !p._fresh;});
+
+  if(!list.length){
+    el.innerHTML='<div class="empty">Geen posities voldoen aan dit filter.</div>';
+    renderOverlap();
+    return;
+  }
+
+  el.innerHTML=list.map(function(p){
+    var pl = plOf(p);
+    var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
       '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
       (p._fresh?'<span class="scorecell">'+p._fresh.score+'</span>':'<span style="color:var(--muted);font-size:12px">nog niet gecheckt</span>')+
       '<button class="pf-remove" onclick="removePosition(\''+p.id+'\')">verwijderen</button></div>'+
       '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
+      (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
       (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
       (p._fresh?'<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>':'')+
       (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
@@ -1345,6 +1451,8 @@ function renderPortfolio(){
   }).join("");
   renderOverlap();
 }
+if($('pfSort'))$('pfSort').onchange=renderPortfolio;
+if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
 function renderOverlap(){
@@ -1380,7 +1488,9 @@ function checkAllPositions(){
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
       }).catch(function(e){
-        pos._fresh=null; pos._alarm={level:"orange",text:"Kon niet ophalen: "+((e&&e.msg)||"onbekende fout")};
+        var msg=(e&&e.msg)?e.msg:(e&&e.message)?e.message:"onbekende fout ("+String(e).slice(0,80)+")";
+        var srcName={finnhub:"Finnhub",fmp:"FMP",eodhd:"EODHD"}[currentSource()]||"databron";
+        pos._fresh=null; pos._alarm={level:"orange",text:"["+srcName+"] Kon niet ophalen: "+msg};
       });
     });
   });
