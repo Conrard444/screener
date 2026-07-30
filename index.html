@@ -156,6 +156,21 @@
   .pwa-tip{display:none;margin:14px 0;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:8px;font-size:13px;color:var(--muted)}
   .pwa-tip b{color:var(--ink)}
   .pwa-tip button{background:none;border:1px solid var(--line);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:12px;margin-left:8px;cursor:pointer}
+  .pf-card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin:10px 0}
+  .pf-card.alarm-red{border-left-color:var(--red)}
+  .pf-card.alarm-orange{border-left-color:var(--accent)}
+  .pf-card.alarm-green{border-left-color:var(--green)}
+  .pf-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .pf-head .tk{font-size:16px}
+  .pf-meta{font-size:12px;color:var(--muted);margin-top:4px}
+  .pf-scores{display:flex;gap:16px;margin-top:10px;font-size:12.5px;flex-wrap:wrap}
+  .pf-scores span b{font-family:'IBM Plex Mono';color:var(--ink)}
+  .pf-alarm-text{margin-top:8px;font-size:13px;padding:8px 12px;border-radius:6px;background:var(--panel-2)}
+  .pf-alarm-text.red{color:var(--red)}
+  .pf-alarm-text.orange{color:var(--accent)}
+  .pf-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;text-decoration:underline}
+  .overlap-warn{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;margin:14px 0;font-size:13px;color:var(--muted)}
+  .overlap-warn b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -168,6 +183,8 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="screener">Screener</button>
+    <button class="tab" data-tab="etf">ETF's</button>
+    <button class="tab" data-tab="portfolio">Portefeuille</button>
     <button class="tab" data-tab="tracking">Tracking &amp; accuratesse</button>
   </div>
 
@@ -203,6 +220,7 @@
         <option value="ALL">VS + EU alles (~120)</option>
         <option value="SP500">S&amp;P 500 grootste ~200 \u2014 met vooranalyse</option>
         <option value="SCANDI">Scandinavi\u00eb (~29)</option>
+        <option value="CHINA">China / Hongkong (~37)</option>
       </select>
     </div>
     <div class="field">
@@ -253,6 +271,7 @@
 
   <div class="status" id="status"></div>
 
+  <div id="dailyDiffWrap"></div>
   <div class="scrollhint">&#8596; veeg horizontaal om alle kolommen te zien</div>
   <div class="panel-card">
     <table>
@@ -293,9 +312,81 @@
     <p><b>EODHD</b>: <code>eodhd.com</code> &mdash; gratis tier geeft maar 20 calls/dag en fundamentals vereisen een betaald pakket; in de praktijk beperkt bruikbaar.</p>
     <p><b>Grote universa &amp; vooranalyse:</b> bij universa groter dan 60 aandelen (S&amp;P 500, VS+EU alles) gebruikt de tool automatisch een twee-traps trechter: eerst een goedkope scan van het dagmomentum (1 call per aandeel), waarna alleen de top-kandidaten (3x je toonlimiet) de volledige vier-factor analyse krijgen. Zo screen je ~200 aandelen voor ~350 calls i.p.v. dat elke analyse op alles draait. Met Finnhub-throttling duurt de S&amp;P-run zo'n 6-7 minuten; laat het tabblad open. Let op: de vooranalyse selecteert op dagstijging, dus dalers vallen af v&oacute;&oacute;r de factoranalyse \u2014 het is een momentum-trechter, geen volledige rangschikking.</p>
     <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
+    <p><b>China / Hongkong:</b> dekt grote namen via Amerikaanse ADR (bv. BABA, JD, PDD) of HK-notering (.HK) &mdash; <u>niet</u> de binnenlandse A-aandelenmarkt van Shanghai/Shenzhen, die achter gespecialiseerde databronnen zit. Namen met een <span class="trap warn" style="font-size:9px">VIE</span>-label gebruiken een Variable Interest Entity-structuur: je koopt dan een contractuele aanspraak op de winst, geen direct eigendom van het onderliggende bedrijf &mdash; een juridisch/politiek risico dat losstaat van de vier factoren en niet in de score verwerkt zit.</p>
     <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
   </details>
   </div><!-- /tab-screener -->
+
+  <div class="tabpane" id="tab-etf">
+    <p class="sub" style="margin-top:18px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe efficiënt het fonds zijn index volgt. Deze score is losgekoppeld van de aandelenscore hierboven.</p>
+    <div class="disclaimer">&#9888;&#65039; Ook hier geldt: dit vergelijkt fondsen op meetbare kenmerken, het voorspelt geen rendement. Lage kosten en brede spreiding zijn de twee factoren waar het meeste onderzoek achter staat &mdash; niet historisch rendement, want dat zegt weinig over de toekomst.</div>
+
+    <div class="bar-top">
+      <div class="field">
+        <label>Tickers (komma-gescheiden, VS-ETF's)</label>
+        <input type="text" id="etfTickers" value="SPY, QQQ, VTI, VOO, VXUS, VEA, VWO, IWM, SCHD, VYM, ARKK, XLK, XLF, XLE, BND, AGG" style="min-width:340px">
+      </div>
+      <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
+      <button class="btn-ghost" id="etfDemo">Laad demo</button>
+    </div>
+
+    <div class="weights">
+      <span style="color:var(--ink);font-weight:600">Score-weging:</span>
+      <span class="wlabel">Lage kosten <b id="ewc-v">40</b>%</span><input type="range" id="ewc" min="0" max="100" value="40">
+      <span class="wlabel">Spreiding <b id="ewd-v">25</b>%</span><input type="range" id="ewd" min="0" max="100" value="25">
+      <span class="wlabel">Liquiditeit <b id="ewl-v">20</b>%</span><input type="range" id="ewl" min="0" max="100" value="20">
+      <span class="wlabel">Track record <b id="ewt-v">15</b>%</span><input type="range" id="ewt" min="0" max="100" value="15">
+    </div>
+
+    <div class="status" id="etfStatus"></div>
+
+    <div class="panel-card">
+      <table>
+        <thead>
+          <tr>
+            <th class="l" data-k="symbol">Ticker</th>
+            <th data-k="aum" title="Fondsomvang (assets under management) in miljarden dollar. Groter fonds = doorgaans lagere kosten en betere liquiditeit, minder kans dat het fonds ooit sluit.">AUM<span class="q">?</span></th>
+            <th data-k="ter" title="Total Expense Ratio: het jaarlijkse kostenpercentage dat automatisch van je rendement wordt afgehaald. Het enige cijfer dat je vooraf zeker weet. Lager is vrijwel altijd beter.">Kosten<span class="q">?</span></th>
+            <th data-k="holdings" title="Aantal onderliggende posities. Meer posities = bredere spreiding = minder afhankelijk van één bedrijf of sector.">Posities<span class="q">?</span></th>
+            <th data-k="top10" title="Percentage van het fonds dat in de 10 grootste posities zit. Hoger percentage = geconcentreerder, dus minder gespreid dan het aantal posities doet vermoeden.">Top&nbsp;10<span class="q">?</span></th>
+            <th data-k="yield" title="Dividendrendement op jaarbasis, in procent.">Dividend<span class="q">?</span></th>
+            <th data-k="chg" title="Koersverandering vandaag, in procent.">&Delta; Dag<span class="q">?</span></th>
+            <th data-k="score">Score &#9662;</th>
+          </tr>
+        </thead>
+        <tbody id="etfBody"></tbody>
+      </table>
+    </div>
+
+    <p class="legend">
+      <b>Waarom deze factoren?</b> <b>Kosten</b> wegen het zwaarst (40%) omdat het de enige factor is die je vooraf met zekerheid kent en die rechtstreeks van je rendement afgaat &mdash; onderzoek naar fondsselectie wijst kosten consistent aan als de sterkste voorspeller van relatieve prestatie op lange termijn. <b>Spreiding</b> (aantal posities, concentratie in top-10) bepaalt hoe afhankelijk je bent van een klein aantal bedrijven. <b>Liquiditeit</b> (fondsomvang) is een risico-indicator: kleine fondsen sluiten vaker en hebben bredere spreads. <b>Track record</b> is bewust het lichtst gewogen &mdash; historisch rendement van een fonds zegt weinig over toekomstig rendement, dat volgt gewoon de onderliggende index.
+    </p>
+
+    <details>
+      <summary>&#128273; Over ETF-data</summary>
+      <p>Gebruikt dezelfde Finnhub-sleutel als de aandelenscreener (ETF profile + holdings endpoints). Deze endpoints zijn op Finnhub premium-geclassificeerd &mdash; op een gratis sleutel kan dit dus net als bij aandelen beperkt of geblokkeerd zijn. Lukt het niet, dan zie je een duidelijke melding i.p.v. stille lege cellen.</p>
+    </details>
+  </div><!-- /tab-etf -->
+
+  <div class="tabpane" id="tab-portfolio">
+    <p class="sub" style="margin-top:18px">Voer je eigen posities in. De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde &mdash; en waarschuwt als de fundamentele situatie merkbaar is veranderd.</p>
+    <div class="disclaimer">&#9888;&#65039; Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet en kan geen koop- of verkoopbeslissing nemen. Bij elke waarschuwing: vraag jezelf af waaróm je deze positie ook alweer aanhield.</div>
+
+    <div class="bar-top">
+      <div class="field"><label>Ticker</label><input type="text" id="pfSymbol" placeholder="bv. AAPL" style="width:110px"></div>
+      <div class="field"><label>Aantal</label><input type="number" id="pfQty" placeholder="10" style="width:90px"></div>
+      <div class="field"><label>Aankoopprijs</label><input type="number" id="pfPrice" placeholder="150.00" step="0.01" style="width:110px"></div>
+      <div class="field"><label>Aankoopdatum</label><input type="date" id="pfDate"></div>
+      <button class="btn-go" id="pfAdd">+ Toevoegen</button>
+      <button class="btn-ghost" id="pfCheck">&#128260; Alle posities checken</button>
+      <button class="btn-ghost" id="pfImportBtn">&#8593; Importeer uit SaxoInvestor (CSV)</button>
+      <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
+    </div>
+
+    <div class="status" id="pfStatus"></div>
+    <div id="overlapWrap"></div>
+    <div id="pfList"><div class="empty">Nog geen posities toegevoegd.</div></div>
+  </div><!-- /tab-portfolio -->
 
   <div class="tabpane" id="tab-tracking">
     <p class="sub" style="margin-top:18px">Hier legt de tool vast wat je screende en meet achteraf hoe accuraat de scores bleken. Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien.</p>
@@ -497,7 +588,9 @@ function render(){
     var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
     var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
     return '<tr>'+
-      '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span><span class="nm">'+(d.name||"")+'</span></td>'+
+      '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
+      (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
+      '<span class="nm">'+(d.name||"")+'</span></td>'+
       '<td class="l" style="color:var(--muted);font-size:12px">'+(d.sector||"\u2014")+'</td>'+
       '<td class="num">'+fmt(d.price)+'</td>'+
       '<td class="num '+cls(d.chg)+'">'+signed(d.chg)+'</td>'+
@@ -567,6 +660,20 @@ var UNIVERSE_SCANDI=[
   "VOLV-B.ST","ERIC-B.ST","ATCO-A.ST","INVE-B.ST","SEB-A.ST","SWED-A.ST","HM-B.ST","SAND.ST","ESSITY-B.ST","EVO.ST",
   "EQNR.OL","DNB.OL","TEL.OL","NHY.OL","MOWI.OL",
   "NOKIA.HE","KNEBV.HE","SAMPO.HE","FORTUM.HE","NESTE.HE","UPM.HE"];
+
+// China/Hongkong: grote namen toegankelijk via HK-notering (.HK) of Amerikaanse ADR (geen suffix).
+// Dekt NIET de binnenlandse A-aandelenmarkt (Shanghai/Shenzhen) - die zit achter gespecialiseerde databronnen.
+var UNIVERSE_CHINA=[
+  "BABA","PDD","JD","BIDU","NTES","TCOM","BILI","YUMC","ZTO","LI","NIO","XPEV",
+  "0700.HK","9988.HK","3690.HK","1024.HK","9618.HK","1810.HK","2318.HK","0939.HK",
+  "1398.HK","3988.HK","0005.HK","0388.HK","0175.HK","2020.HK","1211.HK","9866.HK",
+  "0016.HK","1299.HK","2331.HK","0027.HK","0883.HK","0857.HK","0386.HK"];
+// VIE-structuur (Variable Interest Entity): bij deze namen koop je een contractuele claim, niet direct eigendom.
+// Komt vooral voor bij Chinese tech/internet-ADR's en HK-duallistings van diezelfde bedrijven.
+var VIE_RISK={
+  BABA:1,PDD:1,JD:1,BIDU:1,NTES:1,TCOM:1,BILI:1,ZTO:1,
+  "0700.HK":1,"9988.HK":1,"3690.HK":1,"1024.HK":1,"9618.HK":1
+};
 
 // Sector per symbool (vast, dus geen extra API-calls). Brede categorieën.
 var SECTOR={
@@ -640,7 +747,15 @@ var SECTOR={
   "ERIC-B.ST":"Technologie","NOKIA.HE":"Technologie",
   "INVE-B.ST":"Financieel","SEB-A.ST":"Financieel","SWED-A.ST":"Financieel","DNB.OL":"Financieel","SAMPO.HE":"Financieel",
   "EQNR.OL":"Energie","NESTE.HE":"Energie","ORSTED.CO":"Nuts","FORTUM.HE":"Nuts",
-  "TEL.OL":"Communicatie","NHY.OL":"Materialen","UPM.HE":"Materialen"
+  "TEL.OL":"Communicatie","NHY.OL":"Materialen","UPM.HE":"Materialen",
+  // China / Hongkong
+  BABA:"Consument",PDD:"Consument",JD:"Consument",YUMC:"Consument",
+  BIDU:"Communicatie",NTES:"Communicatie",TCOM:"Consument",BILI:"Communicatie",
+  ZTO:"Industrie",LI:"Consument",NIO:"Consument",XPEV:"Consument",
+  "0700.HK":"Communicatie","9988.HK":"Consument","3690.HK":"Communicatie","1024.HK":"Communicatie","9618.HK":"Consument",
+  "1810.HK":"Technologie","2318.HK":"Financieel","0939.HK":"Financieel","1398.HK":"Financieel","3988.HK":"Financieel",
+  "0005.HK":"Financieel","0388.HK":"Financieel","0175.HK":"Consument","2020.HK":"Consument","1211.HK":"Consument","9866.HK":"Consument",
+  "0016.HK":"Vastgoed","1299.HK":"Financieel","2331.HK":"Consument","0027.HK":"Consument","0883.HK":"Energie","0857.HK":"Energie","0386.HK":"Energie"
 };
 function sectorOf(sym){return SECTOR[sym]||"Overig";}
 
@@ -649,6 +764,7 @@ function chosenUniverse(){
   var us,eu;
   if(ex==="SP500"){return UNIVERSE_US.concat(UNIVERSE_SP_EXTRA);}
   if(ex==="SCANDI"){return UNIVERSE_SCANDI;}
+  if(ex==="CHINA"){return UNIVERSE_CHINA;}
   if(ex==="EU_ALL"){us=[];eu=UNIVERSE_EU;}
   else if(ex==="US_ALL"){us=UNIVERSE_US;eu=[];}
   else if(ex==="ALL"){us=UNIVERSE_US;eu=UNIVERSE_EU;}
@@ -954,6 +1070,7 @@ function run(){
       st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+" Sorteer via de kolomtitels.";
     }
     render();
+    if(typeof renderDailyDiff==="function")renderDailyDiff();
   });
 }
 
@@ -1014,6 +1131,347 @@ $('saveKey').onclick=function(){
 };
 updateKeyLabel();
 loadKeyFor($('source').value);
+
+// ============ ETF-TABBLAD ============
+var ETF_DEMO=[
+  {symbol:"VOO",  name:"Vanguard S&P 500",        aum:520, ter:0.03, holdings:503,  top10:35.2, yield:1.3, chg:0.4},
+  {symbol:"VTI",  name:"Vanguard Total Stock Mkt", aum:410, ter:0.03, holdings:3700, top10:26.1, yield:1.3, chg:0.5},
+  {symbol:"SPY",  name:"SPDR S&P 500",             aum:560, ter:0.09, holdings:503,  top10:35.2, yield:1.2, chg:0.4},
+  {symbol:"QQQ",  name:"Invesco Nasdaq 100",       aum:300, ter:0.20, holdings:101,  top10:51.4, yield:0.5, chg:0.9},
+  {symbol:"VXUS", name:"Vanguard Total Intl Stock",aum:80,  ter:0.07, holdings:8600, top10:11.3, yield:2.8, chg:-0.2},
+  {symbol:"VEA",  name:"Vanguard FTSE Developed",  aum:135, ter:0.05, holdings:3900, top10:12.0, yield:2.6, chg:-0.1},
+  {symbol:"VWO",  name:"Vanguard FTSE Emerging",   aum:85,  ter:0.08, holdings:5600, top10:24.5, yield:2.9, chg:-0.5},
+  {symbol:"IWM",  name:"iShares Russell 2000",     aum:65,  ter:0.19, holdings:1960, top10:4.5,  yield:1.1, chg:0.7},
+  {symbol:"SCHD", name:"Schwab US Dividend Eq.",   aum:60,  ter:0.06, holdings:104,  top10:41.0, yield:3.4, chg:0.2},
+  {symbol:"VYM",  name:"Vanguard High Div Yield",  aum:55,  ter:0.06, holdings:530,  top10:18.7, yield:2.9, chg:0.3},
+  {symbol:"ARKK", name:"ARK Innovation",           aum:6,   ter:0.75, holdings:35,   top10:55.0, yield:0.0, chg:-1.8},
+  {symbol:"XLK",  name:"Technology Select SPDR",   aum:75,  ter:0.09, holdings:65,   top10:65.2, yield:0.6, chg:1.1},
+  {symbol:"XLF",  name:"Financial Select SPDR",    aum:45,  ter:0.09, holdings:73,   top10:52.0, yield:1.6, chg:0.3},
+  {symbol:"XLE",  name:"Energy Select SPDR",       aum:35,  ter:0.09, holdings:23,   top10:75.0, yield:3.2, chg:-0.6},
+  {symbol:"BND",  name:"Vanguard Total Bond Mkt",  aum:110, ter:0.03, holdings:11000,top10:8.2,  yield:4.1, chg:0.1},
+  {symbol:"AGG",  name:"iShares Core US Aggregate",aum:105, ter:0.03, holdings:12500,top10:7.8,  yield:4.0, chg:0.1},
+];
+var ETF_PEERS=null;
+function etfNorm(v,lo,hi,invert){if(v==null||isNaN(v))return 40;var t=(v-lo)/(hi-lo);t=Math.max(0,Math.min(1,t));return Math.round((invert?1-t:t)*100);}
+function etfPctRank(v,arr,invert){
+  if(v==null||isNaN(v))return 40;
+  var vals=arr.filter(function(x){return x!=null&&!isNaN(x);});
+  if(vals.length<4)return null;
+  var below=0,equal=0;for(var i=0;i<vals.length;i++){if(vals[i]<v)below++;else if(vals[i]===v)equal++;}
+  return Math.round(invert?100-((below+equal/2)/vals.length*100):((below+equal/2)/vals.length*100));
+}
+function buildEtfPeers(set){
+  ETF_PEERS={ter:set.map(function(d){return d.ter;}),holdings:set.map(function(d){return d.holdings;}),
+    top10:set.map(function(d){return d.top10;}),aum:set.map(function(d){return d.aum;})};
+}
+function etfCostScore(d){var a=ETF_PEERS&&etfPctRank(d.ter,ETF_PEERS.ter,true);return a!=null?a:etfNorm(d.ter,0.03,0.8,true);}
+function etfDiversityScore(d){
+  var a=ETF_PEERS&&etfPctRank(d.holdings,ETF_PEERS.holdings,false);
+  var b=ETF_PEERS&&etfPctRank(d.top10,ETF_PEERS.top10,true);
+  a=a!=null?a:etfNorm(d.holdings,10,5000,false); b=b!=null?b:etfNorm(d.top10,5,70,true);
+  return Math.round(a*0.5+b*0.5);
+}
+function etfLiquidityScore(d){var a=ETF_PEERS&&etfPctRank(d.aum,ETF_PEERS.aum,false);return a!=null?a:etfNorm(d.aum,0.1,500,false);}
+function etfTrackScore(d){ // proxy: track record vergt historische returns die we niet los ophalen; blijft licht gewogen en neutraal
+  return 55;
+}
+function etfWeights(){
+  var wc=+$('ewc').value,wd=+$('ewd').value,wl=+$('ewl').value,wt=+$('ewt').value;var s=wc+wd+wl+wt||1;
+  return {wc:wc/s,wd:wd/s,wl:wl/s,wt:wt/s};
+}
+function etfTotalScore(d){
+  var w=etfWeights();
+  return Math.round(etfCostScore(d)*w.wc+etfDiversityScore(d)*w.wd+etfLiquidityScore(d)*w.wl+etfTrackScore(d)*w.wt);
+}
+var ETF_CURRENT=[];
+function etfCloseRisk(d){
+  // klassiek patroon: klein fonds + hoge kosten = verhoogd risico dat de aanbieder het sluit
+  if(d.aum==null||d.ter==null)return null;
+  if(d.aum<0.5)return {level:2,text:"zeer kleine omvang ($"+d.aum+"mld) \u2014 verhoogd sluitingsrisico"};
+  if(d.aum<3&&d.ter>0.4)return {level:2,text:"kleine omvang + hoge kosten \u2014 klassiek patroon vóór ETF-sluitingen"};
+  if(d.aum<3)return {level:1,text:"kleine omvang ($"+d.aum+"mld) \u2014 let op liquiditeit en spread"};
+  return null;
+}
+function renderEtf(){
+  buildEtfPeers(ETF_CURRENT);
+  var rows=ETF_CURRENT.map(function(d){return Object.assign({},d,{_s:etfTotalScore(d)});});
+  rows.sort(function(a,b){return b._s-a._s;});
+  $('etfBody').innerHTML=rows.map(function(d){
+    var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
+    var risk=etfCloseRisk(d);
+    var riskBadge=risk?('<span class="trap '+(risk.level===2?"danger":"warn")+'" title="'+risk.text+'" style="margin-left:6px">'+(risk.level===2?"sluitingsrisico":"let op")+'</span>'):'';
+    return '<tr>'+
+      '<td class="l"><span class="tk">'+d.symbol+'</span>'+riskBadge+'<span class="nm">'+(d.name||"")+'</span></td>'+
+      '<td class="num">'+(d.aum!=null?"$"+d.aum+"mld":"\u2014")+'</td>'+
+      '<td class="num">'+(d.ter!=null?d.ter.toFixed(2)+"%":"\u2014")+'</td>'+
+      '<td class="num">'+(d.holdings!=null?d.holdings.toLocaleString():"\u2014")+'</td>'+
+      '<td class="num">'+(d.top10!=null?d.top10.toFixed(1)+"%":"\u2014")+'</td>'+
+      '<td class="num">'+(d.yield!=null?d.yield.toFixed(1)+"%":"\u2014")+'</td>'+
+      '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+(d.chg!=null?((d.chg>0?"+":"")+d.chg.toFixed(1)+"%"):"\u2014")+'</td>'+
+      '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
+    '</tr>';
+  }).join("");
+}
+function fetchEtfFinnhub(symbol,key){
+  return Promise.all([
+    getJson(FINNHUB_BASE+"/etf/profile?symbol="+encodeURIComponent(symbol)+"&token="+key),
+    getJson(FINNHUB_BASE+"/quote?symbol="+encodeURIComponent(symbol)+"&token="+key),
+    getJson(FINNHUB_BASE+"/etf/holdings?symbol="+encodeURIComponent(symbol)+"&token="+key).catch(function(){return null;})
+  ]).then(function(res){
+    var p=res[0]||{}, q=res[1]||{}, h=res[2];
+    var hl=(h&&h.holdings)||[];
+    var top10=hl.length? hl.slice(0,10).reduce(function(s,x){return s+(+x.percent||0);},0) : null;
+    return {
+      symbol:symbol, name:p.name||symbol,
+      aum:p.aum!=null?+(p.aum/1e9).toFixed(1):(p.netAssets!=null?+(p.netAssets/1e9).toFixed(1):null),
+      ter:p.expenseRatio!=null?+(+p.expenseRatio).toFixed(2):null,
+      holdings:p.numberOfHoldings!=null?+p.numberOfHoldings:(hl.length||null),
+      top10:top10!=null?+top10.toFixed(1):null,
+      yield:p.yield!=null?+(+p.yield).toFixed(1):null,
+      chg:q.dp!=null?+(+q.dp).toFixed(2):null
+    };
+  });
+}
+function runEtf(){
+  var key=$('apikey').value.trim();
+  var st=$('etfStatus');
+  if(!key||currentSource()!=="finnhub"){
+    st.className="status err";
+    st.textContent="ETF-data vereist een Finnhub-sleutel \u2014 zet bovenaan bij Screener de databron op Finnhub, vul je sleutel in en bewaar hem, kom dan hierheen terug.";
+    return;
+  }
+  var syms=$('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
+  st.className="status";st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen\u2026";
+  var seq=Promise.resolve([]);
+  var err=null;
+  syms.forEach(function(sym,i){
+    seq=seq.then(function(acc){
+      if(err)return acc;
+      return fetchEtfFinnhub(sym,key).then(function(e){acc.push(e);st.textContent="Ophalen\u2026 "+(i+1)+"/"+syms.length;return acc;})
+        .catch(function(e){err=(e&&e.msg)||"onbekende fout";return acc;});
+    });
+  });
+  seq.then(function(all){
+    if(err){
+      st.className="status err";
+      st.innerHTML="\u26a0\ufe0f ETF-data ophalen mislukt \u2014 melding: \""+String(err).replace(/</g,"&lt;")+"\". Dit zijn premium Finnhub-endpoints; op een gratis sleutel kan dit geblokkeerd zijn. Hieronder de demo ter illustratie.";
+      ETF_CURRENT=ETF_DEMO; renderEtf(); return;
+    }
+    ETF_CURRENT=all;
+    st.className="status";st.textContent="Klaar \u2014 "+all.length+" ETF's vergeleken.";
+    renderEtf();
+  });
+}
+$('etfRun').onclick=runEtf;
+$('etfDemo').onclick=function(){$('etfStatus').className="status";$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel.';ETF_CURRENT=ETF_DEMO;renderEtf();};
+['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
+ETF_CURRENT=ETF_DEMO;
+$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel. Vul je Finnhub-sleutel in bij Screener en klik "Vergelijk ETF\'s" voor live data.';
+renderEtf();
+
+// ============ PORTEFEUILLE-TABBLAD ============
+var PORTFOLIO=[]; // {symbol, qty, buyPrice, buyDate, baseline:{score,quality,trapLevel,ts}, id}
+
+function pfStat(msg,err){var s=$('pfStatus');s.className=err?"status err":"status";s.textContent=msg;}
+
+function savePortfolioLocal(){
+  try{ if(window.storage&&window.storage.set) window.storage.set('portfolio',JSON.stringify(PORTFOLIO)).catch(function(){}); }catch(e){}
+}
+function loadPortfolioLocal(){
+  try{
+    if(window.storage&&window.storage.get){
+      window.storage.get('portfolio').then(function(r){
+        if(r&&r.value){ try{PORTFOLIO=JSON.parse(r.value)||[];renderPortfolio();}catch(e){} }
+      }).catch(function(){});
+    }
+  }catch(e){}
+}
+function savePortfolioCloud(){
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid).set({portfolio:PORTFOLIO},{merge:true}).catch(function(){});
+  }
+}
+
+$('pfAdd').onclick=function(){
+  var sym=$('pfSymbol').value.trim().toUpperCase();
+  var qty=+$('pfQty').value, price=+$('pfPrice').value, date=$('pfDate').value;
+  if(!sym){pfStat("Vul een ticker in.",true);return;}
+  if(!qty||qty<=0){pfStat("Vul een geldig aantal in.",true);return;}
+  PORTFOLIO.push({id:Date.now()+"_"+sym,symbol:sym,qty:qty,buyPrice:price||null,buyDate:date||null,baseline:null});
+  $('pfSymbol').value="";$('pfQty').value="";$('pfPrice').value="";$('pfDate').value="";
+  savePortfolioLocal();savePortfolioCloud();
+  pfStat("Toegevoegd: "+sym+". Klik 'Alle posities checken' om de actuele score op te halen.");
+  renderPortfolio();
+};
+
+function removePosition(id){
+  PORTFOLIO=PORTFOLIO.filter(function(p){return p.id!==id;});
+  savePortfolioLocal();savePortfolioCloud();
+  renderPortfolio();
+}
+window.removePosition=removePosition;
+
+// classificeer het alarm: vergelijkt actuele staat met de baseline (vorige keer gecheckt)
+function classifyAlarm(pos,fresh){
+  if(!pos.baseline) return {level:"green",text:"Eerste keer gecheckt \u2014 dit wordt de basislijn voor toekomstige vergelijkingen."};
+  var b=pos.baseline;
+  var scoreDrop=b.score-fresh.score;
+  var reasons=[];
+  var level="green";
+  if(fresh.trapLevel===2 && b.trapLevel!==2){level="red";reasons.push("nieuwe val-trap waarschuwing (goedkoop ogend maar fundamenteel verzwakt)");}
+  if(fresh.quality!=null && b.quality!=null && (b.quality-fresh.quality)>=20){level="red";reasons.push("kwaliteitsscore fors gedaald ("+b.quality+" \u2192 "+fresh.quality+")");}
+  if(scoreDrop>=25){level="red";reasons.push("totaalscore sterk gedaald ("+b.score+" \u2192 "+fresh.score+")");}
+  else if(scoreDrop>=12 && level!=="red"){level="orange";reasons.push("totaalscore merkbaar gedaald ("+b.score+" \u2192 "+fresh.score+")");}
+  if(fresh.trapLevel===1 && b.trapLevel===0 && level==="green"){level="orange";reasons.push("nieuw 'let op'-signaal opgedoken");}
+  if(level==="green")reasons.push("geen wezenlijke verandering sinds de laatste check ("+b.score+" \u2192 "+fresh.score+")");
+  return {level:level, text:reasons.join(" \u00b7 ")};
+}
+
+function renderPortfolio(){
+  var el=$('pfList');
+  if(!PORTFOLIO.length){el.innerHTML='<div class="empty">Nog geen posities toegevoegd.</div>';renderOverlap();return;}
+  el.innerHTML=PORTFOLIO.map(function(p){
+    var pl = (p.buyPrice&&p._fresh&&p._fresh.price)? (((p._fresh.price-p.buyPrice)/p.buyPrice)*100) : null;
+    return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
+      '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
+      (p._fresh?'<span class="scorecell">'+p._fresh.score+'</span>':'<span style="color:var(--muted);font-size:12px">nog niet gecheckt</span>')+
+      '<button class="pf-remove" onclick="removePosition(\''+p.id+'\')">verwijderen</button></div>'+
+      '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
+      (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
+      (p._fresh?'<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>':'')+
+      (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
+        (p._alarm.level==="red"?"\ud83d\udd34 ":p._alarm.level==="orange"?"\ud83d\udfe0 ":"\ud83d\udfe2 ")+p._alarm.text+'</div>':'')+
+    '</div>';
+  }).join("");
+  renderOverlap();
+}
+
+// sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
+function renderOverlap(){
+  var wrap=$('overlapWrap'); if(!wrap)return;
+  var withSector=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.sector;});
+  if(withSector.length<3){wrap.innerHTML="";return;}
+  var counts={};
+  withSector.forEach(function(p){counts[p._fresh.sector]=(counts[p._fresh.sector]||0)+1;});
+  var total=withSector.length;
+  var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
+  var pct=Math.round(counts[top]/total*100);
+  if(pct>=50){
+    wrap.innerHTML='<div class="overlap-warn">\u26a0\ufe0f <b>Concentratie-signaal:</b> '+pct+'% van je gecheckte posities zit in de sector <b>'+top+'</b>. Individueel kunnen deze aandelen prima scoren, maar samen ben je sterk afhankelijk van \u00e9\u00e9n sector \u2014 een tegenvaller daar raakt je hele portefeuille tegelijk.</div>';
+  }else{
+    wrap.innerHTML='';
+  }
+}
+
+function checkAllPositions(){
+  var key=$('apikey').value.trim();
+  if(!key){pfStat("Vul eerst je API-sleutel in bij het Screener-tabblad.",true);return;}
+  if(!PORTFOLIO.length){pfStat("Nog geen posities om te checken.",true);return;}
+  pfStat("Actuele cijfers ophalen voor "+PORTFOLIO.length+" posities\u2026");
+  var seq=Promise.resolve();
+  PORTFOLIO.forEach(function(pos){
+    seq=seq.then(function(){
+      return enrich(pos.symbol,key).then(function(d){
+        buildPeers([d]); // enkelvoudige set -> valt terug op absolute normalisatie
+        var t=valueTrap(d);
+        var fresh={score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),
+          trapLevel:t.level,price:d.price,sector:d.sector};
+        pos._fresh=fresh;
+        pos._alarm=classifyAlarm(pos,fresh);
+        if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
+      }).catch(function(e){
+        pos._fresh=null; pos._alarm={level:"orange",text:"Kon niet ophalen: "+((e&&e.msg)||"onbekende fout")};
+      });
+    });
+  });
+  seq.then(function(){
+    pfStat("Klaar \u2014 "+PORTFOLIO.length+" posities gecheckt.");
+    savePortfolioLocal();savePortfolioCloud();
+    renderPortfolio();
+  });
+}
+$('pfCheck').onclick=checkAllPositions;
+
+// ---- Import uit SaxoInvestor CSV-export ----
+// Zet Saxo's beurscode (na de ':' in 'Symb.') om naar het tickerformaat dat onze databronnen verwachten.
+var SAXO_EXCHANGE_SUFFIX={
+  xams:".AS", xbru:".BR", xpar:".PA", xetr:".DE", xmil:".MI", xswx:".SW", xhel:".HE",
+  xsto:".ST", xcse:".CO", xosl:".OL", xlon:".L",
+  xnys:"", xnas:"", nsc:"", arcx:"", bats:"" // VS-beurzen: geen suffix nodig
+};
+function saxoSymbolToTicker(raw){
+  if(!raw)return null;
+  var parts=raw.split(":");
+  var sym=parts[0].trim();
+  var ex=(parts[1]||"").trim().toLowerCase();
+  // Saxo schrijft aandelenklassen soms als kleine letter zonder scheidingsteken, bv. BRKb -> BRK-B
+  sym=sym.replace(/^([A-Z]{1,4})([a-z])$/,function(m,a,b){return a+"-"+b.toUpperCase();});
+  var suffix=(ex in SAXO_EXCHANGE_SUFFIX)?SAXO_EXCHANGE_SUFFIX[ex]:"";
+  return sym+suffix;
+}
+// simpele CSV-parser die ook aanhalingstekens en ingesloten komma's aankan (Saxo's export is comma-delimited met "..velden..")
+function parseCsvLine(line){
+  var out=[],cur="",inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i];
+    if(c==='"'){ if(inQ&&line[i+1]==='"'){cur+='"';i++;} else inQ=!inQ; }
+    else if(c===','&&!inQ){ out.push(cur); cur=""; }
+    else cur+=c;
+  }
+  out.push(cur);
+  return out;
+}
+function importSaxoCsv(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var text=e.target.result.replace(/^\uFEFF/,''); // BOM verwijderen
+      var lines=text.split(/\r?\n/).filter(function(l){return l.trim().length;});
+      if(lines.length<2)throw new Error("leeg bestand");
+      var headers=parseCsvLine(lines[0]).map(function(h){return h.replace(/^"|"$/g,'');});
+      var idxName=headers.indexOf("Instrument");
+      var idxSymb=headers.indexOf("Symb.");
+      var idxQty=headers.indexOf("Aantal");
+      var idxAvgPrice=headers.indexOf("AK-krs");
+      var idxDate=headers.indexOf("Valutadatum");
+      if(idxSymb===-1||idxQty===-1){throw new Error("onbekend CSV-formaat (kolommen 'Symb.' of 'Aantal' niet gevonden)");}
+      var added=0, skipped=0;
+      var existing={}; PORTFOLIO.forEach(function(p){existing[p.symbol]=true;});
+      for(var i=1;i<lines.length;i++){
+        var cols=parseCsvLine(lines[i]).map(function(c){return c.replace(/^"|"$/g,'');});
+        var symbRaw=cols[idxSymb];
+        var qtyRaw=cols[idxQty];
+        if(!symbRaw||!qtyRaw){skipped++;continue;} // tussenkoppen zoals "Aandelen (12)" hebben geen Symb./Aantal
+        var ticker=saxoSymbolToTicker(symbRaw);
+        var qty=parseFloat(qtyRaw.replace(",","."));
+        if(!ticker||!qty||isNaN(qty)){skipped++;continue;}
+        var priceRaw=idxAvgPrice>-1?cols[idxAvgPrice]:null;
+        var price=priceRaw?parseFloat(priceRaw.replace(",",".")):null;
+        var dateRaw=idxDate>-1?cols[idxDate]:null; // formaat: 30-jan-2026
+        var isoDate=null;
+        if(dateRaw){
+          var m=dateRaw.match(/(\d{1,2})-([a-z]{3})-(\d{4})/i);
+          var maand={jan:"01",feb:"02",mrt:"03",mar:"03",apr:"04",mei:"05",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",okt:"10",oct:"10",nov:"11",dec:"12"};
+          if(m&&maand[m[2].toLowerCase()]) isoDate=m[3]+"-"+maand[m[2].toLowerCase()]+"-"+("0"+m[1]).slice(-2);
+        }
+        if(existing[ticker]){skipped++;continue;} // sla al aanwezige tickers over, geen duplicaten
+        PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,baseline:null});
+        existing[ticker]=true; added++;
+      }
+      savePortfolioLocal();savePortfolioCloud();
+      renderPortfolio();
+      pfStat("Ge\u00efmporteerd uit SaxoInvestor: "+added+" posities toegevoegd"+(skipped?", "+skipped+" regel(s) overgeslagen (kopregels/duplicaten)":"")+". Klik 'Alle posities checken' voor actuele scores.");
+    }catch(err){
+      pfStat("Import mislukt: "+(err&&err.message||"onbekend CSV-formaat. Controleer of dit een SaxoInvestor posities-export is."),true);
+    }
+  };
+  reader.readAsText(file,'UTF-8');
+}
+$('pfImportBtn').onclick=function(){$('pfImportFile').click();};
+$('pfImportFile').onchange=function(e){if(e.target.files[0])importSaxoCsv(e.target.files[0]);};
+
+loadPortfolioLocal();
+renderPortfolio();
 ['wm','wv','wg','wq'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(CURRENT.length)render();};});
 // horizon/mode wisselen: herbereken en grijs de weegbalk uit als die niet geldt
 function syncWeightUI(){
@@ -1197,6 +1655,41 @@ function renderScatter(pairs){
     +svg;
 }
 
+// Dagelijkse tik-en-vergelijk: vergelijkt de huidige screening met de laatst opgeslagen (niet-demo) snapshot.
+// Jij bent de trigger (open de app, klik screenen); de tool doet het vergelijken.
+function renderDailyDiff(){
+  var wrap=document.getElementById('dailyDiffWrap'); if(!wrap)return;
+  if(typeof HISTORY==="undefined"||!HISTORY.length||!CURRENT.length){wrap.innerHTML="";return;}
+  var realSnaps=HISTORY.filter(function(s){return !s.demo;});
+  if(!realSnaps.length){wrap.innerHTML="";return;}
+  var last=realSnaps[realSnaps.length-1];
+  var ageMs=Date.now()-last.ts, ageH=Math.round(ageMs/3600000);
+  if(ageH<1){wrap.innerHTML="";return;} // te dichtbij vorige meting om zinvol te vergelijken
+  var prevBySym={};
+  last.items.forEach(function(it){prevBySym[it.symbol]=it;});
+  var curTop=CURRENT.slice(0,15);
+  var nieuw=[], gestegen=[], gedaald=[];
+  curTop.forEach(function(d){
+    var score=totalScore(d);
+    var prev=prevBySym[d.symbol];
+    if(!prev){ if(score>=60) nieuw.push({symbol:d.symbol,score:score}); }
+    else{
+      var delta=score-prev.score;
+      if(delta>=15) gestegen.push({symbol:d.symbol,from:prev.score,to:score});
+      else if(delta<=-15) gedaald.push({symbol:d.symbol,from:prev.score,to:score});
+    }
+  });
+  if(!nieuw.length&&!gestegen.length&&!gedaald.length){
+    wrap.innerHTML='<div class="overlap-warn">\ud83d\udd0d Vergeleken met je vorige screening ('+ageH+"u geleden): geen opvallende nieuwkomers of scoreverschuivingen in de huidige top 15.</div>";
+    return;
+  }
+  var parts=[];
+  if(nieuw.length)parts.push("<b>Nieuw in de top:</b> "+nieuw.map(function(n){return n.symbol+" ("+n.score+")";}).join(", "));
+  if(gestegen.length)parts.push("<b>Score sterk gestegen:</b> "+gestegen.map(function(n){return n.symbol+" ("+n.from+"\u2192"+n.to+")";}).join(", "));
+  if(gedaald.length)parts.push("<b>Score sterk gedaald:</b> "+gedaald.map(function(n){return n.symbol+" ("+n.from+"\u2192"+n.to+")";}).join(", "));
+  wrap.innerHTML='<div class="overlap-warn">\ud83d\udd0d <b>Sinds je vorige screening ('+ageH+'u geleden):</b><br>'+parts.join("<br>")+'</div>';
+}
+
 function renderSnapList(){
   var el=$('snapList');
   if(HISTORY.length===0){el.innerHTML='<div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Huidige screening vastleggen".</div>';return;}
@@ -1316,6 +1809,11 @@ function loadCloud(){
       var cur=$('source').value;
       if(!KEYCACHE[cur] && firstWithKey){ $('source').value=firstWithKey; updateKeyLabel(); cur=firstWithKey; }
       $('apikey').value=KEYCACHE[cur]||"";
+    }
+    // portefeuille uit cloud overnemen (cloud-versie wint als hij bestaat en lokaal leeg is, anders lokaal behouden)
+    if(data.portfolio && (!PORTFOLIO || PORTFOLIO.length===0)){
+      PORTFOLIO=data.portfolio;
+      if(typeof renderPortfolio==="function")renderPortfolio();
     }
     syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+(gotKeys?", "+gotKeys+" sleutel(s)":"")+" (cloud: "+cloud.length+", lokaal was: "+before+").");
     if(HISTORY.length>cloud.length)saveCloud();
