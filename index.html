@@ -1650,7 +1650,32 @@ function removePosition(id){
 window.removePosition=removePosition;
 
 // classificeer het alarm: vergelijkt actuele staat met de baseline (vorige keer gecheckt)
+// ---- Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score? ----
+// Zonder waardering/groei/kwaliteit is een vier-factor-score misleidend; dan tonen we dat eerlijk
+// in plaats van een cijfer dat op halve gegevens rust.
+function dataCompleteness(d){
+  if(!d) return {level:"none",missing:["alles"],hasPrice:false};
+  var missing=[];
+  if(d.pe==null && d.pb==null) missing.push("waardering (P/E, K/B)");
+  if(d.revG==null && d.epsG==null) missing.push("groei");
+  if(d.roe==null && d.margin==null) missing.push("kwaliteit (ROE, marge)");
+  var hasPrice = d.price!=null;
+  var level = missing.length===0 ? "full" : (missing.length>=3 ? "price-only" : "partial");
+  return {level:level, missing:missing, hasPrice:hasPrice};
+}
+// externe onderzoekslink voor aandelen waar wij geen fundamentals hebben
+function researchLinkFor(symbol){
+  var base=symbol.split(".")[0];
+  var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i.test(symbol);
+  if(isEU) return {url:"https://www.screenerhero.com/", label:"ScreenerHero (gratis EU-fundamentals)"};
+  return {url:"https://stockanalysis.com/stocks/"+encodeURIComponent(base)+"/", label:"stockanalysis.com"};
+}
+
 function classifyAlarm(pos,fresh){
+  // bij alleen-koersdata is een score-vergelijking betekenisloos -> geen vals alarm
+  if(fresh&&fresh.completeness&&fresh.completeness.level==="price-only"){
+    return {level:"green",text:"Alleen koersdata beschikbaar \u2014 geen fundamentele vergelijking mogelijk via je huidige bronnen."};
+  }
   if(!pos.baseline) return {level:"green",text:"Eerste keer gecheckt \u2014 dit wordt de basislijn voor toekomstige vergelijkingen."};
   var b=pos.baseline;
   var scoreDrop=b.score-fresh.score;
@@ -1686,13 +1711,16 @@ function renderPortfolio(){
   var totalPL=(hasValue&&totalCost>0)?((totalValue-totalCost)/totalCost*100):null;
   var redCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="red";}).length;
   var orangeCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="orange";}).length;
-  var avgScore=checked.length?Math.round(checked.reduce(function(s,p){return s+p._fresh.score;},0)/checked.length):null;
+  // alleen posities met bruikbare fundamentals meetellen in het gemiddelde
+  var scorable=checked.filter(function(p){return !(p._fresh.completeness&&p._fresh.completeness.level==="price-only");});
+  var avgScore=scorable.length?Math.round(scorable.reduce(function(s,p){return s+p._fresh.score;},0)/scorable.length):null;
+  var incomplete=checked.filter(function(p){return p._fresh.completeness&&p._fresh.completeness.level!=="full";}).length;
 
   function kpi(lbl,val,sub,cls){return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';}
   $('pfDashboard').innerHTML=
     kpi("Posities",PORTFOLIO.length,checked.length+" gecheckt")+
     kpi("Resultaat",totalPL!=null?((totalPL>=0?"+":"")+totalPL.toFixed(1)+"%"):"\u2014",hasValue?"o.b.v. actuele koers":"nog geen koersdata",totalPL!=null?(totalPL>=0?"pos":"neg"):"")+
-    kpi("Gem. score",avgScore!=null?avgScore:"\u2014","van gecheckte posities")+
+    kpi("Gem. score",avgScore!=null?avgScore:"\u2014",scorable.length+" met volledige data"+(incomplete?" \u00b7 "+incomplete+" onvolledig":""))+
     kpi("Alarmen",redCount+orangeCount,redCount+" rood \u00b7 "+orangeCount+" oranje",redCount>0?"neg":(orangeCount>0?"":""));
 
   // ---- sorteren ----
@@ -1733,7 +1761,11 @@ function renderPortfolio(){
     var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
       '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
-      (p._fresh?'<span class="scorecell">'+p._fresh.score+'</span>':'<span style="color:var(--muted);font-size:12px">nog niet gecheckt</span>')+
+      (p._fresh
+        ? (p._fresh.completeness && p._fresh.completeness.level==="price-only"
+            ? '<span style="color:var(--muted);font-size:12px" title="Alleen koersdata beschikbaar via deze bron \u2014 geen betrouwbare score mogelijk">score n.v.t.</span>'
+            : '<span class="scorecell">'+p._fresh.score+'</span>')
+        : '<span style="color:var(--muted);font-size:12px">nog niet gecheckt</span>')+
       '<button class="pf-remove" onclick="removePosition(\''+p.id+'\')">verwijderen</button></div>'+
       '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
       (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
@@ -1743,6 +1775,17 @@ function renderPortfolio(){
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
         : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>'
       ) : '')+
+      (p._fresh&&p._fresh.completeness&&p._fresh.completeness.level!=="full"
+        ? (function(){
+            var c=p._fresh.completeness, link=researchLinkFor(p.symbol);
+            var isPriceOnly=c.level==="price-only";
+            return '<div class="pf-alarm-text" style="color:var(--muted)">\u2139\ufe0f '+
+              (isPriceOnly
+                ? 'Alleen koersdata beschikbaar voor dit aandeel via je huidige bronnen \u2014 <b>geen betrouwbare score mogelijk</b>. '
+                : 'Deels onvolledige data: ontbrekend \u2014 '+c.missing.join(", ")+'. De score is daardoor minder betrouwbaar. ')+
+              'Fundamentals gratis opzoeken via <a href="'+link.url+'" target="_blank" rel="noopener" style="color:var(--blue)">'+link.label+'</a>.</div>';
+          })()
+        : '')+
       (p._fresh&&p._fresh.holdingSuggestion?'<div class="pf-alarm-text orange">\ud83c\udfe6 Dit cijferpatroon lijkt op een holding ('+p._fresh.holdingSuggestion.reasons.join(", ")+
         '). <span style="text-decoration:underline;cursor:pointer" onclick="confirmHoldingSuggestion(\''+p.symbol+'\')">Als holding scoren?</span></div>':'')+
       (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
@@ -1856,9 +1899,10 @@ function checkAllPositions(){
         var t=valueTrap(d);
         var holding=isHolding(pos.symbol);
         var sug=holding?null:suggestsHolding(d);
+        var comp=dataCompleteness(d);
         var fresh=holding
-          ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true,src:d._src||null}
-          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null};
+          ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true,src:d._src||null,completeness:comp}
+          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null,completeness:comp};
         pos._fresh=fresh;
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
