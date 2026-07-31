@@ -349,6 +349,8 @@
             <th data-k="holdings" title="Aantal onderliggende posities. Meer posities = bredere spreiding = minder afhankelijk van één bedrijf of sector.">Posities<span class="q">?</span></th>
             <th data-k="top10" title="Percentage van het fonds dat in de 10 grootste posities zit. Hoger percentage = geconcentreerder, dus minder gespreid dan het aantal posities doet vermoeden.">Top&nbsp;10<span class="q">?</span></th>
             <th data-k="yield" title="Dividendrendement op jaarbasis, in procent.">Dividend<span class="q">?</span></th>
+            <th data-k="weightedPe" title="Gewogen gemiddelde koers/winst-verhouding van alle onderliggende posities. Zegt of het fonds als geheel duur of goedkoop geprijsd is. Alleen beschikbaar via SecuritiesDB.">Geweg. P/E<span class="q">?</span></th>
+            <th data-k="vol" title="Jaarlijkse volatiliteit in procent: hoe sterk de koers gemiddeld schommelt. Hoger = beweeglijker, dus grotere uitslagen in beide richtingen. Alleen beschikbaar via SecuritiesDB.">Volat.<span class="q">?</span></th>
             <th data-k="chg" title="Koersverandering vandaag, in procent.">&Delta; Dag<span class="q">?</span></th>
             <th data-k="score">Score &#9662;</th>
           </tr>
@@ -363,7 +365,8 @@
 
     <details>
       <summary>&#128273; Over ETF-data</summary>
-      <p>Gebruikt dezelfde Finnhub-sleutel als de aandelenscreener (ETF profile + holdings endpoints). Deze endpoints zijn op Finnhub premium-geclassificeerd &mdash; op een gratis sleutel kan dit dus net als bij aandelen beperkt of geblokkeerd zijn. Lukt het niet, dan zie je een duidelijke melding i.p.v. stille lege cellen.</p>
+      <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
+      <p style="color:var(--accent)">Dekking is vooral VS-genoteerde ETF's. Europese ETF-tickers (.DE, .MI, .AS) worden waarschijnlijk niet gevonden &mdash; die verschijnen dan in de "niet gevonden"-melding.</p>
     </details>
   </div><!-- /tab-etf -->
 
@@ -383,6 +386,7 @@
         <button class="btn-go" id="pfAdd">+ Toevoegen</button>
         <button class="btn-ghost" id="pfCheck" style="margin-left:auto">&#128260; Alles checken</button>
         <button class="btn-ghost" id="pfImportBtn">&#8593; Saxo CSV</button>
+        <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">&#128269; Overlap meten</button>
         <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
       </div>
     </div>
@@ -409,6 +413,8 @@
         <option value="red">Alleen rode alarmen</option>
         <option value="orange">Rood + oranje</option>
         <option value="unchecked">Nog niet gecheckt</option>
+        <option value="stocks">Alleen aandelen</option>
+        <option value="etfs">Alleen ETF's / fondsen</option>
       </select>
       <details style="margin:0 0 0 auto;background:none;border:none;padding:0">
         <summary style="font-size:12px;color:var(--muted);padding:0;font-weight:400">&#127974; Holdings beheren</summary>
@@ -1545,11 +1551,47 @@ function renderEtf(){
       '<td class="num">'+(d.holdings!=null?d.holdings.toLocaleString():"\u2014")+'</td>'+
       '<td class="num">'+(d.top10!=null?d.top10.toFixed(1)+"%":"\u2014")+'</td>'+
       '<td class="num">'+(d.yield!=null?d.yield.toFixed(1)+"%":"\u2014")+'</td>'+
+      '<td class="num">'+(d.weightedPe!=null?d.weightedPe.toFixed(1):"\u2014")+'</td>'+
+      '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+(d.vol!=null?d.vol.toFixed(1)+"%":"\u2014")+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+(d.chg!=null?((d.chg>0?"+":"")+d.chg.toFixed(1)+"%"):"\u2014")+'</td>'+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
   }).join("");
 }
+// ---- SecuritiesDB: gratis ETF-data zonder sleutel (X-Ray + holdings + overlap) ----
+var SDB_BASE="https://securitiesdb.com/api/v1";
+function fetchEtfSDB(symbol){
+  return getJson(SDB_BASE+"/etfs/"+encodeURIComponent(symbol)+"/xray").then(function(res){
+    var d=(res&&res.data)||{};
+    var ov=d.overview||{}, con=d.concentration||{}, val=d.valuation||{}, risk=d.risk||{};
+    return {
+      symbol:symbol,
+      name:d.ticker||symbol,
+      aum: ov.aum!=null ? +(ov.aum/1e9).toFixed(1) : null,       // naar miljarden
+      ter: ov.expense_ratio!=null ? +(ov.expense_ratio*100).toFixed(2) : null, // 0.0003 -> 0.03%
+      holdings: ov.num_holdings!=null ? +ov.num_holdings : null,
+      top10: con.top10_concentration_pct!=null ? +(+con.top10_concentration_pct).toFixed(1) : null,
+      yield: ov.ttm_yield!=null ? +(ov.ttm_yield*100).toFixed(1) : null,
+      chg: null, // koersverandering komt niet uit dit endpoint
+      // extra's die SecuritiesDB wél geeft en Finnhub niet
+      weightedPe: val.weighted_pe!=null ? +(+val.weighted_pe).toFixed(1) : null,
+      sharpe: risk.sharpe_1y!=null ? +(+risk.sharpe_1y).toFixed(2) : null,
+      maxDd: risk.max_drawdown_3y!=null ? +(risk.max_drawdown_3y*100).toFixed(1) : null,
+      vol: risk.volatility_annual!=null ? +(risk.volatility_annual*100).toFixed(1) : null,
+      hhi: con.hhi_interpretation||null,
+      _src:"securitiesdb"
+    };
+  });
+}
+// echte overlap tussen twee ETF's via SecuritiesDB
+function fetchEtfOverlapSDB(a,b){
+  return getJson(SDB_BASE+"/etfs/"+encodeURIComponent(a)+"/overlap/"+encodeURIComponent(b))
+    .then(function(res){
+      var d=(res&&res.data)||{};
+      return d.overlap_pct!=null ? +(+d.overlap_pct).toFixed(1) : null;
+    }).catch(function(){return null;});
+}
+
 function fetchEtfFinnhub(symbol,key){
   return Promise.all([
     getJson(FINNHUB_BASE+"/etf/profile?symbol="+encodeURIComponent(symbol)+"&token="+key),
@@ -1571,32 +1613,36 @@ function fetchEtfFinnhub(symbol,key){
   });
 }
 function runEtf(){
-  var key=$('apikey').value.trim();
   var st=$('etfStatus');
-  if(!key||currentSource()!=="finnhub"){
-    st.className="status err";
-    st.textContent="ETF-data vereist een Finnhub-sleutel \u2014 zet bovenaan bij Screener de databron op Finnhub, vul je sleutel in en bewaar hem, kom dan hierheen terug.";
-    return;
-  }
   var syms=$('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
-  st.className="status";st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen\u2026";
+  if(!syms.length){st.className="status err";st.textContent="Vul minstens \u00e9\u00e9n ticker in.";return;}
+  st.className="status";st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen via SecuritiesDB (gratis, geen sleutel nodig)\u2026";
+  var key=$('apikey')?$('apikey').value.trim():"";
   var seq=Promise.resolve([]);
-  var err=null;
+  var failed=[];
   syms.forEach(function(sym,i){
     seq=seq.then(function(acc){
-      if(err)return acc;
-      return fetchEtfFinnhub(sym,key).then(function(e){acc.push(e);st.textContent="Ophalen\u2026 "+(i+1)+"/"+syms.length;return acc;})
-        .catch(function(e){err=(e&&e.msg)||"onbekende fout";return acc;});
+      return fetchEtfSDB(sym).then(function(e){
+        acc.push(e); st.textContent="Ophalen\u2026 "+(i+1)+"/"+syms.length; return acc;
+      }).catch(function(e){
+        // fallback naar Finnhub als er een sleutel is
+        if(key&&currentSource()==="finnhub"){
+          return fetchEtfFinnhub(sym,key).then(function(e2){e2._src="finnhub";acc.push(e2);return acc;})
+            .catch(function(){failed.push(sym);return acc;});
+        }
+        failed.push(sym); return acc;
+      });
     });
   });
   seq.then(function(all){
-    if(err){
+    if(!all.length){
       st.className="status err";
-      st.innerHTML="\u26a0\ufe0f ETF-data ophalen mislukt \u2014 melding: \""+String(err).replace(/</g,"&lt;")+"\". Dit zijn premium Finnhub-endpoints; op een gratis sleutel kan dit geblokkeerd zijn. Hieronder de demo ter illustratie.";
+      st.innerHTML="\u26a0\ufe0f Geen ETF-data ontvangen voor: "+failed.join(", ")+". Mogelijk zijn deze tickers niet bekend bij SecuritiesDB (dekking is vooral VS-genoteerde ETF's). Hieronder de demo ter illustratie.";
       ETF_CURRENT=ETF_DEMO; renderEtf(); return;
     }
     ETF_CURRENT=all;
-    st.className="status";st.textContent="Klaar \u2014 "+all.length+" ETF's vergeleken.";
+    st.className="status";
+    st.textContent="Klaar \u2014 "+all.length+" ETF's vergeleken via SecuritiesDB"+(failed.length?"  \u00b7  niet gevonden: "+failed.join(", "):"")+".";
     renderEtf();
   });
 }
@@ -1604,7 +1650,7 @@ $('etfRun').onclick=runEtf;
 $('etfDemo').onclick=function(){$('etfStatus').className="status";$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel.';ETF_CURRENT=ETF_DEMO;renderEtf();};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
 ETF_CURRENT=ETF_DEMO;
-$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel. Vul je Finnhub-sleutel in bij Screener en klik "Vergelijk ETF\'s" voor live data.';
+$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief. Klik "Vergelijk ETF\'s" voor live data via SecuritiesDB (gratis, geen sleutel nodig).';
 renderEtf();
 
 // ============ PORTEFEUILLE-TABBLAD ============
@@ -1653,6 +1699,45 @@ window.removePosition=removePosition;
 // ---- Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score? ----
 // Zonder waardering/groei/kwaliteit is een vier-factor-score misleidend; dan tonen we dat eerlijk
 // in plaats van een cijfer dat op halve gegevens rust.
+// ---- ETF/ETP-herkenning in de portefeuille ----
+// Een ETF heeft geen ROE, winstgroei of P/E in de zin van een bedrijf; die krijgt een eigen beoordeling.
+var ETF_KNOWN={}; // gevuld met tickers waarvan SecuritiesDB bevestigt dat het een fonds is
+var ETF_HINT=/^(SPY|VOO|IVV|VTI|QQQ|QQQM|VXUS|VEA|VWO|IWM|SCHD|VYM|ARKK|XL[KFEVYIPBU]|BND|AGG|VNQ|GLD|SLV|IEFA|IEMG|EEM|ITOT|SCHB|SCHF|SCHZ|VB|IJR|DVY|SPLG|IXUS)$/i;
+function looksLikeEtf(symbol,d){
+  if(ETF_KNOWN[symbol])return true;
+  if(ETF_HINT.test(symbol))return true;
+  // heuristiek: fondsen hebben geen winstgevendheidscijfers maar wel een koers
+  if(d && d.price!=null && d.roe==null && d.margin==null && d.epsG==null && d.pe==null) return true;
+  return false;
+}
+// beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
+function etfPortfolioScore(e){
+  if(!e)return null;
+  var costScore = e.ter!=null ? Math.round(Math.max(0,Math.min(100,(1-(e.ter-0.03)/(0.75-0.03))*100))) : 50;
+  var divScore  = e.holdings!=null ? Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,e.holdings))/Math.log10(5000))*100))) : 50;
+  var concScore = e.top10!=null ? Math.round(Math.max(0,Math.min(100,(1-(e.top10-5)/(75-5))*100))) : 50;
+  var sizeScore = e.aum!=null ? Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.1,e.aum))/Math.log10(600))*100))) : 50;
+  return {
+    score: Math.round(costScore*0.40 + divScore*0.20 + concScore*0.20 + sizeScore*0.20),
+    cost:costScore, div:divScore, conc:concScore, size:sizeScore
+  };
+}
+
+// alarm voor ETF's: let op kosten- en concentratieverschuivingen, niet op winstgroei
+function classifyEtfAlarm(pos,fresh){
+  if(!fresh||!fresh.etf) return {level:"orange",text:"Geen fondsdata beschikbaar."};
+  var e=fresh.etf, reasons=[], level="green";
+  if(e.ter!=null&&e.ter>0.5){level="orange";reasons.push("hoge kosten ("+e.ter+"% per jaar)");}
+  if(e.top10!=null&&e.top10>60){level=level==="green"?"orange":level;reasons.push("sterk geconcentreerd (top 10 = "+e.top10+"%)");}
+  if(e.aum!=null&&e.aum<0.5){level="red";reasons.push("zeer klein fonds ($"+e.aum+" mld) \u2014 verhoogd sluitingsrisico");}
+  if(pos.baseline&&pos.baseline.score!=null&&fresh.score!=null){
+    var drop=pos.baseline.score-fresh.score;
+    if(drop>=15){level="orange";reasons.push("fondsscore gedaald ("+pos.baseline.score+" \u2192 "+fresh.score+")");}
+  }
+  if(!reasons.length)reasons.push("kosten, spreiding en omvang ogen in orde"+(e.ter!=null?" ("+e.ter+"% kosten)":""));
+  return {level:level, text:reasons.join(" \u00b7 ")};
+}
+
 function dataCompleteness(d){
   if(!d) return {level:"none",missing:["alles"],hasPrice:false};
   var missing=[];
@@ -1712,13 +1797,17 @@ function renderPortfolio(){
   var redCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="red";}).length;
   var orangeCount=PORTFOLIO.filter(function(p){return p._alarm&&p._alarm.level==="orange";}).length;
   // alleen posities met bruikbare fundamentals meetellen in het gemiddelde
-  var scorable=checked.filter(function(p){return !(p._fresh.completeness&&p._fresh.completeness.level==="price-only");});
+  var scorable=checked.filter(function(p){return !(p._fresh.completeness&&p._fresh.completeness.level==="price-only") && !p._fresh.isEtf;});
   var avgScore=scorable.length?Math.round(scorable.reduce(function(s,p){return s+p._fresh.score;},0)/scorable.length):null;
   var incomplete=checked.filter(function(p){return p._fresh.completeness&&p._fresh.completeness.level!=="full";}).length;
 
   function kpi(lbl,val,sub,cls){return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';}
   $('pfDashboard').innerHTML=
-    kpi("Posities",PORTFOLIO.length,checked.length+" gecheckt")+
+    (function(){
+      var etfCount=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.isEtf;}).length;
+      var stockCount=checked.length-etfCount;
+      return kpi("Posities",PORTFOLIO.length,checked.length+" gecheckt"+(etfCount?" \u00b7 "+stockCount+" aandelen, "+etfCount+" fondsen":""));
+    })()+
     kpi("Resultaat",totalPL!=null?((totalPL>=0?"+":"")+totalPL.toFixed(1)+"%"):"\u2014",hasValue?"o.b.v. actuele koers":"nog geen koersdata",totalPL!=null?(totalPL>=0?"pos":"neg"):"")+
     kpi("Gem. score",avgScore!=null?avgScore:"\u2014",scorable.length+" met volledige data"+(incomplete?" \u00b7 "+incomplete+" onvolledig":""))+
     kpi("Alarmen",redCount+orangeCount,redCount+" rood \u00b7 "+orangeCount+" oranje",redCount>0?"neg":(orangeCount>0?"":""));
@@ -1749,6 +1838,8 @@ function renderPortfolio(){
   if(filterKey==="red")list=list.filter(function(p){return p._alarm&&p._alarm.level==="red";});
   else if(filterKey==="orange")list=list.filter(function(p){return p._alarm&&(p._alarm.level==="red"||p._alarm.level==="orange");});
   else if(filterKey==="unchecked")list=list.filter(function(p){return !p._fresh;});
+  else if(filterKey==="stocks")list=list.filter(function(p){return !(p._fresh&&p._fresh.isEtf);});
+  else if(filterKey==="etfs")list=list.filter(function(p){return p._fresh&&p._fresh.isEtf;});
 
   if(!list.length){
     el.innerHTML='<div class="empty">Geen posities voldoen aan dit filter.</div>';
@@ -1771,7 +1862,16 @@ function renderPortfolio(){
       (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
       (p._fresh&&p._fresh.src?' \u00b7 <span style="opacity:0.7">via '+p._fresh.src+'</span>':'')+
       (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
-      (p._fresh? (isHolding(p.symbol)
+      (p._fresh&&p._fresh.isEtf
+        ? '<div class="pf-scores"><span style="color:var(--blue)">\ud83d\udcca Fonds</span>'+
+          '<span>Kosten <b>'+(p._fresh.etf.ter!=null?p._fresh.etf.ter+'%':'\u2014')+'</b></span>'+
+          '<span>Posities <b>'+(p._fresh.etf.holdings!=null?p._fresh.etf.holdings.toLocaleString():'\u2014')+'</b></span>'+
+          '<span>Top 10 <b>'+(p._fresh.etf.top10!=null?p._fresh.etf.top10+'%':'\u2014')+'</b></span>'+
+          '<span>Omvang <b>'+(p._fresh.etf.aum!=null?'$'+p._fresh.etf.aum+'mld':'\u2014')+'</b></span>'+
+          (p._fresh.etf.vol!=null?'<span>Volat. <b>'+p._fresh.etf.vol+'%</b></span>':'')+
+          '</div>'
+        : '')+
+      (p._fresh&&!p._fresh.isEtf? (isHolding(p.symbol)
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
         : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>'
       ) : '')+
@@ -1799,6 +1899,33 @@ if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
 // ---- Overlap-analyse: index-dubbelingen tussen ETF's + losse aandelen die ook in je ETF's zitten ----
+// haalt de ECHTE overlap op tussen alle ETF-paren in de portefeuille (SecuritiesDB, gratis)
+var REAL_OVERLAP={}; // "A|B" -> percentage
+function verifyOverlapReal(){
+  var syms=PORTFOLIO.map(function(p){return p.symbol;});
+  var etfs=syms.filter(function(s){return ETF_TOP_HOLDINGS.hasOwnProperty(s)||indexGroupOf(s);});
+  // ook onbekende tickers proberen: SecuritiesDB kent meer ETF's dan onze kennisbank
+  var candidates=syms.filter(function(s){return !/\./.test(s);}); // VS-genoteerd
+  var pairs=[];
+  for(var i=0;i<candidates.length;i++)for(var j=i+1;j<candidates.length;j++)pairs.push([candidates[i],candidates[j]]);
+  if(!pairs.length){pfStat("Geen ETF-paren om te vergelijken.",true);return;}
+  pfStat("Werkelijke overlap ophalen voor "+pairs.length+" paren via SecuritiesDB\u2026");
+  var seq=Promise.resolve(), found=0;
+  pairs.forEach(function(pr,idx){
+    seq=seq.then(function(){
+      return fetchEtfOverlapSDB(pr[0],pr[1]).then(function(pct){
+        if(pct!=null&&pct>0){REAL_OVERLAP[pr[0]+"|"+pr[1]]=pct;found++;}
+        if(idx%3===0)pfStat("Overlap ophalen\u2026 "+(idx+1)+"/"+pairs.length);
+      });
+    });
+  });
+  seq.then(function(){
+    pfStat(found?("Werkelijke overlap opgehaald voor "+found+" paren \u2014 zie hieronder."):"Geen overlappende paren gevonden (of tickers niet bekend bij SecuritiesDB).");
+    renderOverlap();
+  });
+}
+window.verifyOverlapReal=verifyOverlapReal;
+
 function analyseOverlap(){
   var findings=[];
   var symbols=PORTFOLIO.map(function(p){return p.symbol;});
@@ -1847,6 +1974,14 @@ function analyseOverlap(){
       }
     }
   }
+  // 4) ECHTE overlap-cijfers indien opgehaald via SecuritiesDB (overschrijft schattingen)
+  Object.keys(REAL_OVERLAP).forEach(function(k){
+    var parts=k.split("|"), pct=REAL_OVERLAP[k];
+    findings.push({level: pct>=70?"high":"mid",
+      text:"<b>"+parts[0]+"</b> en <b>"+parts[1]+"</b> overlappen werkelijk <b>"+pct+"%</b> "+
+        "<span style=\"opacity:0.7\">(gemeten via SecuritiesDB)</span>"+
+        (pct>=70?" \u2014 dit is nagenoeg dezelfde positie in twee jasjes.":".")});
+  });
   return findings;
 }
 
@@ -1894,6 +2029,22 @@ function checkAllPositions(){
   var seq=Promise.resolve();
   PORTFOLIO.forEach(function(pos){
     seq=seq.then(function(){
+      // ETF's/ETP's krijgen een eigen route: fondskenmerken via SecuritiesDB i.p.v. bedrijfsfundamentals
+      if(ETF_HINT.test(pos.symbol)||ETF_KNOWN[pos.symbol]){
+        return fetchEtfSDB(pos.symbol).then(function(e){
+          ETF_KNOWN[pos.symbol]=true;
+          var sc=etfPortfolioScore(e);
+          pos._fresh={isEtf:true, score:sc?sc.score:null, etf:e, etfScores:sc,
+            price:e.price!=null?e.price:(pos._fresh&&pos._fresh.price)||null,
+            sector:"Fonds", src:"securitiesdb",
+            completeness:{level:"full",missing:[]}};
+          pos._alarm=classifyEtfAlarm(pos,pos._fresh);
+          if(!pos.baseline) pos.baseline={score:pos._fresh.score,ts:Date.now(),isEtf:true};
+        }).catch(function(e){
+          var msg=(e&&e.msg)||"niet gevonden bij SecuritiesDB";
+          pos._fresh=null; pos._alarm={level:"orange",text:"[ETF] "+msg+" \u2014 Europese ETF's worden vaak niet gedekt."};
+        });
+      }
       return enrich(pos.symbol,key).then(function(d){
         buildPeers([d]); // enkelvoudige set -> valt terug op absolute normalisatie
         var t=valueTrap(d);
@@ -2076,6 +2227,7 @@ function importSaxoCsv(file){
   reader.readAsText(file,'UTF-8');
 }
 $('pfImportBtn').onclick=function(){$('pfImportFile').click();};
+if($('pfOverlapBtn'))$('pfOverlapBtn').onclick=verifyOverlapReal;
 $('pfImportFile').onchange=function(e){if(e.target.files[0])importSaxoCsv(e.target.files[0]);};
 
 loadPortfolioLocal();
