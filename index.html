@@ -194,13 +194,14 @@
   </header>
 
   <div class="tabs">
-    <button class="tab active" data-tab="screener">Screener</button>
+    <button class="tab active" data-tab="portfolio">Portefeuille</button>
+    <button class="tab" data-tab="screener">Screener</button>
     <button class="tab" data-tab="etf">ETF's</button>
-    <button class="tab" data-tab="portfolio">Portefeuille</button>
-    <button class="tab" data-tab="tracking">Tracking &amp; accuratesse</button>
+    <button class="tab" data-tab="tracking">Tracking</button>
+    <button class="tab" data-tab="settings">&#9881;&#65039; Instellingen</button>
   </div>
 
-  <div class="tabpane active" id="tab-screener">
+  <div class="tabpane" id="tab-screener">
 
   <div class="pwa-tip" id="pwaTip">
     <b>&#128241; Op je telefoon installeren:</b> open dit bestand online (via een https-link), tik dan op iPhone in Safari op <b>Deel &rarr; Zet op beginscherm</b>, of op Android in Chrome op <b>&#8942; &rarr; App installeren</b>. De screener verschijnt dan als icoon, opent schermvullend, en je bewaarde sleutels blijven op dat toestel.
@@ -366,7 +367,7 @@
     </details>
   </div><!-- /tab-etf -->
 
-  <div class="tabpane" id="tab-portfolio">
+  <div class="tabpane active" id="tab-portfolio">
     <details style="margin:16px 0 0">
       <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
       <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
@@ -462,6 +463,54 @@
     <h3 style="font-family:'Fraunces',serif;font-size:18px;margin:20px 0 8px">Opgeslagen momentopnamen</h3>
     <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Screening vastleggen".</div></div>
   </div><!-- /tab-tracking -->
+
+  <div class="tabpane" id="tab-settings">
+    <details style="margin:16px 0 0" open>
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe meerdere sleutels samenwerken</summary>
+      <p class="sub" style="margin-top:8px">Elke gratis databron heeft andere gaten: Finnhub dekt de VS ruim maar blokkeert vaak Europa, EODHD dekt Europa beter maar heeft strenge daglimieten, FMP zit daartussenin. Vul hieronder alle sleutels in die je hebt &mdash; de tool kiest dan <b>per aandeel automatisch</b> de meest geschikte bron, en schuift bij een blokkade door naar de volgende. Zo vul je de gaten die &eacute;&eacute;n bron alleen laat vallen.</p>
+    </details>
+
+    <div class="control-panel">
+      <div class="control-row">
+        <div class="field" style="flex:1;min-width:220px">
+          <label>Finnhub-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; sterk voor VS, 60 calls/min</span></label>
+          <input type="password" id="key_finnhub" placeholder="finnhub.io" autocomplete="off" style="width:100%">
+        </div>
+        <span id="stat_finnhub" class="trap" style="align-self:center">niet ingesteld</span>
+      </div>
+      <div class="control-row">
+        <div class="field" style="flex:1;min-width:220px">
+          <label>EODHD-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; betere EU/Azi&euml;-dekking, 20 calls/dag gratis</span></label>
+          <input type="password" id="key_eodhd" placeholder="eodhd.com" autocomplete="off" style="width:100%">
+        </div>
+        <span id="stat_eodhd" class="trap" style="align-self:center">niet ingesteld</span>
+      </div>
+      <div class="control-row">
+        <div class="field" style="flex:1;min-width:220px">
+          <label>FMP-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; wisselende symbooldekking</span></label>
+          <input type="password" id="key_fmp" placeholder="financialmodelingprep.com" autocomplete="off" style="width:100%">
+        </div>
+        <span id="stat_fmp" class="trap" style="align-self:center">niet ingesteld</span>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="multiSource" checked style="width:auto">
+          <span>Automatisch de beste bron per aandeel kiezen en doorschuiven bij blokkades <b>(aanbevolen)</b></span>
+        </label>
+        <button class="btn-go" id="saveAllKeys" style="margin-left:auto">Sleutels bewaren</button>
+        <button class="btn-ghost" id="testKeys">&#128269; Sleutels testen</button>
+      </div>
+    </div>
+    <div class="status" id="settingsStatus"></div>
+
+    <div class="snap" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
+      <b>Bronvoorkeur per markt</b> (gebruikt wanneer automatisch kiezen aanstaat):<br>
+      &bull; Amerikaanse tickers (geen suffix) &rarr; Finnhub, dan FMP, dan EODHD<br>
+      &bull; Europese tickers (.AS, .BR, .PA, .DE, .ST, .CO, .OL, .HE, .MI, .SW, .L) &rarr; EODHD, dan FMP, dan Finnhub<br>
+      &bull; Aziatische tickers (.HK) &rarr; EODHD, dan FMP<br>
+      Bij een blokkade of limiet schuift de tool automatisch door naar de volgende bron in de rij.
+    </div>
+  </div><!-- /tab-settings -->
 </div>
 
 <script>
@@ -948,7 +997,50 @@ function getJson(url){
 }
 
 // dispatcher: kiest de juiste bron
+// ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
+var MULTI_KEYS={finnhub:"",eodhd:"",fmp:""};
+var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
+var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
+
+function sourceOrderFor(symbol){
+  if(ASIA_SUFFIX.test(symbol)) return ["eodhd","fmp"];
+  if(EU_SUFFIX.test(symbol))   return ["eodhd","fmp","finnhub"];
+  return ["finnhub","fmp","eodhd"]; // VS
+}
+function multiEnabled(){var el=document.getElementById('multiSource');return el?el.checked:false;}
+function enrichWithSource(symbol,src,key){
+  if(src==="finnhub") return enrichFinnhub(symbol,key);
+  if(src==="eodhd")   return enrichEODHD(symbol,key);
+  return enrichFMP(symbol,key);
+}
+// probeert de bronnen op volgorde; geeft het eerste bruikbare resultaat terug (met _src erin)
+function enrichMulti(symbol){
+  var order=sourceOrderFor(symbol).filter(function(s){return MULTI_KEYS[s];});
+  if(!order.length) return Promise.reject({kind:"config",msg:"geen sleutel ingesteld voor deze markt \u2014 vul er een in bij Instellingen"});
+  var errors=[];
+  function attempt(i){
+    if(i>=order.length) return Promise.reject({kind:"api",msg:"alle bronnen faalden ("+errors.join(" | ")+")"});
+    var src=order[i];
+    return enrichWithSource(symbol,src,MULTI_KEYS[src]).then(function(d){
+      // resultaat zonder bruikbare koers telt als mislukt -> volgende bron proberen
+      if(!d||d.price==null){errors.push(src+": geen data");return attempt(i+1);}
+      d._src=src; return d;
+    }).catch(function(e){
+      errors.push(src+": "+((e&&e.msg)||"fout").slice(0,50));
+      return attempt(i+1);
+    });
+  }
+  return attempt(0);
+}
+
 function enrich(symbol,key){
+  // multi-bron heeft voorrang wanneer ingeschakeld en er minstens één sleutel is
+  if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp)){
+    return enrichMulti(symbol);
+  }
+  return enrichSingle(symbol,key);
+}
+function enrichSingle(symbol,key){
   var src=currentSource();
   if(src==="finnhub") return enrichFinnhub(symbol,key);
   if(src==="eodhd")   return enrichEODHD(symbol,key);
@@ -1282,7 +1374,103 @@ $('saveKey').onclick=function(){
 updateKeyLabel();
 loadKeyFor($('source').value);
 
+// ---- Instellingen-tabblad: alle sleutels samen beheren ----
+function setKeyStatus(src,state,msg){
+  var el=$('stat_'+src); if(!el)return;
+  var cls={ok:"trap ok",warn:"trap warn",err:"trap danger",none:"trap"};
+  el.className=cls[state]||"trap";
+  el.textContent=msg;
+}
+function loadAllKeys(){
+  ['finnhub','eodhd','fmp'].forEach(function(src){
+    var applyVal=function(v){
+      if(v){MULTI_KEYS[src]=v;var f=$('key_'+src);if(f)f.value=v;setKeyStatus(src,"ok","ingesteld");}
+      else setKeyStatus(src,"none","niet ingesteld");
+    };
+    if(KEYCACHE[src]) {applyVal(KEYCACHE[src]);return;}
+    if(window.storage&&window.storage.get){
+      window.storage.get(keyStorageId(src)).then(function(r){applyVal(r&&r.value);}).catch(function(){applyVal(null);});
+    } else applyVal(null);
+  });
+}
+function saveAllKeys(){
+  var count=0;
+  ['finnhub','eodhd','fmp'].forEach(function(src){
+    var f=$('key_'+src); if(!f)return;
+    var v=f.value.trim();
+    MULTI_KEYS[src]=v; KEYCACHE[src]=v;
+    if(v)count++;
+    setKeyStatus(src,v?"ok":"none",v?"ingesteld":"niet ingesteld");
+    if(window.storage&&window.storage.set) window.storage.set(keyStorageId(src),v).catch(function(){});
+  });
+  loadKeyFor($('source').value);
+  if(typeof saveKeysCloud==="function")saveKeysCloud();
+  var st=$('settingsStatus'); st.className="status";
+  st.textContent=count+" sleutel(s) bewaard. De tool kiest nu per aandeel automatisch de beste beschikbare bron.";
+}
+function testAllKeys(){
+  var st=$('settingsStatus'); st.className="status"; st.textContent="Sleutels testen\u2026";
+  var tests=[
+    {src:"finnhub",sym:"AAPL"},
+    {src:"eodhd",sym:"ASML.AS"},
+    {src:"fmp",sym:"AAPL"}
+  ].filter(function(t){return MULTI_KEYS[t.src];});
+  if(!tests.length){st.className="status err";st.textContent="Geen sleutels ingevuld om te testen.";return;}
+  var seq=Promise.resolve(), results=[];
+  tests.forEach(function(t){
+    seq=seq.then(function(){
+      setKeyStatus(t.src,"warn","testen\u2026");
+      return enrichWithSource(t.sym,t.src,MULTI_KEYS[t.src]).then(function(d){
+        if(d&&d.price!=null){setKeyStatus(t.src,"ok","werkt");results.push(t.src+": OK");}
+        else{setKeyStatus(t.src,"warn","geen data");results.push(t.src+": geen data");}
+      }).catch(function(e){
+        var m=((e&&e.msg)||"fout").slice(0,60);
+        setKeyStatus(t.src,"err","fout");results.push(t.src+": "+m);
+      });
+    });
+  });
+  seq.then(function(){
+    st.className="status";
+    st.textContent="Testresultaat \u2014 "+results.join("  \u00b7  ");
+  });
+}
+if($('saveAllKeys'))$('saveAllKeys').onclick=saveAllKeys;
+if($('testKeys'))$('testKeys').onclick=testAllKeys;
+loadAllKeys();
+
 // ============ ETF-TABBLAD ============
+// ---- Overlap-kennisbank: welke ETF's volgen dezelfde index, en wat zijn hun grootste posities? ----
+// Ingebouwd omdat de live holdings-endpoints premium zijn. Cijfers zijn indicatief (gewichten schuiven
+// mee met de markt) en bedoeld om verborgen dubbeltellingen te signaleren, niet als exacte allocatie.
+var ETF_INDEX_GROUPS={
+  "S&P 500":["SPY","VOO","IVV","SPLG"],
+  "Nasdaq 100":["QQQ","QQQM"],
+  "Total US Market":["VTI","ITOT","SCHB"],
+  "Developed ex-US":["VEA","IEFA","SCHF"],
+  "Emerging Markets":["VWO","IEMG","EEM"],
+  "Total World ex-US":["VXUS","IXUS"],
+  "US Small Cap":["IWM","VB","IJR"],
+  "US Aggregate Bond":["BND","AGG","SCHZ"],
+  "US Dividend":["SCHD","VYM","DVY"]
+};
+// grootste posities per ETF (indicatief gewicht in %) - alleen de namen die er echt toe doen voor overlap
+var ETF_TOP_HOLDINGS={
+  SPY:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  VOO:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  IVV:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  VTI:{NVDA:6.5,AAPL:5.9,MSFT:5.4,AMZN:3.5,META:2.3,GOOGL:2.2,AVGO:2.1,TSLA:1.8},
+  QQQ:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
+  QQQM:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
+  XLK:{NVDA:15.0,AAPL:14.0,MSFT:13.0,AVGO:5.0},
+  XLF:{"BRK-B":13.0,JPM:10.0,V:7.5,MA:6.5,BAC:4.5},
+  XLE:{XOM:22.0,CVX:17.0,COP:7.0,SLB:4.0},
+  SCHD:{},VYM:{},IWM:{},BND:{},AGG:{},VXUS:{},VEA:{},VWO:{},ARKK:{TSLA:9.0,COIN:7.0}
+};
+function indexGroupOf(sym){
+  for(var g in ETF_INDEX_GROUPS){ if(ETF_INDEX_GROUPS[g].indexOf(sym)>-1) return g; }
+  return null;
+}
+
 var ETF_DEMO=[
   {symbol:"VOO",  name:"Vanguard S&P 500",        aum:520, ter:0.03, holdings:503,  top10:35.2, yield:1.3, chg:0.4},
   {symbol:"VTI",  name:"Vanguard Total Stock Mkt", aum:410, ter:0.03, holdings:3700, top10:26.1, yield:1.3, chg:0.5},
@@ -1549,6 +1737,7 @@ function renderPortfolio(){
       '<button class="pf-remove" onclick="removePosition(\''+p.id+'\')">verwijderen</button></div>'+
       '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
       (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
+      (p._fresh&&p._fresh.src?' \u00b7 <span style="opacity:0.7">via '+p._fresh.src+'</span>':'')+
       (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
       (p._fresh? (isHolding(p.symbol)
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
@@ -1566,25 +1755,97 @@ if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
+// ---- Overlap-analyse: index-dubbelingen tussen ETF's + losse aandelen die ook in je ETF's zitten ----
+function analyseOverlap(){
+  var findings=[];
+  var symbols=PORTFOLIO.map(function(p){return p.symbol;});
+
+  // 1) twee of meer ETF's die dezelfde index volgen
+  var byGroup={};
+  symbols.forEach(function(s){
+    var g=indexGroupOf(s);
+    if(g){ if(!byGroup[g])byGroup[g]=[]; byGroup[g].push(s); }
+  });
+  Object.keys(byGroup).forEach(function(g){
+    if(byGroup[g].length>1){
+      findings.push({level:"high",text:"<b>"+byGroup[g].join(" en ")+"</b> volgen allebei de index <b>"+g+
+        "</b> \u2014 vrijwel volledige overlap. Je spreidt hiermee niet extra; je verdubbelt dezelfde positie (en betaalt mogelijk twee keer kosten)."});
+    }
+  });
+
+  // 2) losse aandelen die ook een grote positie zijn in je ETF's -> geconcentreerde exposure
+  var etfsInPf=symbols.filter(function(s){return ETF_TOP_HOLDINGS.hasOwnProperty(s);});
+  var stockSyms=symbols.filter(function(s){return !ETF_TOP_HOLDINGS.hasOwnProperty(s);});
+  stockSyms.forEach(function(stock){
+    var via=[];
+    etfsInPf.forEach(function(etf){
+      var w=ETF_TOP_HOLDINGS[etf]&&ETF_TOP_HOLDINGS[etf][stock];
+      if(w) via.push(etf+" ("+w+"%)");
+    });
+    if(via.length){
+      findings.push({level:"mid",text:"Je houdt <b>"+stock+"</b> los aan, maar het zit ook in "+via.join(" en ")+
+        ". Je werkelijke blootstelling aan dit bedrijf is dus groter dan je losse positie doet vermoeden."});
+    }
+  });
+
+  // 3) ETF's die onderling sterk overlappen via dezelfde topposities (bv. QQQ + XLK)
+  for(var i=0;i<etfsInPf.length;i++){
+    for(var j=i+1;j<etfsInPf.length;j++){
+      var a=etfsInPf[i], b=etfsInPf[j];
+      if(indexGroupOf(a)&&indexGroupOf(a)===indexGroupOf(b))continue; // al gemeld bij 1)
+      var ha=ETF_TOP_HOLDINGS[a]||{}, hb=ETF_TOP_HOLDINGS[b]||{};
+      var shared=[],sumOverlap=0;
+      Object.keys(ha).forEach(function(sym){
+        if(hb[sym]){shared.push(sym);sumOverlap+=Math.min(ha[sym],hb[sym]);}
+      });
+      if(shared.length>=3&&sumOverlap>=12){
+        findings.push({level:"mid",text:"<b>"+a+"</b> en <b>"+b+"</b> delen hun grootste posities ("+shared.slice(0,5).join(", ")+
+          ") \u2014 samen ongeveer "+Math.round(sumOverlap)+"% overlappend gewicht. Minder spreiding dan twee losse fondsen suggereren."});
+      }
+    }
+  }
+  return findings;
+}
+
 function renderOverlap(){
   var wrap=$('overlapWrap'); if(!wrap)return;
+  var html="";
+
+  // A) sectorconcentratie (gebaseerd op gecheckte posities)
   var withSector=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.sector;});
-  if(withSector.length<3){wrap.innerHTML="";return;}
-  var counts={};
-  withSector.forEach(function(p){counts[p._fresh.sector]=(counts[p._fresh.sector]||0)+1;});
-  var total=withSector.length;
-  var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
-  var pct=Math.round(counts[top]/total*100);
-  if(pct>=50){
-    wrap.innerHTML='<div class="overlap-warn">\u26a0\ufe0f <b>Concentratie-signaal:</b> '+pct+'% van je gecheckte posities zit in de sector <b>'+top+'</b>. Individueel kunnen deze aandelen prima scoren, maar samen ben je sterk afhankelijk van \u00e9\u00e9n sector \u2014 een tegenvaller daar raakt je hele portefeuille tegelijk.</div>';
-  }else{
-    wrap.innerHTML='';
+  if(withSector.length>=3){
+    var counts={};
+    withSector.forEach(function(p){counts[p._fresh.sector]=(counts[p._fresh.sector]||0)+1;});
+    var total=withSector.length;
+    var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
+    var pct=Math.round(counts[top]/total*100);
+    if(pct>=50){
+      html+='<div class="overlap-warn">\u26a0\ufe0f <b>Concentratie-signaal:</b> '+pct+'% van je gecheckte posities zit in de sector <b>'+top+'</b>. Individueel kunnen deze aandelen prima scoren, maar samen ben je sterk afhankelijk van \u00e9\u00e9n sector \u2014 een tegenvaller daar raakt je hele portefeuille tegelijk.</div>';
+    }
   }
+
+  // B) ETF-overlap en dubbele exposure (werkt ook zonder dat posities gecheckt zijn)
+  var findings=analyseOverlap();
+  if(findings.length){
+    var high=findings.filter(function(f){return f.level==="high";});
+    var mid=findings.filter(function(f){return f.level!=="high";});
+    html+='<div class="overlap-warn" style="border-left-color:'+(high.length?"var(--red)":"var(--accent)")+'">'+
+      '\ud83d\udd0e <b>Overlap in je portefeuille</b> \u2014 verborgen dubbeltellingen die losse scores niet tonen:'+
+      '<ul style="margin:8px 0 0 18px;padding:0">'+
+      high.concat(mid).map(function(f){return '<li style="margin:4px 0">'+f.text+'</li>';}).join("")+
+      '</ul>'+
+      '<div style="margin-top:8px;font-size:11.5px;opacity:0.8">Gewichten zijn indicatief (ingebouwde kennisbank van bekende ETF\'s, want live holdings-data is premium bij alle bronnen). Bedoeld om dubbeltellingen te signaleren, niet als exacte allocatie.</div>'+
+      '</div>';
+  }
+
+  wrap.innerHTML=html;
 }
 
 function checkAllPositions(){
   var key=$('apikey').value.trim();
-  if(!key){pfStat("Vul eerst je API-sleutel in bij het Screener-tabblad.",true);return;}
+  if(!key && !(multiEnabled()&&(MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp))){
+    pfStat("Geen sleutel gevonden \u2014 vul er minstens \u00e9\u00e9n in bij het Instellingen-tabblad.",true);return;
+  }
   if(!PORTFOLIO.length){pfStat("Nog geen posities om te checken.",true);return;}
   pfStat("Actuele cijfers ophalen voor "+PORTFOLIO.length+" posities\u2026");
   var seq=Promise.resolve();
@@ -1596,8 +1857,8 @@ function checkAllPositions(){
         var holding=isHolding(pos.symbol);
         var sug=holding?null:suggestsHolding(d);
         var fresh=holding
-          ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true}
-          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug};
+          ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true,src:d._src||null}
+          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null};
         pos._fresh=fresh;
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
