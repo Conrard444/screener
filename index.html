@@ -321,8 +321,22 @@
 
     <div class="control-panel">
       <div class="control-row">
-        <div class="field" style="flex:1;min-width:260px">
-          <label>Tickers (komma-gescheiden, VS-ETF's)</label>
+        <div class="field">
+          <label>Selectie</label>
+          <select id="etfCategory">
+            <option value="custom">Eigen tickers (hieronder)</option>
+            <option value="kern">Kern-ETF's (26)</option>
+            <option value="internationaal">Internationaal &amp; opkomend (27)</option>
+            <option value="sector">Sectoren (28)</option>
+            <option value="obligaties">Obligaties &amp; cash (26)</option>
+            <option value="factor">Factor &amp; dividend (24)</option>
+            <option value="grondstof">Grondstoffen (24)</option>
+            <option value="thema">Thema &amp; groei (24)</option>
+            <option value="alles">Alles (179, duurt enkele minuten)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:220px">
+          <label>Tickers (bij 'eigen tickers')</label>
           <input type="text" id="etfTickers" value="SPY, QQQ, VTI, VOO, VXUS, VEA, VWO, IWM, SCHD, VYM, ARKK, XLK, XLF, XLE, BND, AGG" style="width:100%">
         </div>
         <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
@@ -1445,6 +1459,36 @@ if($('testKeys'))$('testKeys').onclick=testAllKeys;
 loadAllKeys();
 
 // ============ ETF-TABBLAD ============
+// ---- ETF-catalogus: voorgeprogrammeerde selecties van grote Amerikaanse fondsen ----
+// SecuritiesDB heeft geen lijst-endpoint, dus we leveren de tickers zelf aan.
+// Dekking: VS-genoteerde ETF's (Europese UCITS-fondsen worden niet gedekt).
+var ETF_CATALOG={
+  kern:{label:"Kern-ETF's (breed, goedkoop)",tickers:[
+    "VOO","SPY","IVV","SPLG","VTI","ITOT","SCHB","VT","QQQ","QQQM","DIA","IWM","VB","IJR","VO","IJH","MDY","VXF","RSP","SCHX","SCHG","SCHV","VUG","VTV","MGK","MGV"]},
+  internationaal:{label:"Internationaal &amp; opkomend",tickers:[
+    "VXUS","IXUS","VEA","IEFA","SCHF","EFA","VWO","IEMG","EEM","SCHE","VGK","VPL","EWJ","EWG","EWU","EWC","EWZ","EWY","EWT","INDA","FXI","MCHI","KWEB","EZU","IEUR","SPDW","SPEM"]},
+  sector:{label:"Sectoren",tickers:[
+    "XLK","XLF","XLV","XLE","XLI","XLY","XLP","XLB","XLU","XLRE","XLC","VGT","VHT","VFH","VDE","VIS","VCR","VDC","VAW","VPU","VNQ","SMH","SOXX","IBB","XBI","ITA","KRE","IYR"]},
+  obligaties:{label:"Obligaties &amp; cash",tickers:[
+    "BND","AGG","BNDX","SCHZ","VCIT","VCSH","LQD","HYG","JNK","TLT","IEF","SHY","GOVT","VGIT","VGSH","VGLT","MUB","VTEB","TIP","VTIP","SGOV","BIL","SHV","USFR","EMB","BNDW"]},
+  factor:{label:"Factor &amp; dividend",tickers:[
+    "SCHD","VYM","DVY","VIG","DGRO","NOBL","HDV","SPHD","SPYD","USMV","SPLV","QUAL","MTUM","VLUE","SIZE","IWF","IWD","VBR","VBK","AVUV","DFAC","COWZ","JEPI","JEPQ"]},
+  grondstof:{label:"Grondstoffen &amp; alternatief",tickers:[
+    "GLD","IAU","GLDM","SLV","SIVR","PDBC","DBC","USO","UNG","PPLT","PALL","COPX","GDX","GDXJ","REMX","LIT","URA","XME","WOOD","CORN","WEAT","IBIT","FBTC","ETHA"]},
+  thema:{label:"Thema &amp; groei",tickers:[
+    "ARKK","ARKW","ARKG","ARKQ","ARKF","BOTZ","ROBO","ICLN","TAN","FAN","PBW","HACK","CIBR","BUG","SKYY","CLOU","WCLD","FINX","IPO","MOON","JETS","PEJ","ESPO","HERO"]}
+};
+function etfCatalogTickers(cat){
+  if(cat==="alles"){
+    var all=[],seen={};
+    Object.keys(ETF_CATALOG).forEach(function(k){
+      ETF_CATALOG[k].tickers.forEach(function(t){if(!seen[t]){seen[t]=1;all.push(t);}});
+    });
+    return all;
+  }
+  return (ETF_CATALOG[cat]&&ETF_CATALOG[cat].tickers)||[];
+}
+
 // ---- Overlap-kennisbank: welke ETF's volgen dezelfde index, en wat zijn hun grootste posities? ----
 // Ingebouwd omdat de live holdings-endpoints premium zijn. Cijfers zijn indicatief (gewichten schuiven
 // mee met de markt) en bedoeld om verborgen dubbeltellingen te signaleren, niet als exacte allocatie.
@@ -1614,9 +1658,14 @@ function fetchEtfFinnhub(symbol,key){
 }
 function runEtf(){
   var st=$('etfStatus');
-  var syms=$('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
-  if(!syms.length){st.className="status err";st.textContent="Vul minstens \u00e9\u00e9n ticker in.";return;}
-  st.className="status";st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen via SecuritiesDB (gratis, geen sleutel nodig)\u2026";
+  var cat=$('etfCategory')?$('etfCategory').value:"custom";
+  var syms = (cat==="custom")
+    ? $('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean)
+    : etfCatalogTickers(cat);
+  if(!syms.length){st.className="status err";st.textContent="Geen tickers geselecteerd.";return;}
+  st.className="status";
+  var etaMin=Math.ceil(syms.length*0.7/60);
+  st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen via SecuritiesDB\u2026"+(syms.length>40?" (duurt ongeveer "+etaMin+" min \u2014 laat dit tabblad open)":"");
   var key=$('apikey')?$('apikey').value.trim():"";
   var seq=Promise.resolve([]);
   var failed=[];
@@ -1647,6 +1696,16 @@ function runEtf(){
   });
 }
 $('etfRun').onclick=runEtf;
+if($('etfCategory'))$('etfCategory').onchange=function(){
+  var custom=this.value==="custom";
+  var f=$('etfTickers');
+  if(f){f.disabled=!custom;f.style.opacity=custom?1:0.45;}
+  if(!custom){
+    var n=etfCatalogTickers(this.value).length;
+    $('etfStatus').className="status";
+    $('etfStatus').textContent=n+" fondsen geselecteerd \u2014 klik 'Vergelijk ETF's' om op te halen.";
+  }
+};
 $('etfDemo').onclick=function(){$('etfStatus').className="status";$('etfStatus').innerHTML='<span class="demo-flag">\u25cf DEMODATA</span> \u2014 illustratief, niet actueel.';ETF_CURRENT=ETF_DEMO;renderEtf();};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
 ETF_CURRENT=ETF_DEMO;
@@ -1701,7 +1760,8 @@ window.removePosition=removePosition;
 // in plaats van een cijfer dat op halve gegevens rust.
 // ---- ETF/ETP-herkenning in de portefeuille ----
 // Een ETF heeft geen ROE, winstgroei of P/E in de zin van een bedrijf; die krijgt een eigen beoordeling.
-var ETF_KNOWN={}; // gevuld met tickers waarvan SecuritiesDB bevestigt dat het een fonds is
+var ETF_KNOWN={};    // tickers waarvan SecuritiesDB bevestigt dat het een fonds is
+var ETF_NOT_FUND={}; // tickers waarvan we weten dat het géén fonds is (voorkomt herhaalde pogingen)
 var ETF_HINT=/^(SPY|VOO|IVV|VTI|QQQ|QQQM|VXUS|VEA|VWO|IWM|SCHD|VYM|ARKK|XL[KFEVYIPBU]|BND|AGG|VNQ|GLD|SLV|IEFA|IEMG|EEM|ITOT|SCHB|SCHF|SCHZ|VB|IJR|DVY|SPLG|IXUS)$/i;
 function looksLikeEtf(symbol,d){
   if(ETF_KNOWN[symbol])return true;
@@ -2029,8 +2089,12 @@ function checkAllPositions(){
   var seq=Promise.resolve();
   PORTFOLIO.forEach(function(pos){
     seq=seq.then(function(){
-      // ETF's/ETP's krijgen een eigen route: fondskenmerken via SecuritiesDB i.p.v. bedrijfsfundamentals
-      if(ETF_HINT.test(pos.symbol)||ETF_KNOWN[pos.symbol]){
+      // ETF's/ETP's krijgen een eigen route: fondskenmerken via SecuritiesDB i.p.v. bedrijfsfundamentals.
+      // We proberen SecuritiesDB voor elke ticker die géén bekend aandeel is - blijkt het geen fonds,
+      // dan valt hij door naar de gewone aandelenroute. Zo hoeven we geen tickerlijst bij te houden.
+      var mightBeFund = ETF_HINT.test(pos.symbol) || ETF_KNOWN[pos.symbol] ||
+                        (ETF_NOT_FUND[pos.symbol]!==true && !isHolding(pos.symbol));
+      if(mightBeFund){
         return fetchEtfSDB(pos.symbol).then(function(e){
           ETF_KNOWN[pos.symbol]=true;
           var sc=etfPortfolioScore(e);
@@ -2040,12 +2104,19 @@ function checkAllPositions(){
             completeness:{level:"full",missing:[]}};
           pos._alarm=classifyEtfAlarm(pos,pos._fresh);
           if(!pos.baseline) pos.baseline={score:pos._fresh.score,ts:Date.now(),isEtf:true};
-        }).catch(function(e){
-          var msg=(e&&e.msg)||"niet gevonden bij SecuritiesDB";
-          pos._fresh=null; pos._alarm={level:"orange",text:"[ETF] "+msg+" \u2014 Europese ETF's worden vaak niet gedekt."};
+        }).catch(function(){
+          // geen fonds (of niet gedekt) -> onthouden en doorvallen naar de aandelenroute
+          ETF_NOT_FUND[pos.symbol]=true;
+          return enrichAsStock(pos,key);
         });
       }
-      return enrich(pos.symbol,key).then(function(d){
+      return enrichAsStock(pos,key);
+    });
+  });
+
+  // aandelenroute als herbruikbare functie (ook gebruikt als doorval vanuit de ETF-poging)
+  function enrichAsStock(pos,key){
+    return enrich(pos.symbol,key).then(function(d){
         buildPeers([d]); // enkelvoudige set -> valt terug op absolute normalisatie
         var t=valueTrap(d);
         var holding=isHolding(pos.symbol);
@@ -2062,8 +2133,8 @@ function checkAllPositions(){
         var srcName={finnhub:"Finnhub",fmp:"FMP",eodhd:"EODHD"}[currentSource()]||"databron";
         pos._fresh=null; pos._alarm={level:"orange",text:"["+srcName+"] Kon niet ophalen: "+msg};
       });
-    });
-  });
+  }
+
   seq.then(function(){
     pfStat("Klaar \u2014 "+PORTFOLIO.length+" posities gecheckt.");
     savePortfolioLocal();savePortfolioCloud();
