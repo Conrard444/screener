@@ -37,37 +37,44 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{
     background:radial-gradient(1200px 600px at 85% -10%, rgba(212,168,67,.06), transparent 60%),var(--bg);
-    color:var(--ink);font-family:'IBM Plex Sans',sans-serif;line-height:1.5;padding:32px 20px 80px;
+    color:var(--ink);font-family:'IBM Plex Sans',sans-serif;line-height:1.5;padding:24px 20px 60px;
   }
   .wrap{max-width:1240px;margin:0 auto}
-  header{margin-bottom:24px;border-bottom:1px solid var(--line);padding-bottom:20px}
-  h1{font-family:'Fraunces',serif;font-weight:900;font-size:33px;letter-spacing:-.02em;line-height:1.05}
+  header{margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:14px}
+  h1{font-family:'Fraunces',serif;font-weight:900;font-size:27px;letter-spacing:-.02em;line-height:1.05}
   h1 .x{color:var(--accent);font-style:italic}
-  .sub{color:var(--muted);font-size:14px;margin-top:8px;max-width:660px}
-  .disclaimer{margin-top:14px;font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px}
-  .bar-top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:20px 0 14px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
-  .field{display:flex;flex-direction:column;gap:5px}
-  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-  input[type=text],input[type=password],input[type=number],select{
+  .sub{color:var(--muted);font-size:13px;margin-top:6px;max-width:660px}
+  .disclaimer{margin-top:14px;font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:9px 13px;border-radius:6px}
+  /* Verdicht control-panel: vervangt losse bar-top/filters/weights dozen door één paneel met interne secties */
+  .control-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 14px;overflow:hidden}
+  .control-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;padding:12px 16px}
+  .control-row+.control-row{border-top:1px solid var(--line)}
+  .control-row.compact{gap:8px 12px;padding:9px 16px}
+  .bar-top{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin:16px 0 14px;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  input[type=text],input[type=password],input[type=number],input[type=date],select{
     background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
-    padding:9px 11px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px;
+    padding:7px 10px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
   }
   input:focus,select:focus{outline:none;border-color:var(--accent)}
-  input[type=number]{width:92px}
-  button{cursor:pointer;border:none;border-radius:7px;font-family:'IBM Plex Sans';font-weight:600;font-size:13px;padding:10px 18px;transition:.15s}
+  input[type=number]{width:84px}
+  button{cursor:pointer;border:none;border-radius:6px;font-family:'IBM Plex Sans';font-weight:600;font-size:12.5px;padding:8px 15px;transition:.15s}
   .btn-go{background:var(--accent);color:#1a1206}
   .btn-go:hover{filter:brightness(1.08)}
   .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
   .btn-ghost:hover{color:var(--ink);border-color:var(--muted)}
-  .filters{display:flex;flex-wrap:wrap;gap:18px 22px;align-items:flex-end;margin:0 0 14px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
-  .filters .grp{display:flex;flex-direction:column;gap:6px}
-  .filters .grp > span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);font-weight:600}
+  .filters{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:flex-end;margin:0 0 14px;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .filters .grp{display:flex;flex-direction:column;gap:5px}
+  .filters .grp > span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:600}
   .filters .row{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
-  .weights{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 16px;font-size:12px;color:var(--muted);align-items:center;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  .weights{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 14px;font-size:12px;color:var(--muted);align-items:center;padding:11px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
   .weights .wlabel{font-family:'IBM Plex Mono'}
-  .weights input[type=range]{accent-color:var(--accent);width:110px;vertical-align:middle}
-  .status{font-size:13px;color:var(--muted);margin:12px 2px;min-height:18px;font-family:'IBM Plex Mono'}
+  .weights input[type=range]{accent-color:var(--accent);width:100px;vertical-align:middle}
+  .status{font-size:12.5px;color:var(--muted);margin:8px 2px;min-height:16px;font-family:'IBM Plex Mono'}
   .status.err{color:var(--red)}
+  /* label die inline voor een control-groep staat i.p.v. erboven — voor compacte rijen */
+  .inline-lbl{font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px}
   .demo-flag{color:var(--accent);font-family:'IBM Plex Mono'}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line)}
@@ -135,6 +142,12 @@
     h1{font-size:24px}
     .sub{font-size:13px}
     .bar-top,.filters{padding:12px;gap:10px}
+    .control-row{padding:10px 12px;gap:8px 10px}
+    .control-row .field,.bar-top .field,.filters .grp{width:100%}
+    .control-row select,.control-row input[type=text],.control-row input[type=password]{width:100%}
+    .control-row button{flex:1;min-width:120px;margin-left:0 !important}
+    .control-row input[type=range]{width:100%}
+    .control-row .wlabel{width:100%;display:flex;justify-content:space-between}
     .bar-top .field,.filters .grp{width:100%}
     .bar-top input[type=password],.bar-top select,.field select,.field input{width:100%;min-width:0}
     .bar-top button,.track-actions button{flex:1;min-width:130px;padding:12px 14px;font-size:14px}
@@ -176,9 +189,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Markt-screener <span class="x">×</span> Momentum · Waardering · Groei</h1>
-    <p class="sub">Doorzoekt een ingebouwd universum van grote VS- en EU-aandelen, scoort de kandidaten op momentum, waardering en groei, en zet de sterkste bovenaan — met een waarschuwing voor mogelijke waarde-vallen.</p>
-    <div class="disclaimer">&#9888;&#65039; Analyse-instrument, geen financieel advies en geen winstgarantie. De screener vindt aandelen die op papier aan je criteria voldoen &mdash; of ze stijgen blijft onzeker, want de markt heeft diezelfde cijfers al gezien. Een hoge score is een startpunt voor eigen onderzoek, geen koopsignaal.</div>
+    <h1>Markt-screener <span class="x">×</span> Momentum · Waardering · Groei · Kwaliteit</h1>
+    <div class="disclaimer">&#9888;&#65039; Analyse-instrument, geen financieel advies. Een hoge score is een startpunt voor eigen onderzoek, geen koopsignaal &mdash; de markt heeft diezelfde cijfers al gezien.</div>
   </header>
 
   <div class="tabs">
@@ -195,82 +207,65 @@
     <button id="pwaTipClose">verberg</button>
   </div>
 
-  <div class="bar-top">
-    <div class="field">
-      <label>Databron</label>
-      <select id="source">
-        <option value="finnhub" selected>Finnhub (ruime gratis tier, VS)</option>
-        <option value="fmp">Financial Modeling Prep</option>
-        <option value="eodhd">EODHD</option>
-      </select>
+  <div class="control-panel">
+    <div class="control-row">
+      <div class="field">
+        <label>Databron</label>
+        <select id="source">
+          <option value="finnhub" selected>Finnhub (ruime gratis tier, VS)</option>
+          <option value="fmp">Financial Modeling Prep</option>
+          <option value="eodhd">EODHD</option>
+        </select>
+      </div>
+      <div class="field">
+        <label id="keylabel">API-sleutel</label>
+        <input type="password" id="apikey" placeholder="laat leeg = demodata" autocomplete="off" style="min-width:180px">
+      </div>
+      <button class="btn-ghost" id="saveKey" title="Bewaart de sleutel in deze browser zodat je hem niet steeds opnieuw hoeft te plakken">&#128190; Bewaar</button>
+      <button class="btn-go" id="run" style="margin-left:auto">Screen het universum</button>
+      <button class="btn-ghost" id="demo">Demo</button>
+      <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">&#8595; CSV</button>
     </div>
-    <div class="field">
-      <label id="keylabel">API-sleutel</label>
-      <input type="password" id="apikey" placeholder="laat leeg = demodata" autocomplete="off" style="min-width:200px">
+    <div class="control-row compact">
+      <div class="field">
+        <label>Universum</label>
+        <select id="exchange">
+          <option value="ALL_SMALL" selected>VS + EU compact (~20)</option>
+          <option value="US_SMALL">VS compact (~15)</option>
+          <option value="EU_SMALL">EU compact (~12)</option>
+          <option value="US_ALL">VS volledig (~75)</option>
+          <option value="EU_ALL">EU volledig (~45)</option>
+          <option value="ALL">VS + EU alles (~120)</option>
+          <option value="SP500">S&amp;P 500 top ~200 (vooranalyse)</option>
+          <option value="SCANDI">Scandinavi\u00eb (~29)</option>
+          <option value="CHINA">China / Hongkong (~37)</option>
+          <option value="HOLDINGS">Holdings / investeringsmaatschappijen (~21)</option>
+        </select>
+      </div>
+      <div class="field"><label>Toon top</label><select id="limit"><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option></select></div>
+      <div class="field">
+        <label title="Stijgers: rangschikt op de vier factoren met jouw weging. Overdreven dalers: zoekt aandelen die hard zijn gedaald maar fundamenteel gezond bleven.">Zoekmodus</label>
+        <select id="mode"><option value="stijgers" selected>Stijgers (momentum)</option><option value="herstel">Overdreven dalers</option></select>
+      </div>
+      <div class="field">
+        <label title="Korte termijn: relatieve scores, reageert snel maar schommelt. Lange termijn: trage fundamenten, absolute scores + demping — veel stabieler.">Horizon</label>
+        <select id="horizon"><option value="kort" selected>Kort (reactief)</option><option value="lang">Lang (stabiel)</option></select>
+      </div>
+      <div class="field"><label>Marktwaarde &gt;</label><input type="number" id="mcap" value="0" style="width:60px"><span class="inline-lbl">mld $</span></div>
+      <div class="field"><label>P/E &lt;</label><input type="number" id="pemax" value="40" style="width:60px"></div>
     </div>
-    <button class="btn-ghost" id="saveKey" title="Bewaart de sleutel in deze browser zodat je hem niet steeds opnieuw hoeft te plakken">&#128190; Bewaar sleutel</button>
-    <div class="field">
-      <label>Universum (meer = meer API-calls)</label>
-      <select id="exchange">
-        <option value="ALL_SMALL" selected>VS + EU compact (~20 aandelen)</option>
-        <option value="US_SMALL">VS compact (~15)</option>
-        <option value="EU_SMALL">EU compact (~12)</option>
-        <option value="US_ALL">VS volledig (~75)</option>
-        <option value="EU_ALL">EU volledig (~45)</option>
-        <option value="ALL">VS + EU alles (~120)</option>
-        <option value="SP500">S&amp;P 500 grootste ~200 \u2014 met vooranalyse</option>
-        <option value="SCANDI">Scandinavi\u00eb (~29)</option>
-        <option value="CHINA">China / Hongkong (~37)</option>
-      </select>
+    <div class="control-row compact">
+      <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging<span id="wnote" style="color:var(--accent);font-weight:400"></span>:</span>
+      <span class="wlabel inline-lbl">Momentum <b id="wm-v">30</b>%</span><input type="range" id="wm" min="0" max="100" value="30">
+      <span class="wlabel inline-lbl">Waardering <b id="wv-v">25</b>%</span><input type="range" id="wv" min="0" max="100" value="25">
+      <span class="wlabel inline-lbl">Groei <b id="wg-v">15</b>%</span><input type="range" id="wg" min="0" max="100" value="15">
+      <span class="wlabel inline-lbl">Kwaliteit <b id="wq-v">30</b>%</span><input type="range" id="wq" min="0" max="100" value="30">
     </div>
-    <div class="field">
-      <label>Toon top</label>
-      <select id="limit">
-        <option value="15">15</option>
-        <option value="25" selected>25</option>
-        <option value="40">40</option>
-      </select>
-    </div>
-    <div class="field">
-      <label title="Stijgers: rangschikt op de vier factoren met jouw weging. Overdreven dalers: zoekt aandelen die hard zijn gedaald maar fundamenteel gezond bleven (30% dalingsdiepte + 35% kwaliteit + 35% waardering, weegregelaars gelden niet).">Zoekmodus</label>
-      <select id="mode">
-        <option value="stijgers" selected>Stijgers (momentum)</option>
-        <option value="herstel">Overdreven dalers (herstel)</option>
-      </select>
-    </div>
-    <div class="field">
-      <label title="Korte termijn: jouw eigen weging, relatieve scores, geen demping \u2014 reageert snel maar schommelt. Lange termijn: zware nadruk op trage fundamenten (kwaliteit + waardering), momentum laag, absolute scores en demping over je opgeslagen metingen \u2014 veel stabieler.">Horizon</label>
-      <select id="horizon">
-        <option value="kort" selected>Korte termijn (reactief)</option>
-        <option value="lang">Lange termijn (stabiel)</option>
-      </select>
-    </div>
-    <button class="btn-go" id="run">Screen het universum</button>
-    <button class="btn-ghost" id="demo">Laad demo</button>
-    <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">&#8595; CSV</button>
-  </div>
-
-  <div class="filters">
-    <div class="grp">
-      <span>Omvang</span>
-      <div class="row">Marktwaarde &gt; <input type="number" id="mcap" value="0"> mld $</div>
-    </div>
-    <div class="grp">
-      <span>Waardering</span>
-      <div class="row">P/E lager dan <input type="number" id="pemax" value="40"></div>
-    </div>
-  </div>
-
-  <div class="weights">
-    <span style="color:var(--ink);font-weight:600">Score-weging:<span id="wnote" style="color:var(--accent);font-weight:400;font-size:11px"></span></span>
-    <span class="wlabel">Momentum <b id="wm-v">30</b>%</span><input type="range" id="wm" min="0" max="100" value="30">
-    <span class="wlabel">Waardering <b id="wv-v">25</b>%</span><input type="range" id="wv" min="0" max="100" value="25">
-    <span class="wlabel">Groei <b id="wg-v">15</b>%</span><input type="range" id="wg" min="0" max="100" value="15">
-    <span class="wlabel">Kwaliteit <b id="wq-v">30</b>%</span><input type="range" id="wq" min="0" max="100" value="30">
   </div>
 
   <div class="status" id="status"></div>
 
+  <div id="holdingsNote"></div>
   <div id="dailyDiffWrap"></div>
   <div class="scrollhint">&#8596; veeg horizontaal om alle kolommen te zien</div>
   <div class="panel-card">
@@ -318,24 +313,27 @@
   </div><!-- /tab-screener -->
 
   <div class="tabpane" id="tab-etf">
-    <p class="sub" style="margin-top:18px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe efficiënt het fonds zijn index volgt. Deze score is losgekoppeld van de aandelenscore hierboven.</p>
-    <div class="disclaimer">&#9888;&#65039; Ook hier geldt: dit vergelijkt fondsen op meetbare kenmerken, het voorspelt geen rendement. Lage kosten en brede spreiding zijn de twee factoren waar het meeste onderzoek achter staat &mdash; niet historisch rendement, want dat zegt weinig over de toekomst.</div>
+    <details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
+      <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
+    </details>
 
-    <div class="bar-top">
-      <div class="field">
-        <label>Tickers (komma-gescheiden, VS-ETF's)</label>
-        <input type="text" id="etfTickers" value="SPY, QQQ, VTI, VOO, VXUS, VEA, VWO, IWM, SCHD, VYM, ARKK, XLK, XLF, XLE, BND, AGG" style="min-width:340px">
+    <div class="control-panel">
+      <div class="control-row">
+        <div class="field" style="flex:1;min-width:260px">
+          <label>Tickers (komma-gescheiden, VS-ETF's)</label>
+          <input type="text" id="etfTickers" value="SPY, QQQ, VTI, VOO, VXUS, VEA, VWO, IWM, SCHD, VYM, ARKK, XLK, XLF, XLE, BND, AGG" style="width:100%">
+        </div>
+        <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
+        <button class="btn-ghost" id="etfDemo">Demo</button>
       </div>
-      <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
-      <button class="btn-ghost" id="etfDemo">Laad demo</button>
-    </div>
-
-    <div class="weights">
-      <span style="color:var(--ink);font-weight:600">Score-weging:</span>
-      <span class="wlabel">Lage kosten <b id="ewc-v">40</b>%</span><input type="range" id="ewc" min="0" max="100" value="40">
-      <span class="wlabel">Spreiding <b id="ewd-v">25</b>%</span><input type="range" id="ewd" min="0" max="100" value="25">
-      <span class="wlabel">Liquiditeit <b id="ewl-v">20</b>%</span><input type="range" id="ewl" min="0" max="100" value="20">
-      <span class="wlabel">Track record <b id="ewt-v">15</b>%</span><input type="range" id="ewt" min="0" max="100" value="15">
+      <div class="control-row compact">
+        <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging:</span>
+        <span class="wlabel inline-lbl">Lage kosten <b id="ewc-v">40</b>%</span><input type="range" id="ewc" min="0" max="100" value="40">
+        <span class="wlabel inline-lbl">Spreiding <b id="ewd-v">25</b>%</span><input type="range" id="ewd" min="0" max="100" value="25">
+        <span class="wlabel inline-lbl">Liquiditeit <b id="ewl-v">20</b>%</span><input type="range" id="ewl" min="0" max="100" value="20">
+        <span class="wlabel inline-lbl">Track record <b id="ewt-v">15</b>%</span><input type="range" id="ewt" min="0" max="100" value="15">
+      </div>
     </div>
 
     <div class="status" id="etfStatus"></div>
@@ -369,22 +367,23 @@
   </div><!-- /tab-etf -->
 
   <div class="tabpane" id="tab-portfolio">
-    <p class="sub" style="margin-top:18px">Voer je eigen posities in. De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde &mdash; en waarschuwt als de fundamentele situatie merkbaar is veranderd.</p>
-    <div class="disclaimer">&#9888;&#65039; Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet en kan geen koop- of verkoopbeslissing nemen. Bij elke waarschuwing: vraag jezelf af waaróm je deze positie ook alweer aanhield.</div>
+    <details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
+      <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
+      <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
+    </details>
 
-    <div class="snap" id="pfSourceBar" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
-      &#8505;&#65039; Posities worden gecheckt via de databron die bovenaan bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK, \u2026) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse. Wissel zo nodig van bron bij Screener en kom hierheen terug om opnieuw te checken.
-    </div>
-
-    <div class="bar-top">
-      <div class="field"><label>Ticker</label><input type="text" id="pfSymbol" placeholder="bv. AAPL" style="width:110px"></div>
-      <div class="field"><label>Aantal</label><input type="number" id="pfQty" placeholder="10" style="width:90px"></div>
-      <div class="field"><label>Aankoopprijs</label><input type="number" id="pfPrice" placeholder="150.00" step="0.01" style="width:110px"></div>
-      <div class="field"><label>Aankoopdatum</label><input type="date" id="pfDate"></div>
-      <button class="btn-go" id="pfAdd">+ Toevoegen</button>
-      <button class="btn-ghost" id="pfCheck">&#128260; Alle posities checken</button>
-      <button class="btn-ghost" id="pfImportBtn">&#8593; Importeer uit SaxoInvestor (CSV)</button>
-      <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
+    <div class="control-panel">
+      <div class="control-row">
+        <div class="field"><label>Ticker</label><input type="text" id="pfSymbol" placeholder="AAPL" style="width:95px"></div>
+        <div class="field"><label>Aantal</label><input type="number" id="pfQty" placeholder="10" style="width:75px"></div>
+        <div class="field"><label>Aankoopprijs</label><input type="number" id="pfPrice" placeholder="150.00" step="0.01" style="width:95px"></div>
+        <div class="field"><label>Datum</label><input type="date" id="pfDate"></div>
+        <button class="btn-go" id="pfAdd">+ Toevoegen</button>
+        <button class="btn-ghost" id="pfCheck" style="margin-left:auto">&#128260; Alles checken</button>
+        <button class="btn-ghost" id="pfImportBtn">&#8593; Saxo CSV</button>
+        <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
+      </div>
     </div>
 
     <div class="status" id="pfStatus"></div>
@@ -392,59 +391,67 @@
     <div class="kpi-row" id="pfDashboard"></div>
     <div id="overlapWrap"></div>
 
-    <div class="filters" style="align-items:center">
-      <div class="grp">
-        <span>Sorteren op</span>
-        <div class="row">
-          <select id="pfSort">
-            <option value="alarm">Alarmniveau (rood eerst)</option>
-            <option value="score">Score (hoog \u2192 laag)</option>
-            <option value="scoreAsc">Score (laag \u2192 hoog)</option>
-            <option value="pl">Resultaat % (hoog \u2192 laag)</option>
-            <option value="plAsc">Resultaat % (laag \u2192 hoog)</option>
-            <option value="symbol">Ticker (A-Z)</option>
-            <option value="value">Positiewaarde (groot \u2192 klein)</option>
-          </select>
+    <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px">
+      <span class="inline-lbl">Sorteren</span>
+      <select id="pfSort">
+        <option value="alarm">Alarmniveau (rood eerst)</option>
+        <option value="score">Score (hoog \u2192 laag)</option>
+        <option value="scoreAsc">Score (laag \u2192 hoog)</option>
+        <option value="pl">Resultaat % (hoog \u2192 laag)</option>
+        <option value="plAsc">Resultaat % (laag \u2192 hoog)</option>
+        <option value="symbol">Ticker (A-Z)</option>
+        <option value="value">Positiewaarde (groot \u2192 klein)</option>
+      </select>
+      <span class="inline-lbl" style="margin-left:8px">Filter</span>
+      <select id="pfFilter">
+        <option value="all">Alle posities</option>
+        <option value="red">Alleen rode alarmen</option>
+        <option value="orange">Rood + oranje</option>
+        <option value="unchecked">Nog niet gecheckt</option>
+      </select>
+      <details style="margin:0 0 0 auto;background:none;border:none;padding:0">
+        <summary style="font-size:12px;color:var(--muted);padding:0;font-weight:400">&#127974; Holdings beheren</summary>
+        <div style="padding:10px 0 0">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Markeer een investeringsmaatschappij zodat die op koers/boekwaarde wordt gescoord i.p.v. P/E &amp; groei.</p>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div class="field"><label>Ticker</label><input type="text" id="holdingNew" placeholder="GBLB.BR" style="width:110px"></div>
+            <button class="btn-ghost" id="holdingAdd">+ Markeren</button>
+          </div>
+          <div id="holdingList" style="margin-top:8px"></div>
         </div>
-      </div>
-      <div class="grp">
-        <span>Filter</span>
-        <div class="row">
-          <select id="pfFilter">
-            <option value="all">Alle posities</option>
-            <option value="red">Alleen rode alarmen</option>
-            <option value="orange">Rood + oranje</option>
-            <option value="unchecked">Nog niet gecheckt</option>
-          </select>
-        </div>
-      </div>
+      </details>
     </div>
 
     <div id="pfList"><div class="empty">Nog geen posities toegevoegd.</div></div>
   </div><!-- /tab-portfolio -->
 
   <div class="tabpane" id="tab-tracking">
-    <p class="sub" style="margin-top:18px">Hier legt de tool vast wat je screende en meet achteraf hoe accuraat de scores bleken. Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien.</p>
-    <div class="disclaimer">&#9888;&#65039; Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een ietwat betrouwbaar beeld, en zelfs dan blijft verleden geen garantie voor de toekomst. Gebruik dit om te leren, niet om zekerheid te claimen.</div>
+    <details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe accuratesse gemeten wordt</summary>
+      <p class="sub" style="margin-top:8px">Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien. Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld, en zelfs dan blijft verleden geen garantie. Gebruik dit om te leren, niet om zekerheid te claimen.</p>
+    </details>
 
-    <div class="snap" id="syncBar" style="border-left:3px solid var(--blue);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span id="syncStatus" style="flex:1;min-width:200px;font-size:13px;color:var(--muted)">&#9729;&#65039; Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.</span>
-      <button class="btn-ghost" id="loginBtn">Inloggen met Google</button>
-      <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
-    </div>
-    <div class="snap" id="keySyncBar" style="border-left:3px solid var(--accent);font-size:12.5px;color:var(--muted)">
-      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
-        <input type="checkbox" id="syncKeys" style="margin-top:3px">
-        <span>Ook mijn API-sleutels meenemen in de cloud-sync (handig: dan hoef je ze niet per apparaat opnieuw in te geven). <b style="color:var(--accent)">Waarschuwing:</b> een API-sleutel is een wachtwoord. Doe dit alleen voor gratis sleutels \u2014 bewaar hier g\u00e9\u00e9n sleutels van betaalde abonnementen, want bij lekken kan dat geld kosten.</span>
-      </label>
-    </div>
-    <div class="track-actions">
-      <button class="btn-save" id="snapshot">&#128190; Huidige screening vastleggen</button>
-      <button class="btn-ghost" id="export">&#8595; Exporteer geschiedenis (bestand)</button>
-      <button class="btn-ghost" id="importBtn">&#8593; Importeer geschiedenis</button>
-      <input type="file" id="importFile" accept="application/json" style="display:none">
-      <button class="btn-ghost" id="measure">&#128202; Meet accuratesse nu</button>
-      <button class="btn-ghost" id="clearHist" style="color:var(--red)">Wis geschiedenis</button>
+    <div class="control-panel">
+      <div class="control-row">
+        <span id="syncStatus" style="flex:1;min-width:200px;font-size:12.5px;color:var(--muted)">&#9729;&#65039; Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.</span>
+        <button class="btn-ghost" id="loginBtn">Inloggen met Google</button>
+        <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
+        <button class="btn-ghost" id="saveSettingsBtn" title="Bewaar je huidige universum, weging, horizon en modus in de cloud, zodat ze op je andere apparaten worden hersteld">&#9881;&#65039; Instellingen bewaren</button>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+          <input type="checkbox" id="syncKeys" style="margin-top:2px;width:auto">
+          <span>Ook API-sleutels meenemen in de cloud-sync. <b style="color:var(--accent)">Let op:</b> een sleutel is een wachtwoord &mdash; doe dit alleen voor gratis sleutels, niet voor betaalde abonnementen.</span>
+        </label>
+      </div>
+      <div class="control-row compact">
+        <button class="btn-save" id="snapshot">&#128190; Screening vastleggen</button>
+        <button class="btn-ghost" id="measure">&#128202; Meet accuratesse</button>
+        <button class="btn-ghost" id="export">&#8595; Exporteer</button>
+        <button class="btn-ghost" id="importBtn">&#8593; Importeer</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+        <button class="btn-ghost" id="clearHist" style="color:var(--red);margin-left:auto">Wis geschiedenis</button>
+      </div>
     </div>
     <div class="status" id="trackStatus"></div>
 
@@ -452,8 +459,8 @@
     <div id="factorWrap"></div>
     <div id="scatterWrap"></div>
 
-    <h3 style="font-family:'Fraunces',serif;font-size:20px;margin:24px 0 10px">Opgeslagen momentopnamen</h3>
-    <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening op het Screener-tabblad en klik hier op "Huidige screening vastleggen".</div></div>
+    <h3 style="font-family:'Fraunces',serif;font-size:18px;margin:20px 0 8px">Opgeslagen momentopnamen</h3>
+    <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Screening vastleggen".</div></div>
   </div><!-- /tab-tracking -->
 </div>
 
@@ -578,6 +585,11 @@ function dampedScore(d,raw){
 }
 // ruwe (ongedempte) totaalscore
 function rawScore(d){
+  // Holdings/investeringsmaatschappijen: aparte logica, want P/E, groei en de gewone
+  // kwaliteitsratio's zijn hier vertekend door portefeuille-herwaarderingen (zie toelichting bij de score).
+  if(isHolding(d.symbol)){
+    return holdingScore(d); // geen val-trap-penalty: die is gebouwd op P/E/PEG-signalen die hier niet gelden
+  }
   var base;
   if(currentMode()==='herstel'){
     base=drawdownScore(d)*0.30+qualityScore(d)*0.35+valuationScore(d)*0.35;
@@ -613,6 +625,15 @@ function fmt(v,s){return (v==null||isNaN(v))?"\u2014":(v+(s||""));}
 function signed(v){return (v==null||isNaN(v))?"\u2014":((v>0?"+":"")+v.toFixed(1)+"%");}
 function cls(v){return v>0?"pos":(v<0?"neg":"");}
 
+function renderHoldingsNote(){
+  var el=document.getElementById('holdingsNote'); if(!el)return;
+  var isHoldingsRun = $('exchange') && $('exchange').value==="HOLDINGS";
+  if(!isHoldingsRun){el.innerHTML="";return;}
+  el.innerHTML='<div class="overlap-warn">\ud83c\udfe6 <b>Holdings-modus:</b> deze aandelen worden gescoord op <b>koers/boekwaarde</b> (NAV-proxy), schuldgraad en momentum \u2014 niet op P/E, groei of de gewone kwaliteitsratio\'s, want die zijn bij investeringsmaatschappijen vertekend. '+
+    'Let bij het lezen op de kolom <b>K/B</b>: onder 1 betekent noteren onder boekwaarde. '+
+    '<b>Belangrijk:</b> een korting van 10-15% is normaal en gezond (conglomeraatkorting); bij Aziatische en sommige familieholdings loopt die op tot 40-60%. Zo\'n diepe korting is g\u00e9\u00e9n automatisch koopje \u2014 hij prijst vaak governance-, politiek- of liquiditeitsrisico in, en kan jarenlang blijven bestaan zonder katalysator (verkoop, afsplitsing, aandeleninkoop).</div>';
+}
+
 function render(){
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT); // relatief t.o.v. volledige gescreende set
   var rows=CURRENT.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
@@ -625,6 +646,8 @@ function render(){
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
       (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
+      (isHolding(d.symbol)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
+        (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
       '<span class="nm">'+(d.name||"")+'</span></td>'+
       '<td class="l" style="color:var(--muted);font-size:12px">'+(d.sector||"\u2014")+'</td>'+
       '<td class="num">'+fmt(d.price)+'</td>'+
@@ -654,6 +677,7 @@ function render(){
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
   }).join("");
+  renderHoldingsNote();
 }
 
 var BASE="https://financialmodelingprep.com/stable";
@@ -790,9 +814,90 @@ var SECTOR={
   "0700.HK":"Communicatie","9988.HK":"Consument","3690.HK":"Communicatie","1024.HK":"Communicatie","9618.HK":"Consument",
   "1810.HK":"Technologie","2318.HK":"Financieel","0939.HK":"Financieel","1398.HK":"Financieel","3988.HK":"Financieel",
   "0005.HK":"Financieel","0388.HK":"Financieel","0175.HK":"Consument","2020.HK":"Consument","1211.HK":"Consument","9866.HK":"Consument",
-  "0016.HK":"Vastgoed","1299.HK":"Financieel","2331.HK":"Consument","0027.HK":"Consument","0883.HK":"Energie","0857.HK":"Energie","0386.HK":"Energie"
+  "0016.HK":"Vastgoed","1299.HK":"Financieel","2331.HK":"Consument","0027.HK":"Consument","0883.HK":"Energie","0857.HK":"Energie","0386.HK":"Energie",
+  // Holdings-universum (eigen sector zodat ze onderling vergeleken worden, niet met operationele bedrijven)
+  "EXO.PA":"Holding","GBLB.BR":"Holding","SOF.BR":"Holding","INVE-B.ST":"Holding","MF.PA":"Holding",
+  "ACKB.BR":"Holding","BRED.BR":"Holding","PRX.AS":"Holding","INDUC.ST":"Holding","LUND-B.ST":"Holding","HAL.AS":"Holding",
+  "0001.HK":"Holding","0019.HK":"Holding","0656.HK":"Holding","0142.HK":"Holding","0004.HK":"Holding",
+  "BRK-B":"Holding","BRK-A":"Holding","L":"Holding","IEP":"Holding","JARLF":"Holding"
 };
 function sectorOf(sym){return SECTOR[sym]||"Overig";}
+
+// ---- Holdings / investeringsmaatschappijen: winst- en groeicijfers zijn hier misleidend ----
+// (holding bezit belangen in andere bedrijven i.p.v. zelf een product te verkopen; NAV/koers-boekwaarde is de juiste maatstaf, niet P/E of omzetgroei)
+// Uitbreidbaar: voeg hier zelf tickers toe als je een andere holding tegenkomt.
+// ---- Holdings-universum: investeringsmaatschappijen wereldwijd, te vergelijken op NAV-proxy ----
+// Deze noteren vaak met een structurele korting op hun intrinsieke waarde (10-15% is normaal;
+// in Azië en bij sommige familieholdings loopt dit op tot 40-60%). Een grote korting is géén
+// automatisch koopsignaal: zonder katalysator (verkoop, afsplitsing, inkoop) kan die jaren blijven bestaan.
+var UNIVERSE_HOLDINGS=[
+  // Europa - familie/investeringsholdings
+  "EXO.PA",     // Exor (Agnelli: Ferrari, Stellantis, CNH, Lingotto)
+  "GBLB.BR",    // Groupe Bruxelles Lambert (SGS, Pernod Ricard, Adidas, Umicore)
+  "SOF.BR",     // Sofina (listed + private growth)
+  "INVE-B.ST",  // Investor AB (Wallenberg)
+  "MF.PA",      // Wendel (listed private equity)
+  "ACKB.BR",    // Ackermans & van Haaren
+  "BRED.BR",    // Brederode
+  "PRX.AS",     // Prosus (Tencent-belang; klassieke NAV-kortingcase)
+  "INDUC.ST",   // Industrivärden
+  "LUND-B.ST",  // Lundbergföretagen
+  "HAL.AS",     // HAL Trust
+  // Hongkong / Azië - conglomeraten
+  "0001.HK",    // CK Hutchison (havens, retail, infra, telecom)
+  "0019.HK",    // Swire Pacific A
+  "0016.HK",    // Sun Hung Kai Properties
+  "0656.HK",    // Fosun International
+  "0142.HK",    // First Pacific
+  "0004.HK",    // Wharf Holdings
+  // VS / overig
+  "BRK-B",      // Berkshire Hathaway
+  "L",          // Loews Corp
+  "IEP",        // Icahn Enterprises
+  "JARLF"       // Jardine Matheson (OTC-notering)
+];
+
+var HOLDING_SET_DEFAULT=(function(){
+  var s={"BRK-A":1}; // extra klasse die niet in het universum staat
+  UNIVERSE_HOLDINGS.forEach(function(sym){s[sym]=1;});
+  return s;
+})();
+var HOLDING_SET=Object.assign({},HOLDING_SET_DEFAULT); // spiegel; gebruikersuitbreidingen komen hier apart bovenop
+function isHolding(symbol){ return !!HOLDING_SET[symbol]; }
+
+// ---- Automatische holding-detectie: signaleert een vermoeden, classificeert nooit stilzwijgend ----
+// Patroon: lage/grillige omzetgroei + koers/boekwaarde dicht bij 1-2 + lage schuld.
+// Sluit REIT's uit (die hebben vaak óók P/B~1, maar kenmerken zich juist door hóge schuld -> ander patroon).
+function holdingSuspicionScore(d){
+  if(!d||isHolding(d.symbol))return 0; // al bekend, geen suggestie nodig
+  if(d.sector==="Vastgoed")return 0; // REIT's uitgesloten: vergelijkbare P/B maar ander schuldpatroon
+  var pts=0, reasons=[];
+  // 1) lage/grillige omzetgroei (holdings "groeien" niet zoals operationele bedrijven)
+  if(d.revG!=null && Math.abs(d.revG)<6){pts+=35;reasons.push("lage omzetgroei ("+d.revG+"%)");}
+  // 2) koers/boekwaarde dicht bij NAV (1-2x) - typisch voor holdings, atypisch voor de meeste operationele bedrijven
+  if(d.pb!=null && d.pb>=0.7 && d.pb<=2.2){pts+=35;reasons.push("koers/boekwaarde dicht bij boekwaarde ("+d.pb+"x)");}
+  // 3) relatief lage schuldgraad (holdings lenen doorgaans minder dan operationele bedrijven met kapitaalbehoefte)
+  if(d.de!=null && d.de<0.6){pts+=20;reasons.push("lage schuldgraad ("+d.de+")");}
+  // 4) industry-classificatie als extra aanwijzing (indien de bron dit teruggeeft)
+  if(d.industry && /holding|investment|asset management|diversified financ/i.test(d.industry)){pts+=25;reasons.push("classificatie: "+d.industry);}
+  return {score:pts, reasons:reasons};
+}
+// drempel: bij 55+ punten (uit minstens 2 signalen) tonen we de suggestie
+function suggestsHolding(d){
+  var r=holdingSuspicionScore(d);
+  if(!r||typeof r!=="object")return null;
+  return r.score>=55 ? r : null;
+}
+window.HOLDING_SET=HOLDING_SET; // zichtbaar/uitbreidbaar vanuit de browser-console indien gewenst
+
+// Holding-score: leunt op koers/boekwaarde als NAV-proxy + momentum + schuldgraad.
+// Bewust GEEN groei- of winstmarge-factoren: die zijn bij holdings vertekend door portefeuille-herwaarderingen.
+function holdingScore(d){
+  var pbScore = SECTOR_PEERS ? (pctRank(d.pb,peerArr(d,'pb'),true)!=null?pctRank(d.pb,peerArr(d,'pb'),true):norm(d.pb,0.7,3,true)) : norm(d.pb,0.7,3,true);
+  var deScore = norm(d.de,0,1.5,true); // lagere schuld/eigen-vermogen is beter, ruimere marge dan bij operationele bedrijven
+  var momScore = momentumScore(d);
+  return Math.round(pbScore*0.55 + deScore*0.20 + momScore*0.25);
+}
 
 function chosenUniverse(){
   var ex=$('exchange').value;
@@ -800,6 +905,7 @@ function chosenUniverse(){
   if(ex==="SP500"){return UNIVERSE_US.concat(UNIVERSE_SP_EXTRA);}
   if(ex==="SCANDI"){return UNIVERSE_SCANDI;}
   if(ex==="CHINA"){return UNIVERSE_CHINA;}
+  if(ex==="HOLDINGS"){return UNIVERSE_HOLDINGS;}
   if(ex==="EU_ALL"){us=[];eu=UNIVERSE_EU;}
   else if(ex==="US_ALL"){us=UNIVERSE_US;eu=[];}
   else if(ex==="ALL"){us=UNIVERSE_US;eu=UNIVERSE_EU;}
@@ -1444,7 +1550,12 @@ function renderPortfolio(){
       '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
       (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
       (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
-      (p._fresh?'<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>':'')+
+      (p._fresh? (isHolding(p.symbol)
+        ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
+        : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>'
+      ) : '')+
+      (p._fresh&&p._fresh.holdingSuggestion?'<div class="pf-alarm-text orange">\ud83c\udfe6 Dit cijferpatroon lijkt op een holding ('+p._fresh.holdingSuggestion.reasons.join(", ")+
+        '). <span style="text-decoration:underline;cursor:pointer" onclick="confirmHoldingSuggestion(\''+p.symbol+'\')">Als holding scoren?</span></div>':'')+
       (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
         (p._alarm.level==="red"?"\ud83d\udd34 ":p._alarm.level==="orange"?"\ud83d\udfe0 ":"\ud83d\udfe2 ")+p._alarm.text+'</div>':'')+
     '</div>';
@@ -1482,8 +1593,11 @@ function checkAllPositions(){
       return enrich(pos.symbol,key).then(function(d){
         buildPeers([d]); // enkelvoudige set -> valt terug op absolute normalisatie
         var t=valueTrap(d);
-        var fresh={score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),
-          trapLevel:t.level,price:d.price,sector:d.sector};
+        var holding=isHolding(pos.symbol);
+        var sug=holding?null:suggestsHolding(d);
+        var fresh=holding
+          ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true}
+          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug};
         pos._fresh=fresh;
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
@@ -1501,6 +1615,85 @@ function checkAllPositions(){
   });
 }
 $('pfCheck').onclick=checkAllPositions;
+
+// ---- Zelfbediening: eigen holdings toevoegen/verwijderen, lokaal + cloud bewaard ----
+var HOLDING_CUSTOM=[]; // door de gebruiker toegevoegde tickers (los van de standaardlijst)
+
+function rebuildHoldingSet(){
+  HOLDING_SET=Object.assign({},HOLDING_SET_DEFAULT);
+  HOLDING_CUSTOM.forEach(function(sym){HOLDING_SET[sym]=1;});
+  window.HOLDING_SET=HOLDING_SET;
+}
+function saveHoldingsLocal(){
+  try{ if(window.storage&&window.storage.set) window.storage.set('holdingCustom',JSON.stringify(HOLDING_CUSTOM)).catch(function(){}); }catch(e){}
+}
+function loadHoldingsLocal(){
+  try{
+    if(window.storage&&window.storage.get){
+      window.storage.get('holdingCustom').then(function(r){
+        if(r&&r.value){ try{HOLDING_CUSTOM=JSON.parse(r.value)||[];rebuildHoldingSet();renderHoldingList();}catch(e){} }
+      }).catch(function(){});
+    }
+  }catch(e){}
+}
+function saveHoldingsCloud(){
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid).set({holdingCustom:HOLDING_CUSTOM},{merge:true}).catch(function(){});
+  }
+}
+function renderHoldingList(){
+  var el=$('holdingList'); if(!el)return;
+  var std=Object.keys(HOLDING_SET_DEFAULT);
+  var custom=HOLDING_CUSTOM;
+  var html='<div style="font-size:12px;color:var(--muted);margin-bottom:6px"><b>Standaard:</b> '+std.join(", ")+'</div>';
+  if(custom.length){
+    html+='<div style="font-size:12px;color:var(--muted)"><b>Eigen toevoegingen:</b></div>';
+    html+=custom.map(function(sym){
+      return '<span class="trap ok" style="margin:3px 4px 3px 0;cursor:default">'+sym+
+        ' <span style="cursor:pointer;opacity:0.7" onclick="removeHolding(\''+sym+'\')" title="Verwijderen">\u2715</span></span>';
+    }).join("");
+  }else{
+    html+='<div style="font-size:12px;color:var(--muted);font-style:italic">Nog geen eigen holdings toegevoegd.</div>';
+  }
+  el.innerHTML=html;
+}
+function removeHolding(sym){
+  HOLDING_CUSTOM=HOLDING_CUSTOM.filter(function(s){return s!==sym;});
+  rebuildHoldingSet(); saveHoldingsLocal(); saveHoldingsCloud(); renderHoldingList();
+  if(CURRENT&&CURRENT.length)render();
+  renderPortfolio();
+}
+window.removeHolding=removeHolding;
+
+// gebruiker bevestigt een auto-suggestie vanuit de screener- of portefeuille-tabel
+function confirmHoldingSuggestion(sym){
+  if(HOLDING_SET_DEFAULT[sym]||HOLDING_CUSTOM.indexOf(sym)>-1)return; // al bekend
+  HOLDING_CUSTOM.push(sym);
+  rebuildHoldingSet();
+  if(typeof saveHoldingsLocal==="function")saveHoldingsLocal();
+  if(typeof saveHoldingsCloud==="function")saveHoldingsCloud();
+  if(typeof renderHoldingList==="function")renderHoldingList();
+  if(typeof pfStat==="function")pfStat(sym+" bevestigd als holding \u2014 wordt vanaf nu op koers/boekwaarde gescoord.");
+  if(typeof CURRENT!=="undefined"&&CURRENT&&CURRENT.length&&typeof render==="function")render();
+  if(typeof renderPortfolio==="function")renderPortfolio();
+}
+window.confirmHoldingSuggestion=confirmHoldingSuggestion;
+
+$('holdingAdd').onclick=function(){
+  var sym=$('holdingNew').value.trim().toUpperCase();
+  if(!sym){pfStat("Vul een ticker in.",true);return;}
+  if(HOLDING_SET_DEFAULT[sym]){pfStat(sym+" staat al in de standaardlijst.",true);return;}
+  if(HOLDING_CUSTOM.indexOf(sym)>-1){pfStat(sym+" is al toegevoegd.",true);return;}
+  HOLDING_CUSTOM.push(sym);
+  rebuildHoldingSet(); saveHoldingsLocal(); saveHoldingsCloud(); renderHoldingList();
+  $('holdingNew').value="";
+  pfStat(sym+" wordt vanaf nu als holding gescoord (koers/boekwaarde i.p.v. P/E &amp; groei). Check je posities opnieuw om het effect te zien.");
+  if(CURRENT&&CURRENT.length)render();
+  renderPortfolio();
+};
+
+loadHoldingsLocal();
+renderHoldingList();
 
 // ---- Import uit SaxoInvestor CSV-export ----
 // Zet Saxo's beurscode (na de ':' in 'Symb.') om naar het tickerformaat dat onze databronnen verwachten.
@@ -1881,6 +2074,7 @@ $('loginBtn').onclick=function(){
   FB.auth.signInWithPopup(prov).catch(function(e){syncMsg("Inloggen mislukt: "+(e&&e.message||e));});
 };
 $('logoutBtn').onclick=function(){if(FB.auth)FB.auth.signOut();};
+if($('saveSettingsBtn'))$('saveSettingsBtn').onclick=function(){if(typeof saveSettingsCloud==="function")saveSettingsCloud();};
 if($('syncKeys'))$('syncKeys').onchange=function(){
   if(!FB.user){syncMsg("Log eerst in om sleutels te synchroniseren.");$('syncKeys').checked=false;return;}
   saveKeysCloud();
@@ -1925,6 +2119,14 @@ function loadCloud(){
       PORTFOLIO=data.portfolio;
       if(typeof renderPortfolio==="function")renderPortfolio();
     }
+    // eigen holdings-toevoegingen samenvoegen (niet overschrijven, zodat lokale toevoegingen niet verloren gaan)
+    if(data.holdingCustom && typeof HOLDING_CUSTOM!=="undefined"){
+      var merged={}; HOLDING_CUSTOM.concat(data.holdingCustom).forEach(function(s){merged[s]=1;});
+      HOLDING_CUSTOM=Object.keys(merged);
+      if(typeof rebuildHoldingSet==="function"){rebuildHoldingSet();renderHoldingList();if(CURRENT&&CURRENT.length)render();}
+    }
+    // screener-instellingen (universum/weging/horizon/modus) herstellen
+    if(data.settings && typeof applySettings==="function"){ applySettings(data.settings); }
     syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+(gotKeys?", "+gotKeys+" sleutel(s)":"")+" (cloud: "+cloud.length+", lokaal was: "+before+").");
     if(HISTORY.length>cloud.length)saveCloud();
   }).catch(function(e){syncMsg("Ophalen uit cloud mislukt: "+(e&&e.message||e));});
@@ -1934,6 +2136,34 @@ function saveCloud(){
   FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()},{merge:true}).then(function(){
     syncMsg("\u2601\ufe0f Opgeslagen in cloud als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen.");
   }).catch(function(e){syncMsg("Opslaan in cloud mislukt: "+(e&&e.message||e));});
+}
+// jouw screener-configuratie (universum, weging, horizon, modus) bewaren/herstellen
+function currentSettings(){
+  return {
+    exchange:$('exchange')?$('exchange').value:null,
+    limit:$('limit')?$('limit').value:null,
+    mcap:$('mcap')?$('mcap').value:null,
+    pemax:$('pemax')?$('pemax').value:null,
+    mode:$('mode')?$('mode').value:null,
+    horizon:$('horizon')?$('horizon').value:null,
+    wm:$('wm')?$('wm').value:null, wv:$('wv')?$('wv').value:null,
+    wg:$('wg')?$('wg').value:null, wq:$('wq')?$('wq').value:null,
+    source:$('source')?$('source').value:null
+  };
+}
+function applySettings(s){
+  if(!s)return;
+  Object.keys(s).forEach(function(k){
+    var el=$(k); if(el&&s[k]!=null){el.value=s[k];}
+  });
+  updateKeyLabel(); if(typeof syncWeightUI==="function")syncWeightUI();
+  ['wm','wv','wg','wq'].forEach(function(id){var l=$(id+'-v');if(l&&$(id))l.textContent=$(id).value;});
+}
+function saveSettingsCloud(){
+  if(!FB.user||!FB.ready){syncMsg("Log eerst in om instellingen te bewaren.");return;}
+  FB.db.collection("users").doc(FB.user.uid).set({settings:currentSettings()},{merge:true}).then(function(){
+    syncMsg("\u2601\ufe0f Screener-instellingen bewaard in de cloud.");
+  }).catch(function(e){syncMsg("Bewaren mislukt: "+(e&&e.message||e));});
 }
 // sleutels apart naar cloud schrijven, alleen als de opt-in checkbox aanstaat
 function saveKeysCloud(){
