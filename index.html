@@ -1112,23 +1112,57 @@ function enrichMultiFallback(symbol){
   if(!order.length) return Promise.reject({kind:"config",msg:"geen sleutel ingesteld voor deze markt \u2014 vul er een in bij Instellingen"});
   var errors=[];
   function attempt(i){
-    if(i>=order.length) return Promise.reject({kind:"api",msg:"alle bronnen faalden ("+errors.join(" | ")+")"});
+    if(i>=order.length) return Promise.reject({kind:"api",msg:"geen bruikbare data ("+errors.join(" | ")+")"});
     var src=order[i];
     return enrichWithSource(symbol,src,MULTI_KEYS[src]).then(function(d){
-      // resultaat zonder bruikbare koers telt als mislukt -> volgende bron proberen
-      if(!d||d.price==null){errors.push(src+": geen data");return attempt(i+1);}
-      d._src=src; return d;
+      // Bruikbaar is: fundamentals OF koers. Eulerpool levert bewust alleen fundamentals
+      // (geen koers), dus een ontbrekende prijs mag geen reden zijn om het weg te gooien.
+      var hasFundamentals = d && (d.aaqs!=null||d.pe!=null||d.roe!=null||d.revG!=null||d.piotroski!=null);
+      var hasPrice = d && d.price!=null;
+      if(!d || (!hasFundamentals && !hasPrice)){errors.push(src+": geen data");return attempt(i+1);}
+      d._src=src;
+      // koers ontbreekt maar fundamentals zijn er: vul de koers aan uit een andere bron
+      if(!hasPrice) return fillPriceFrom(d,symbol,order,i);
+      return d;
     }).catch(function(e){
-      errors.push(src+": "+((e&&e.msg)||"fout").slice(0,50));
+      // korte, niet-geneste foutreden per bron (voorkomt dat hele ketens in elkaar geplakt worden)
+      var raw=(e&&e.msg)||"fout";
+      var short=/CORS|netwerkfout/i.test(raw) ? "geen browsertoegang"
+              : /403|access denied|don't have access/i.test(raw) ? "geen toegang op je tier"
+              : /404|not found/i.test(raw) ? "niet gevonden"
+              : /limit|429/i.test(raw) ? "limiet bereikt"
+              : raw.split("(")[0].slice(0,40);
+      if(errors.indexOf(src+": "+short)===-1) errors.push(src+": "+short);
       return attempt(i+1);
     });
   }
   return attempt(0);
 }
+// haalt alleen de koers op bij een andere bron, zonder de fundamentals te overschrijven
+function fillPriceFrom(d,symbol,order,skipIndex){
+  var priceSources=order.filter(function(s,i){return i!==skipIndex && s!=="eulerpool";});
+  if(!priceSources.length) return Promise.resolve(d);
+  function tryNext(j){
+    if(j>=priceSources.length) return d; // geen koers gevonden: fundamentals blijven bruikbaar
+    return enrichWithSource(symbol,priceSources[j],MULTI_KEYS[priceSources[j]]).then(function(q){
+      if(q&&q.price!=null){
+        d.price=q.price;
+        if(d.chg==null)d.chg=q.chg;
+        if(d.mom1m==null)d.mom1m=q.mom1m;
+        if(d.dd==null)d.dd=q.dd;
+        if(d.pe==null)d.pe=q.pe;
+        if(d._mcap==null)d._mcap=q._mcap;
+        d._src=d._src+"+"+priceSources[j];
+      }
+      return d;
+    }).catch(function(){return tryNext(j+1);});
+  }
+  return Promise.resolve(tryNext(0));
+}
 
 function enrich(symbol,key){
   // multi-bron heeft voorrang wanneer ingeschakeld en er minstens één sleutel is
-  if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp)){
+  if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp||MULTI_KEYS.eulerpool)){
     return enrichMulti(symbol);
   }
   return enrichSingle(symbol,key);
