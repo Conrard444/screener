@@ -333,7 +333,10 @@
             <option value="factor">Factor &amp; dividend (24)</option>
             <option value="grondstof">Grondstoffen (24)</option>
             <option value="thema">Thema &amp; groei (24)</option>
-            <option value="alles">Alles (179, duurt enkele minuten)</option>
+            <option value="eu_kern">&#127466;&#127482; Europese kern-ETF's (15)</option>
+            <option value="eu_obligaties">&#127466;&#127482; Europese obligaties (8)</option>
+            <option value="eu_thema">&#127466;&#127482; Europese sector &amp; thema (10)</option>
+            <option value="alles">Alles (212, duurt enkele minuten)</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:220px">
@@ -380,7 +383,7 @@
     <details>
       <summary>&#128273; Over ETF-data</summary>
       <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
-      <p><b>Europese ETF's</b> (UCITS, tickers als .DE, .AS, .MI of een ISIN als IE00B4L5Y983) lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
+      <p><b>Europese ETF's</b>: kies een van de &#127466;&#127482;-selecties in de lijst. Die zijn opgebouwd met ISIN's (bv. IE00B4L5Y983), het formaat waar Eulerpool het betrouwbaarst mee werkt. Ze lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
     </details>
   </div><!-- /tab-etf -->
 
@@ -1630,6 +1633,45 @@ var ETF_CATALOG={
     "SCHD","VYM","DVY","VIG","DGRO","NOBL","HDV","SPHD","SPYD","USMV","SPLV","QUAL","MTUM","VLUE","SIZE","IWF","IWD","VBR","VBK","AVUV","DFAC","COWZ","JEPI","JEPQ"]},
   grondstof:{label:"Grondstoffen &amp; alternatief",tickers:[
     "GLD","IAU","GLDM","SLV","SIVR","PDBC","DBC","USO","UNG","PPLT","PALL","COPX","GDX","GDXJ","REMX","LIT","URA","XME","WOOD","CORN","WEAT","IBIT","FBTC","ETHA"]},
+  eu_kern:{label:"\ud83c\uddea\ud83c\uddfa Europese kern-ETF's (UCITS)",tickers:[
+    "IE00B4L5Y983", // iShares Core MSCI World
+    "IE00B4L5YC18", // iShares Core MSCI EM IMI
+    "IE00BK5BQT80", // Vanguard FTSE All-World
+    "IE00B3RBWM25", // Vanguard FTSE All-World (dist)
+    "IE00BFY0GT14", // SPDR MSCI World
+    "IE00B5BMR087", // iShares Core S&P 500
+    "IE00B3XXRP09", // Vanguard S&P 500
+    "IE00BKX55T58", // Vanguard FTSE Developed World
+    "IE00BK5BQV03", // Vanguard FTSE Developed Europe
+    "IE00B4K48X80", // iShares Core MSCI Europe
+    "LU0908500753", // Amundi Stoxx Europe 600
+    "IE00BFMXXD54", // Vanguard S&P 500 (acc)
+    "IE00BJ0KDQ92", // Xtrackers MSCI World
+    "LU1781541179", // Amundi MSCI World
+    "IE00BYYHSQ67"  // iShares MSCI World SRI
+  ]},
+  eu_obligaties:{label:"\ud83c\uddea\ud83c\uddfa Europese obligaties (UCITS)",tickers:[
+    "IE00B3F81R35", // iShares Core Euro Aggregate Bond
+    "IE00B4WXJJ64", // iShares Core Global Aggregate Bond
+    "IE00BDBRDM35", // iShares Global Aggregate Bond
+    "LU1287023003", // Amundi Euro Government Bond
+    "IE00B3VTMJ91", // iShares Euro Corporate Bond
+    "IE00B4L60045", // iShares Euro High Yield Corporate
+    "IE00B1FZS798", // iShares Euro Government Bond 7-10y
+    "IE00B14X4Q57"  // iShares Euro Government Bond 1-3y
+  ]},
+  eu_thema:{label:"\ud83c\uddea\ud83c\uddfa Europese sector &amp; thema",tickers:[
+    "IE00BGV5VN51", // Xtrackers MSCI World Information Technology
+    "IE00BM67HT60", // Xtrackers MSCI World Health Care
+    "IE00BJ5JNY98", // iShares MSCI World Energy
+    "IE00B4ND3602", // iShares Physical Gold
+    "IE00B579F325", // Invesco Physical Gold
+    "IE00BYZK4552", // iShares Automation & Robotics
+    "IE00BGL86Z12", // iShares Global Clean Energy
+    "IE00BYXG2H39", // iShares Digitalisation
+    "LU1861132840", // Amundi MSCI Semiconductors
+    "IE00BF0M6N54"  // iShares MSCI World Small Cap
+  ]},
   thema:{label:"Thema &amp; groei",tickers:[
     "ARKK","ARKW","ARKG","ARKQ","ARKF","BOTZ","ROBO","ICLN","TAN","FAN","PBW","HACK","CIBR","BUG","SKYY","CLOU","WCLD","FINX","IPO","MOON","JETS","PEJ","ESPO","HERO"]}
 };
@@ -1781,8 +1823,10 @@ function fetchEtfEulerpool(identifier,token){
         var m=d.description.match(/(\d[\d,\.]*)\s+holdings/i);
         if(m) holdings=parseInt(m[1].replace(/[,\.]/g,""),10);
       }
+      // als er een ISIN werd opgevraagd, toon dan het leesbare beurssymbool in de tabel
+      var display = /^[A-Z]{2}[A-Z0-9]{9}\d$/.test(identifier) ? (d.symbol||identifier) : identifier;
       return {
-        symbol:identifier, name:d.name||identifier,
+        symbol:display, queriedAs:identifier, name:d.name||identifier,
         isin:d.isin||null,
         aum: d.aum!=null ? +(d.aum/1e9).toFixed(1) : null,      // naar miljarden
         ter: d.expenseRatio!=null ? +(+d.expenseRatio).toFixed(2) : null,
@@ -1967,7 +2011,12 @@ function fetchEtfFinnhub(symbol,key){
 }
 // probeert de juiste ETF-bron: Europese tickers/ISIN's naar Eulerpool, VS naar SecuritiesDB
 function fetchEtfAuto(sym){
-  var isEuropean = /\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|F|SG|MU|BE|DU|HM)$/i.test(sym) || /^[A-Z]{2}[A-Z0-9]{9}\d$/.test(sym);
+  var isIsin = /^[A-Z]{2}[A-Z0-9]{9}\d$/.test(sym);
+  var isEuropean = isIsin || /\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|F|SG|MU|BE|DU|HM)$/i.test(sym);
+  // een ISIN is het formaat waar Eulerpool het betrouwbaarst mee werkt
+  if(isIsin && !MULTI_KEYS.eulerpool){
+    return Promise.reject({kind:"config",msg:"Europese ETF's vereisen een Eulerpool-sleutel (zie Instellingen)"});
+  }
   var euKey = MULTI_KEYS.eulerpool;
   if(isEuropean && euKey){
     return fetchEtfEulerpool(sym,euKey).catch(function(){ return fetchEtfSDB(sym); });
@@ -2024,8 +2073,11 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
   if(f){f.disabled=!custom;f.style.opacity=custom?1:0.45;}
   if(!custom){
     var n=etfCatalogTickers(this.value).length;
-    $('etfStatus').className="status";
-    $('etfStatus').textContent=n+" fondsen geselecteerd \u2014 klik 'Vergelijk ETF's' om op te halen.";
+    var isEU=this.value.indexOf("eu_")===0;
+    $('etfStatus').className=(isEU&&!MULTI_KEYS.eulerpool)?"status err":"status";
+    $('etfStatus').innerHTML=(isEU&&!MULTI_KEYS.eulerpool)
+      ? "Europese fondsen vereisen een <b>Eulerpool</b>-sleutel \u2014 vul die in bij Instellingen."
+      : n+" fondsen geselecteerd \u2014 klik 'Vergelijk ETF's' om op te halen.";
   }
 };
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
