@@ -533,6 +533,13 @@
   </div><!-- /tab-settings -->
 </div>
 
+<footer style="max-width:1240px;margin:30px auto 0;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.7">
+  <b>Databronnen:</b> aandelen- en ETF-analyse (Piotroski F-Score, Altman Z, ROIC-WACC, DCF, ETF-overlap en holdings) via
+  <a href="https://securitiesdb.com" target="_blank" rel="noopener" style="color:var(--blue)">securitiesdb.com</a>
+  &mdash; afgeleid uit openbare SEC-filings. Koersen via Finnhub / EODHD / Financial Modeling Prep.<br>
+  Dit is een persoonlijk analyse-instrument, geen financieel advies en geen aanbeveling tot koop of verkoop.
+</footer>
+
 <script>
 const DEMO=[
   {symbol:"NVDA", name:"NVIDIA Corp.",     market:"US",sector:"Technologie",roe:91.9,margin:55.0,de:0.41,dd:-5.2,price:128.7,chg:5.4,mom1m:18.9,pe:54.8,peg:1.1,pb:46.1,revG:78.0,epsG:88.0},
@@ -620,6 +627,16 @@ function growthScore(d){
 }
 // Kwaliteit (academisch best onderbouwd na momentum): winstgevendheid hoog, marge hoog, schuld laag.
 function qualityScore(d){
+  // Als SecuritiesDB-data beschikbaar is: gebruik de academisch sterkere maatstaven.
+  // Piotroski F (0-9, financiële kracht) + ROIC-WACC spread (waardecreatie) + Altman Z (faillissementsrisico).
+  if(d.piotroski!=null||d.roicSpread!=null){
+    var pio = d.piotroski!=null ? Math.round(d.piotroski/9*100) : 50;
+    var spread = d.roicSpread!=null ? Math.round(Math.max(0,Math.min(100,(d.roicSpread+10)/40*100))) : 50;
+    var solv = d.altmanZ!=null ? Math.round(Math.max(0,Math.min(100,(d.altmanZ-1)/5*100))) : 50;
+    var q = Math.round(pio*0.40 + spread*0.35 + solv*0.25);
+    if(d.beneishFlag) q=Math.round(q*0.75); // signaal van mogelijke winstmanipulatie -> strafkorting
+    return q;
+  }
   if(!isLong()&&SECTOR_PEERS){
     var a=pctRank(d.roe,peerArr(d,'roe'),false),
         b=pctRank(d.margin,peerArr(d,'margin'),false),
@@ -683,6 +700,11 @@ function valueTrap(d){
   if(d.peg!=null&&d.peg>3&&d.epsG!=null&&d.epsG<5){lvl=Math.max(lvl,1);r.push("hoge PEG, weinig groei");}
   if(d.mom1m!=null&&d.mom1m<-5&&d.epsG!=null&&d.epsG>10){lvl=Math.max(lvl,1);r.push("dalende koers ondanks groei");}
   if(d.pe!=null&&d.pe>40&&d.epsG!=null&&d.epsG<10){lvl=Math.max(lvl,1);r.push("hoge P/E, magere groei");}
+  // harde signalen uit SecuritiesDB (indien beschikbaar): faillissementsrisico en manipulatie-vlag
+  if(d.altmanZ!=null&&d.altmanZ<1.81){lvl=2;r.push("Altman Z "+d.altmanZ+" \u2014 financi\u00eble distress-zone");}
+  else if(d.altmanZ!=null&&d.altmanZ<2.99){lvl=Math.max(lvl,1);r.push("Altman Z "+d.altmanZ+" \u2014 grijze zone");}
+  if(d.beneishFlag){lvl=2;r.push("Beneish M-score wijst op mogelijke winstmanipulatie");}
+  if(d.piotroski!=null&&d.piotroski<=3){lvl=Math.max(lvl,1);r.push("Piotroski "+d.piotroski+"/9 \u2014 zwakke financi\u00eble kracht");}
   if(lvl===0)r.push("pijlers bevestigen elkaar");
   return {level:lvl,reason:r.join(" \u00b7 ")};
 }
@@ -741,7 +763,14 @@ function render(){
       '<td class="num">'+fmt(d.pb)+'</td>'+
       '<td class="num '+cls(d.revG)+'">'+signed(d.revG)+'</td>'+
       '<td class="num '+cls(d.epsG)+'">'+signed(d.epsG)+'</td>'+
-      '<td class="num" title="ROE: '+(d.roe!=null?d.roe+'%':'\u2014')+' \u00b7 marge: '+(d.margin!=null?d.margin+'%':'\u2014')+' \u00b7 schuld/EV: '+(d.de!=null?d.de:'\u2014')+'" style="cursor:help">'+d._q+'</td>'+
+      '<td class="num" title="'+
+        (d.piotroski!=null?'Piotroski: '+d.piotroski+'/9 \u00b7 ':'')+
+        (d.altmanZ!=null?'Altman Z: '+d.altmanZ+' ('+(d.altmanZone||'')+') \u00b7 ':'')+
+        (d.roicSpread!=null?'ROIC-WACC: '+(d.roicSpread>0?'+':'')+d.roicSpread+'% \u00b7 ':'')+
+        'ROIC/ROE: '+(d.roe!=null?d.roe+'%':'\u2014')+' \u00b7 marge: '+(d.margin!=null?d.margin+'%':'\u2014')+' \u00b7 schuld/EV: '+(d.de!=null?d.de:'\u2014')+
+        '" style="cursor:help">'+d._q+
+        (d.piotroski!=null?'<span style="display:block;font-size:9px;color:var(--muted)">F'+d.piotroski+(d.altmanZ!=null?' Z'+d.altmanZ:'')+'</span>':'')+
+        '</td>'+
       '<td>'+trap+'</td>'+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
@@ -1034,7 +1063,31 @@ function enrichWithSource(symbol,src,key){
   return enrichFMP(symbol,key);
 }
 // probeert de bronnen op volgorde; geeft het eerste bruikbare resultaat terug (met _src erin)
+// Voor VS-aandelen: SecuritiesDB voor de fundamentals (Piotroski/Altman/ROIC) + koers uit Finnhub
+function enrichCombinedUS(symbol){
+  return enrichSDBStock(symbol).then(function(fund){
+    // koers erbij halen als er een Finnhub-sleutel is; anders werken we zonder koers
+    if(!MULTI_KEYS.finnhub) return fund;
+    return enrichFinnhub(symbol,MULTI_KEYS.finnhub).then(function(q){
+      fund.price=q.price; fund.chg=q.chg; fund.mom1m=q.mom1m; fund.dd=q.dd;
+      if(fund.pe==null)fund.pe=q.pe;
+      if(fund._mcap==null)fund._mcap=q._mcap;
+      fund._src="securitiesdb+finnhub";
+      return fund;
+    }).catch(function(){return fund;}); // koers mislukt -> fundamentals blijven bruikbaar
+  });
+}
+
 function enrichMulti(symbol){
+  // VS-aandelen: probeer eerst de rijkere SecuritiesDB-combinatie
+  if(!/\./.test(symbol)){
+    return enrichCombinedUS(symbol).catch(function(){
+      return enrichMultiFallback(symbol); // geen SDB-dekking -> normale keten
+    });
+  }
+  return enrichMultiFallback(symbol);
+}
+function enrichMultiFallback(symbol){
   var order=sourceOrderFor(symbol).filter(function(s){return MULTI_KEYS[s];});
   if(!order.length) return Promise.reject({kind:"config",msg:"geen sleutel ingesteld voor deze markt \u2014 vul er een in bij Instellingen"});
   var errors=[];
@@ -1602,6 +1655,41 @@ function renderEtf(){
     '</tr>';
   }).join("");
 }
+// ---- SecuritiesDB aandelen: quant-health (Piotroski, Altman Z, ROIC-WACC, waardering) ----
+// Gratis, geen sleutel, data uit SEC-filings. Dekking: VS-genoteerde aandelen.
+function enrichSDBStock(symbol){
+  return getJson(SDB_BASE+"/stocks/"+encodeURIComponent(symbol)+"/quant-health").then(function(res){
+    var d=(res&&res.data)||{};
+    var sc=d.scores||{}, vc=d.value_creation||{}, pr=d.profitability||{},
+        gr=d.growth||{}, lv=d.leverage||{}, rk=d.risk||{}, va=d.valuation||{};
+    if(va.pe_ratio==null && pr.net_margin==null) throw {kind:"api",msg:"geen fundamentals"};
+    return {
+      symbol:symbol, name:d.ticker||symbol,
+      market: symbol.indexOf(".")>-1?"EU":"US",
+      sector: sectorOf(symbol),
+      price:null, chg:null,           // koers komt uit de bestaande bron (Finnhub) indien beschikbaar
+      pe: va.pe_ratio!=null?+(+va.pe_ratio).toFixed(1):null,
+      pb: va.price_to_book!=null?+(+va.price_to_book).toFixed(1):null,
+      peg: (va.pe_ratio!=null&&gr.earnings_growth_yoy!=null&&gr.earnings_growth_yoy>0)
+             ? +(va.pe_ratio/(gr.earnings_growth_yoy*100)).toFixed(2) : null,
+      revG: gr.revenue_growth_yoy!=null?+(gr.revenue_growth_yoy*100).toFixed(1):null,
+      epsG: gr.earnings_growth_yoy!=null?+(gr.earnings_growth_yoy*100).toFixed(1):null,
+      roe: vc.roic!=null?+(vc.roic*100).toFixed(1):null,   // ROIC i.p.v. ROE: zuiverder maatstaf
+      margin: pr.net_margin!=null?+(pr.net_margin*100).toFixed(1):null,
+      de: lv.debt_to_equity!=null?+(+lv.debt_to_equity).toFixed(2):null,
+      // extra kwaliteitssignalen die alleen SecuritiesDB geeft
+      piotroski: sc.piotroski_f!=null?+sc.piotroski_f:null,
+      altmanZ: sc.altman_z!=null?+(+sc.altman_z).toFixed(1):null,
+      altmanZone: sc.altman_z_zone||null,
+      beneishFlag: sc.beneish_flag===true,
+      roicSpread: vc.roic_wacc_spread!=null?+(vc.roic_wacc_spread*100).toFixed(1):null,
+      peVsHist: va.pe_vs_historical_pct!=null?+(+va.pe_vs_historical_pct).toFixed(1):null,
+      vol: rk.volatility_annual!=null?+(rk.volatility_annual*100).toFixed(1):null,
+      _src:"securitiesdb"
+    };
+  });
+}
+
 // ---- SecuritiesDB: gratis ETF-data zonder sleutel (X-Ray + holdings + overlap) ----
 var SDB_BASE="https://securitiesdb.com/api/v1";
 function fetchEtfSDB(symbol){
@@ -1629,10 +1717,12 @@ function fetchEtfSDB(symbol){
 }
 // echte overlap tussen twee ETF's via SecuritiesDB
 function fetchEtfOverlapSDB(a,b){
-  return getJson(SDB_BASE+"/etfs/"+encodeURIComponent(a)+"/overlap/"+encodeURIComponent(b))
+  return getJson(SDB_BASE+"/etfs/overlap?etf1="+encodeURIComponent(a)+"&etf2="+encodeURIComponent(b))
     .then(function(res){
       var d=(res&&res.data)||{};
-      return d.overlap_pct!=null ? +(+d.overlap_pct).toFixed(1) : null;
+      return {pct: d.overlap_pct!=null ? +(+d.overlap_pct).toFixed(1) : null,
+              verdict: d.verdict||null,
+              shared: d.shared_holdings!=null ? d.shared_holdings : null};
     }).catch(function(){return null;});
 }
 
@@ -1973,8 +2063,8 @@ function verifyOverlapReal(){
   var seq=Promise.resolve(), found=0;
   pairs.forEach(function(pr,idx){
     seq=seq.then(function(){
-      return fetchEtfOverlapSDB(pr[0],pr[1]).then(function(pct){
-        if(pct!=null&&pct>0){REAL_OVERLAP[pr[0]+"|"+pr[1]]=pct;found++;}
+      return fetchEtfOverlapSDB(pr[0],pr[1]).then(function(r){
+        if(r&&r.pct!=null&&r.pct>0){REAL_OVERLAP[pr[0]+"|"+pr[1]]={pct:r.pct,verdict:r.verdict,shared:r.shared};found++;}
         if(idx%3===0)pfStat("Overlap ophalen\u2026 "+(idx+1)+"/"+pairs.length);
       });
     });
@@ -2036,10 +2126,12 @@ function analyseOverlap(){
   }
   // 4) ECHTE overlap-cijfers indien opgehaald via SecuritiesDB (overschrijft schattingen)
   Object.keys(REAL_OVERLAP).forEach(function(k){
-    var parts=k.split("|"), pct=REAL_OVERLAP[k];
+    var parts=k.split("|"), o=REAL_OVERLAP[k], pct=o.pct;
     findings.push({level: pct>=70?"high":"mid",
       text:"<b>"+parts[0]+"</b> en <b>"+parts[1]+"</b> overlappen werkelijk <b>"+pct+"%</b> "+
         "<span style=\"opacity:0.7\">(gemeten via SecuritiesDB)</span>"+
+        (o.shared?" \u00b7 "+o.shared+" gedeelde posities":"")+
+        (o.verdict?" \u00b7 "+o.verdict:"")+
         (pct>=70?" \u2014 dit is nagenoeg dezelfde positie in twee jasjes.":".")});
   });
   return findings;
