@@ -1468,14 +1468,42 @@ $('csv').onclick=function(){
   $('status').className="status";$('status').textContent="CSV ge\u00ebxporteerd ("+CURRENT.length+" aandelen, puntkomma-gescheiden voor Excel).";
 };
 
+// ---- Opslaglaag: werkt in elke browser (localStorage), met fallback ----
+var LS={
+  available:(function(){
+    try{ var t="__kompas_test__"; window.localStorage.setItem(t,"1"); window.localStorage.removeItem(t); return true; }
+    catch(e){ return false; }
+  })(),
+  get:function(key){
+    return new Promise(function(res){
+      try{
+        if(LS.available){ var v=window.localStorage.getItem("kompas_"+key); res(v!=null?{value:v}:null); return; }
+      }catch(e){}
+      if(window.storage&&window.storage.get){
+        window.storage.get(key).then(res).catch(function(){res(null);});
+      } else res(null);
+    });
+  },
+  set:function(key,val){
+    return new Promise(function(res){
+      try{
+        if(LS.available){ window.localStorage.setItem("kompas_"+key,val); res(true); return; }
+      }catch(e){}
+      if(window.storage&&window.storage.set){
+        window.storage.set(key,val).then(function(){res(true);}).catch(function(){res(false);});
+      } else res(false);
+    });
+  }
+};
+
 // ---- Sleutelbeheer per bron, met persistente opslag ----
 var KEYCACHE={}; // in-memory spiegel
 function keyStorageId(src){return "apikey_"+src;}
 function loadKeyFor(src){
   // probeer eerst in-memory, dan persistente opslag
   if(KEYCACHE[src]!=null){$('apikey').value=KEYCACHE[src];return;}
-  if(window.storage&&window.storage.get){
-    window.storage.get(keyStorageId(src)).then(function(r){
+  if(true){
+    LS.get(keyStorageId(src)).then(function(r){
       if(r&&r.value){KEYCACHE[src]=r.value;$('apikey').value=r.value;}
       else $('apikey').value="";
     }).catch(function(){$('apikey').value="";});
@@ -1490,8 +1518,8 @@ $('source').onchange=function(){updateKeyLabel();loadKeyFor($('source').value);i
 $('saveKey').onclick=function(){
   var src=$('source').value, val=$('apikey').value.trim();
   KEYCACHE[src]=val;
-  if(window.storage&&window.storage.set){
-    window.storage.set(keyStorageId(src),val).then(function(){
+  if(true){
+    LS.set(keyStorageId(src),val).then(function(){
       $('status').className="status";$('status').textContent="Sleutel voor "+src+" bewaard in deze browser.";
     }).catch(function(){
       $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie (persistente opslag niet beschikbaar).";
@@ -1533,9 +1561,7 @@ function loadAllKeys(){
       else setKeyStatus(src,"none","niet ingesteld");
     };
     if(KEYCACHE[src]) {applyVal(KEYCACHE[src]);return;}
-    if(window.storage&&window.storage.get){
-      window.storage.get(keyStorageId(src)).then(function(r){applyVal(r&&r.value);}).catch(function(){applyVal(null);});
-    } else applyVal(null);
+    LS.get(keyStorageId(src)).then(function(r){applyVal(r&&r.value);}).catch(function(){applyVal(null);});
   });
 }
 function saveAllKeys(){
@@ -1546,13 +1572,14 @@ function saveAllKeys(){
     MULTI_KEYS[src]=v; KEYCACHE[src]=v;
     if(v)count++;
     setKeyStatus(src,v?"ok":"none",v?"ingesteld":"niet ingesteld");
-    if(window.storage&&window.storage.set) window.storage.set(keyStorageId(src),v).catch(function(){});
+    LS.set(keyStorageId(src),v);
   });
   loadKeyFor($('source').value);
   updateSourceIndicator();
   if(typeof saveKeysCloud==="function")saveKeysCloud();
   var st=$('settingsStatus'); st.className="status";
-  st.textContent=count+" sleutel(s) bewaard. De tool kiest nu per aandeel automatisch de beste beschikbare bron.";
+  var where = LS.available ? "in deze browser bewaard" : "alleen voor deze sessie bewaard (opslag geblokkeerd \u2014 sta cookies/opslag toe voor deze site)";
+  st.textContent=count+" sleutel(s) "+where+". De tool kiest per aandeel automatisch de beste beschikbare bron.";
 }
 function testAllKeys(){
   var st=$('settingsStatus'); st.className="status"; st.textContent="Sleutels testen\u2026";
@@ -2010,12 +2037,12 @@ var PORTFOLIO=[]; // {symbol, qty, buyPrice, buyDate, baseline:{score,quality,tr
 function pfStat(msg,err){var s=$('pfStatus');s.className=err?"status err":"status";s.textContent=msg;}
 
 function savePortfolioLocal(){
-  try{ if(window.storage&&window.storage.set) window.storage.set('portfolio',JSON.stringify(PORTFOLIO)).catch(function(){}); }catch(e){}
+  try{ LS.set('portfolio',JSON.stringify(PORTFOLIO)); }catch(e){}
 }
 function loadPortfolioLocal(){
   try{
-    if(window.storage&&window.storage.get){
-      window.storage.get('portfolio').then(function(r){
+    if(true){
+      LS.get('portfolio').then(function(r){
         if(r&&r.value){ try{PORTFOLIO=JSON.parse(r.value)||[];renderPortfolio();}catch(e){} }
       }).catch(function(){});
     }
@@ -2460,12 +2487,12 @@ function rebuildHoldingSet(){
   window.HOLDING_SET=HOLDING_SET;
 }
 function saveHoldingsLocal(){
-  try{ if(window.storage&&window.storage.set) window.storage.set('holdingCustom',JSON.stringify(HOLDING_CUSTOM)).catch(function(){}); }catch(e){}
+  try{ LS.set('holdingCustom',JSON.stringify(HOLDING_CUSTOM)); }catch(e){}
 }
 function loadHoldingsLocal(){
   try{
-    if(window.storage&&window.storage.get){
-      window.storage.get('holdingCustom').then(function(r){
+    if(true){
+      LS.get('holdingCustom').then(function(r){
         if(r&&r.value){ try{HOLDING_CUSTOM=JSON.parse(r.value)||[];rebuildHoldingSet();renderHoldingList();}catch(e){} }
       }).catch(function(){});
     }
@@ -2989,7 +3016,7 @@ function loadCloud(){
       ['finnhub','fmp','eodhd'].forEach(function(src){
         if(data.keys[src]){KEYCACHE[src]=data.keys[src];gotKeys++;
           if(firstWithKey===null)firstWithKey=src;
-          if(window.storage&&window.storage.set)window.storage.set(keyStorageId(src),data.keys[src]).catch(function(){});
+          LS.set(keyStorageId(src),data.keys[src]);
         }
       });
       // schakel naar de bron waarvoor een sleutel bestaat (als de huidige er geen heeft) en vul het veld
