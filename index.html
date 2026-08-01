@@ -1827,7 +1827,10 @@ var ISIN_MAP={
   "VOLV-B.ST":"SE0000115446","ERIC-B.ST":"SE0000108656","ATCO-A.ST":"SE0017486889",
   "INVE-B.ST":"SE0015811963","SAND.ST":"SE0000667891","HM-B.ST":"SE0000106270",
   "EQNR.OL":"NO0010096985","DNB.OL":"NO0010161896","NHY.OL":"NO0005052605",
-  "NOKIA.HE":"FI0009000681","SAMPO.HE":"FI4000552500","NESTE.HE":"FI0009013296"
+  "NOKIA.HE":"FI0009000681","SAMPO.HE":"FI4000552500","NESTE.HE":"FI0009013296",
+  // aanvullingen: ING heeft twee noteringen, LOTB = Lotus Bakeries
+  "ING.AS":"NL0011821202","INGA.AS":"NL0011821202","LOTB.BR":"BE0003604155",
+  "BESI.AS":"NL0012866412","TNOW.PA":"FR0011871128"
 };
 function isinFor(symbol){
   // eerst uit de portefeuille (Saxo-import bewaart de ISIN), dan uit de vaste tabel
@@ -2254,6 +2257,12 @@ function renderPortfolio(){
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
         : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>'
       ) : '')+
+      (!p._fresh && !p.isin && !isinFor(p.symbol)
+        ? '<div class="pf-alarm-text" style="color:var(--muted)">\u2139\ufe0f Voor Europese aandelen is een <b>ISIN</b> nodig (Eulerpool werkt daarop). '+
+          'Vul hem hier in \u2014 je vindt hem op je broker-overzicht of via een zoekopdracht op de bedrijfsnaam:<br>'+
+          '<input type="text" id="isin_'+p.id+'" placeholder="bv. NL0010273215" style="width:180px;margin-top:6px">'+
+          '<button class="btn-ghost" style="margin-left:6px" onclick="setPositionIsin(\''+p.id+'\')">Opslaan</button></div>'
+        : '')+
       (p._fresh&&p._fresh.completeness&&p._fresh.completeness.level!=="full"
         ? (function(){
             var c=p._fresh.completeness, link=researchLinkFor(p.symbol);
@@ -2599,8 +2608,9 @@ function importSaxoCsv(file){
       var idxQty=headers.indexOf("Aantal");
       var idxAvgPrice=headers.indexOf("AK-krs");
       var idxDate=headers.indexOf("Valutadatum");
+      var idxIsinGlobal=headers.indexOf("ISIN");
       if(idxSymb===-1||idxQty===-1){throw new Error("onbekend CSV-formaat (kolommen 'Symb.' of 'Aantal' niet gevonden)");}
-      var added=0, skipped=0;
+      var added=0, skipped=0, updated=0;
       var existing={}; PORTFOLIO.forEach(function(p){existing[p.symbol]=true;});
       for(var i=1;i<lines.length;i++){
         var cols=parseCsvLine(lines[i]).map(function(c){return c.replace(/^"|"$/g,'');});
@@ -2619,15 +2629,24 @@ function importSaxoCsv(file){
           var maand={jan:"01",feb:"02",mrt:"03",mar:"03",apr:"04",mei:"05",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",okt:"10",oct:"10",nov:"11",dec:"12"};
           if(m&&maand[m[2].toLowerCase()]) isoDate=m[3]+"-"+maand[m[2].toLowerCase()]+"-"+("0"+m[1]).slice(-2);
         }
-        if(existing[ticker]){skipped++;continue;} // sla al aanwezige tickers over, geen duplicaten
-        var idxIsin=headers.indexOf("ISIN");
-        var isinVal=(idxIsin>-1&&cols[idxIsin])?cols[idxIsin].trim():null;
+        if(existing[ticker]){
+          // bestaat al: vul ontbrekende ISIN aan i.p.v. simpelweg overslaan
+          for(var k=0;k<PORTFOLIO.length;k++){
+            if(PORTFOLIO[k].symbol===ticker && !PORTFOLIO[k].isin && isinVal){
+              PORTFOLIO[k].isin=isinVal; updated++;
+            }
+          }
+          skipped++; continue;
+        }
+        var isinVal=(idxIsinGlobal>-1&&cols[idxIsinGlobal])?cols[idxIsinGlobal].trim():null;
         PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,isin:isinVal,baseline:null});
         existing[ticker]=true; added++;
       }
       savePortfolioLocal();savePortfolioCloud();
       renderPortfolio();
-      pfStat("Ge\u00efmporteerd uit SaxoInvestor: "+added+" posities toegevoegd"+(skipped?", "+skipped+" regel(s) overgeslagen (kopregels/duplicaten)":"")+". Klik 'Alle posities checken' voor actuele scores.");
+      pfStat("Ge\u00efmporteerd: "+added+" posities toegevoegd"+
+        (updated?", "+updated+" bestaande posities aangevuld met ISIN":"")+
+        (skipped?", "+skipped+" regel(s) overgeslagen":"")+". Klik 'Alles checken' voor actuele gegevens.");
     }catch(err){
       pfStat("Import mislukt: "+(err&&err.message||"onbekend CSV-formaat. Controleer of dit een SaxoInvestor posities-export is."),true);
     }
@@ -2900,6 +2919,27 @@ function removeSnapshot(ts){
   }
 }
 window.removeSnapshot=removeSnapshot;
+
+// handmatig een ISIN toevoegen aan een positie (nodig voor Eulerpool bij Europese aandelen)
+function setPositionIsin(id){
+  var inp=document.getElementById('isin_'+id);
+  if(!inp)return;
+  var v=inp.value.trim().toUpperCase();
+  if(!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(v)){
+    pfStat("Dat lijkt geen geldige ISIN \u2014 formaat is 2 letters + 10 tekens, bv. NL0010273215.",true);
+    return;
+  }
+  for(var i=0;i<PORTFOLIO.length;i++){
+    if(PORTFOLIO[i].id===id){
+      PORTFOLIO[i].isin=v;
+      savePortfolioLocal(); savePortfolioCloud();
+      pfStat(PORTFOLIO[i].symbol+" gekoppeld aan ISIN "+v+" \u2014 klik 'Alles checken' om de gegevens op te halen.");
+      renderPortfolio();
+      return;
+    }
+  }
+}
+window.setPositionIsin=setPositionIsin;
 
 // alle demo-opnamen in één keer opruimen
 function purgeDemoSnapshots(){
