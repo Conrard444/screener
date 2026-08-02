@@ -624,7 +624,20 @@ function momentumScore(d){
   return Math.round(norm(d.chg,-5,8,false)*0.4+norm(d.mom1m,-15,25,false)*0.6);
 }
 function valuationScore(d){
-  // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels (selectie-onafhankelijk)
+  // Beste signaal indien beschikbaar: hoe verhoudt de huidige P/E zich tot de EIGEN 5-jaarshistorie
+  // van dit bedrijf? Dat corrigeert automatisch voor sector, bedrijfsmodel en groeiprofiel -
+  // een tech-P/E van 35 is niet duur als dat bedrijf historisch op 40 handelde.
+  if(d.peVsHist!=null){
+    // peVsHist: +34 betekent 34% boven het eigen 5-jaarsgemiddelde
+    var hist = Math.round(Math.max(0,Math.min(100,(1-(d.peVsHist+50)/150)*100)));
+    // aanvullen met PEG (waardering t.o.v. groei) waar beschikbaar
+    if(d.peg!=null){
+      var pegS = norm(d.peg,0.5,4,true);
+      return Math.round(hist*0.65 + pegS*0.35);
+    }
+    return hist;
+  }
+  // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels
   if(!isLong()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
     if(a!=null&&b!=null&&c!=null)return Math.round(a*0.4+b*0.4+c*0.2);}
   return Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2);
@@ -638,21 +651,33 @@ function growthScore(d){
 function qualityScore(d){
   // Eulerpool AAQS (0-10): kwaliteitsscore over 10 dimensies - beste maatstaf voor EU-aandelen
   if(d.aaqs!=null){
-    var base=Math.round(d.aaqs/10*100);
-    // bijstelling: ROCE en winststabiliteit verfijnen het beeld
-    var roceBonus = d.roce!=null ? Math.min(10,Math.max(-10,Math.round((d.roce-12)/4))) : 0;
-    var contBonus = d.profitContinuity!=null ? Math.round((d.profitContinuity-5)) : 0;
-    return Math.max(0,Math.min(100,base+roceBonus+contBonus));
+    // AAQS 0-10 -> 0-100. Zelfde opbouw als de VS-variant hieronder: kernscore + waardecreatie + stabiliteit,
+    // zodat een EU- en VS-aandeel op dezelfde schaal vergelijkbaar zijn.
+    var base = Math.round(d.aaqs/10*100);
+    // waardecreatie: ROCE boven ~10% (grofweg de kapitaalkost) is waardecreërend
+    var roceS = d.roce!=null ? Math.round(Math.max(0,Math.min(100,(d.roce-2)/30*100))) : null;
+    // stabiliteit: winstcontinuïteit 0-10 en beperkte EBIT-terugval
+    var stabS = d.profitContinuity!=null ? Math.round(d.profitContinuity/10*100) : null;
+    var parts=[[base,0.55]], sum=0.55;
+    if(roceS!=null){parts.push([roceS,0.25]);sum+=0.25;}
+    if(stabS!=null){parts.push([stabS,0.20]);sum+=0.20;}
+    var q=0; parts.forEach(function(p){q+=p[0]*p[1];});
+    return Math.max(0,Math.min(100,Math.round(q/sum)));
   }
   // Als SecuritiesDB-data beschikbaar is: gebruik de academisch sterkere maatstaven.
   // Piotroski F (0-9, financiële kracht) + ROIC-WACC spread (waardecreatie) + Altman Z (faillissementsrisico).
   if(d.piotroski!=null||d.roicSpread!=null){
-    var pio = d.piotroski!=null ? Math.round(d.piotroski/9*100) : 50;
-    var spread = d.roicSpread!=null ? Math.round(Math.max(0,Math.min(100,(d.roicSpread+10)/40*100))) : 50;
-    var solv = d.altmanZ!=null ? Math.round(Math.max(0,Math.min(100,(d.altmanZ-1)/5*100))) : 50;
-    var q = Math.round(pio*0.40 + spread*0.35 + solv*0.25);
-    if(d.beneishFlag) q=Math.round(q*0.75); // signaal van mogelijke winstmanipulatie -> strafkorting
-    return q;
+    // Ontbrekende onderdelen worden niet als "50" meegeteld (dat trekt goede bedrijven omlaag
+    // en slechte omhoog), maar uit de weging gehaald en de rest wordt herschaald.
+    var parts=[], sum=0;
+    if(d.piotroski!=null){parts.push([Math.round(d.piotroski/9*100),0.40]);sum+=0.40;}
+    if(d.roicSpread!=null){parts.push([Math.round(Math.max(0,Math.min(100,(d.roicSpread+10)/40*100))),0.35]);sum+=0.35;}
+    if(d.altmanZ!=null){parts.push([Math.round(Math.max(0,Math.min(100,(d.altmanZ-1)/5*100))),0.25]);sum+=0.25;}
+    if(!sum) return 50;
+    var q=0; parts.forEach(function(p){q+=p[0]*p[1];});
+    q=Math.round(q/sum);
+    if(d.beneishFlag) q=Math.round(q*0.75); // mogelijke winstmanipulatie -> strafkorting
+    return Math.max(0,Math.min(100,q));
   }
   if(!isLong()&&SECTOR_PEERS){
     var a=pctRank(d.roe,peerArr(d,'roe'),false),
@@ -1013,10 +1038,44 @@ window.HOLDING_SET=HOLDING_SET; // zichtbaar/uitbreidbaar vanuit de browser-cons
 // Holding-score: leunt op koers/boekwaarde als NAV-proxy + momentum + schuldgraad.
 // Bewust GEEN groei- of winstmarge-factoren: die zijn bij holdings vertekend door portefeuille-herwaarderingen.
 function holdingScore(d){
-  var pbScore = SECTOR_PEERS ? (pctRank(d.pb,peerArr(d,'pb'),true)!=null?pctRank(d.pb,peerArr(d,'pb'),true):norm(d.pb,0.7,3,true)) : norm(d.pb,0.7,3,true);
-  var deScore = norm(d.de,0,1.5,true); // lagere schuld/eigen-vermogen is beter, ruimere marge dan bij operationele bedrijven
-  var momScore = momentumScore(d);
-  return Math.round(pbScore*0.55 + deScore*0.20 + momScore*0.25);
+  // Holdings waardeer je op korting t.o.v. intrinsieke waarde, niet op winstratio's.
+  // Koers/boekwaarde is de bruikbaarste NAV-proxy; onder 1 = noteren onder boekwaarde.
+  // Absolute schaal (niet sector-relatief): holdings onderling vergelijken werkt alleen
+  // als de maatstaf niet meebeweegt met de toevallige samenstelling van je selectie.
+  var parts=[], sum=0;
+
+  // 1) korting t.o.v. boekwaarde - de kern
+  if(d.pb!=null){
+    // P/B 0.5 -> 100 punten, 1.0 -> ~70, 2.0 -> ~30, 3+ -> laag
+    var pbScore = Math.round(Math.max(0,Math.min(100,(2.6-d.pb)/2.2*100)));
+    parts.push([pbScore,0.45]); sum+=0.45;
+  }
+
+  // 2) kwaliteit van de onderliggende portefeuille: rendement op eigen vermogen
+  if(d.roe!=null){
+    parts.push([Math.round(Math.max(0,Math.min(100,(d.roe-2)/25*100))),0.20]); sum+=0.20;
+  }
+
+  // 3) schuldgraad - let op: verschillende bronnen leveren een andere maatstaf
+  if(d.de!=null){
+    var deS;
+    if(d.aaqs!=null){
+      // Eulerpool: netto schuld / EBIT. Negatief = netto cash = uitstekend.
+      deS = Math.round(Math.max(0,Math.min(100,(4-d.de)/6*100)));
+    }else{
+      // Finnhub/SecuritiesDB: schuld / eigen vermogen
+      deS = norm(d.de,0,2,true);
+    }
+    parts.push([deS,0.20]); sum+=0.20;
+  }
+
+  // 4) momentum telt licht mee - holdings zijn langetermijnposities, geen handelsobject
+  var mom=momentumScore(d);
+  if(mom!=null){ parts.push([mom,0.15]); sum+=0.15; }
+
+  if(!sum) return 50;
+  var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
+  return Math.max(0,Math.min(100,Math.round(score/sum)));
 }
 
 function chosenUniverse(){
@@ -1749,14 +1808,16 @@ function buildEtfPeers(set){
   ETF_PEERS={ter:set.map(function(d){return d.ter;}),holdings:set.map(function(d){return d.holdings;}),
     top10:set.map(function(d){return d.top10;}),aum:set.map(function(d){return d.aum;})};
 }
-function etfCostScore(d){var a=ETF_PEERS&&etfPctRank(d.ter,ETF_PEERS.ter,true);return a!=null?a:etfNorm(d.ter,0.03,0.8,true);}
+// schalen gelijkgetrokken met etfPortfolioScore, zodat hetzelfde fonds in beide tabbladen
+// een vergelijkbaar cijfer krijgt (absolute maatstaf, niet afhankelijk van je selectie)
+function etfCostScore(d){return d.ter!=null?Math.round(Math.max(0,Math.min(100,(1-(d.ter-0.03)/0.57)*100))):50;}
 function etfDiversityScore(d){
-  var a=ETF_PEERS&&etfPctRank(d.holdings,ETF_PEERS.holdings,false);
-  var b=ETF_PEERS&&etfPctRank(d.top10,ETF_PEERS.top10,true);
-  a=a!=null?a:etfNorm(d.holdings,10,5000,false); b=b!=null?b:etfNorm(d.top10,5,70,true);
-  return Math.round(a*0.5+b*0.5);
+  var a=d.holdings!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,d.holdings))/Math.log10(3000))*100))):null;
+  var b=d.top10!=null?Math.round(Math.max(0,Math.min(100,(1-(d.top10-8)/62)*100))):null;
+  if(a!=null&&b!=null)return Math.round(a*0.5+b*0.5);
+  return a!=null?a:(b!=null?b:50);
 }
-function etfLiquidityScore(d){var a=ETF_PEERS&&etfPctRank(d.aum,ETF_PEERS.aum,false);return a!=null?a:etfNorm(d.aum,0.1,500,false);}
+function etfLiquidityScore(d){return d.aum!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,d.aum))+1.3)/2.3*100))):50;}
 function etfTrackScore(d){ // proxy: track record vergt historische returns die we niet los ophalen; blijft licht gewogen en neutraal
   return 55;
 }
@@ -1766,7 +1827,9 @@ function etfWeights(){
 }
 function etfTotalScore(d){
   var w=etfWeights();
-  return Math.round(etfCostScore(d)*w.wc+etfDiversityScore(d)*w.wd+etfLiquidityScore(d)*w.wl+etfTrackScore(d)*w.wt);
+  var s=Math.round(etfCostScore(d)*w.wc+etfDiversityScore(d)*w.wd+etfLiquidityScore(d)*w.wl+etfTrackScore(d)*w.wt);
+  if(d.isLeveraged||d.isInverse) s=Math.round(s*0.5); // ongeschikt om lang aan te houden
+  return Math.max(0,Math.min(100,s));
 }
 var ETF_CURRENT=[];
 function etfCloseRisk(d){
@@ -1779,7 +1842,7 @@ function etfCloseRisk(d){
 }
 function renderEtf(){
   buildEtfPeers(ETF_CURRENT);
-  var rows=ETF_CURRENT.map(function(d){return Object.assign({},d,{_s:etfTotalScore(d)});});
+  var rows=ETF_CURRENT.map(function(d){var s=etfTotalScore(d);return Object.assign({},d,{_s:(s==null?null:s)});});
   rows.sort(function(a,b){return b._s-a._s;});
   $('etfBody').innerHTML=rows.map(function(d){
     var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
@@ -2147,14 +2210,42 @@ function looksLikeEtf(symbol,d){
 // beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
 function etfPortfolioScore(e){
   if(!e)return null;
-  var costScore = e.ter!=null ? Math.round(Math.max(0,Math.min(100,(1-(e.ter-0.03)/(0.75-0.03))*100))) : 50;
-  var divScore  = e.holdings!=null ? Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,e.holdings))/Math.log10(5000))*100))) : 50;
-  var concScore = e.top10!=null ? Math.round(Math.max(0,Math.min(100,(1-(e.top10-5)/(75-5))*100))) : 50;
-  var sizeScore = e.aum!=null ? Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.1,e.aum))/Math.log10(600))*100))) : 50;
-  return {
-    score: Math.round(costScore*0.40 + divScore*0.20 + concScore*0.20 + sizeScore*0.20),
-    cost:costScore, div:divScore, conc:concScore, size:sizeScore
-  };
+  // Kosten wegen het zwaarst: het is het enige cijfer dat vooraf vaststaat en gegarandeerd
+  // van je rendement afgaat. Onderzoek naar fondsselectie wijst kosten consistent aan als
+  // de sterkste voorspeller van relatieve prestatie op lange termijn.
+  var parts=[], sum=0, detail={};
+
+  if(e.ter!=null){
+    // schaal 0,03% (beste indexfondsen) tot 0,60% (dure actieve fondsen); Europese UCITS
+    // liggen doorgaans tussen 0,07% en 0,40%, dus deze schaal onderscheidt daar goed binnen
+    var cost=Math.round(Math.max(0,Math.min(100,(1-(e.ter-0.03)/0.57)*100)));
+    parts.push([cost,0.40]); sum+=0.40; detail.cost=cost;
+  }
+  if(e.holdings!=null){
+    var div=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,e.holdings))/Math.log10(3000))*100)));
+    parts.push([div,0.20]); sum+=0.20; detail.div=div;
+  }
+  if(e.top10!=null){
+    var conc=Math.round(Math.max(0,Math.min(100,(1-(e.top10-8)/62)*100)));
+    parts.push([conc,0.20]); sum+=0.20; detail.conc=conc;
+  }
+  if(e.aum!=null){
+    // omvang als risico-indicator: kleine fondsen sluiten vaker en hebben bredere spreads.
+    // Boven ~$10 mld is groter nauwelijks nog beter, dus de schaal vlakt daar af.
+    var size=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,e.aum))+1.3)/2.3*100)));
+    parts.push([size,0.20]); sum+=0.20; detail.size=size;
+  }
+  if(!sum) return null; // geen enkel bruikbaar cijfer -> geen score i.p.v. misleidende 50
+
+  var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
+  score=Math.round(score/sum); // herschalen naar wat we wél weten
+
+  // harde afstraffing voor constructies die ongeschikt zijn om lang aan te houden
+  if(e.isLeveraged||e.isInverse) score=Math.round(score*0.5);
+
+  detail.score=score;
+  detail.basedOn=Math.round(sum*100); // hoeveel procent van de weging we konden invullen
+  return detail;
 }
 
 // alarm voor ETF's: let op kosten- en concentratieverschuivingen, niet op winstgroei
@@ -2494,7 +2585,7 @@ function checkAllPositions(){
         return fetchEtfAuto(pos.symbol).then(function(e){
           ETF_KNOWN[pos.symbol]=true;
           var sc=etfPortfolioScore(e);
-          pos._fresh={isEtf:true, score:sc?sc.score:null, etf:e, etfScores:sc,
+          pos._fresh={isEtf:true, score:(sc&&sc.score!=null)?sc.score:null, etf:e, etfScores:sc,
             price:e.price!=null?e.price:(pos._fresh&&pos._fresh.price)||null,
             sector:"Fonds", src:"securitiesdb",
             completeness:{level:"full",missing:[]}};
