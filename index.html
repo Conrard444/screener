@@ -462,12 +462,7 @@
         <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
         <button class="btn-ghost" id="saveSettingsBtn" title="Bewaar je huidige universum, weging, horizon en modus in de cloud, zodat ze op je andere apparaten worden hersteld">Instellingen bewaren</button>
       </div>
-      <div class="control-row compact">
-        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
-          <input type="checkbox" id="syncKeys" style="margin-top:2px;width:auto">
-          <span>Ook API-sleutels meenemen in de cloud-sync. <b style="color:var(--accent)">Let op:</b> een sleutel is een wachtwoord &mdash; doe dit alleen voor gratis sleutels, niet voor betaalde abonnementen.</span>
-        </label>
-      </div>
+
       <div class="control-row compact">
         <button class="btn-save" id="snapshot">Vastleggen</button>
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
@@ -521,6 +516,13 @@
           <input type="password" id="key_fmp" placeholder="financialmodelingprep.com" autocomplete="off" style="width:100%">
         </div>
         <span id="stat_fmp" class="trap" style="align-self:center">niet ingesteld</span>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="syncKeys" checked style="width:auto">
+          <span>Sleutels meenemen in de cloud-sync, zodat ze op je andere apparaten beschikbaar zijn.
+            <b style="color:var(--accent)">Let op:</b> een sleutel is een wachtwoord &mdash; doe dit alleen voor gratis sleutels.</span>
+        </label>
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
@@ -1640,8 +1642,11 @@ function saveAllKeys(){
   updateSourceIndicator();
   if(typeof saveKeysCloud==="function")saveKeysCloud();
   var st=$('settingsStatus'); st.className="status";
-  var where = LS.available ? "in deze browser bewaard" : "alleen voor deze sessie bewaard (opslag geblokkeerd \u2014 sta cookies/opslag toe voor deze site)";
-  st.textContent=count+" sleutel(s) "+where+". De tool kiest per aandeel automatisch de beste beschikbare bron.";
+  var where = LS.available ? "in deze browser bewaard" : "alleen voor deze sessie bewaard (opslag geblokkeerd \u2014 sta opslag toe voor deze site)";
+  var cloudPart = (typeof FB!=="undefined"&&FB.user&&FB.ready)
+    ? ($('syncKeys')&&$('syncKeys').checked ? " \u00b7 \u2601\ufe0f ook opgeslagen in je Google-account" : " \u00b7 niet in de cloud (vinkje staat uit)")
+    : " \u00b7 <b>niet in de cloud</b> \u2014 log in bij Tracking om ze op je andere apparaten te krijgen";
+  st.innerHTML=count+" sleutel(s) "+where+cloudPart+".";
 }
 function testAllKeys(){
   var st=$('settingsStatus'); st.className="status"; st.textContent="Sleutels testen\u2026";
@@ -3193,6 +3198,14 @@ function loadCloud(){
     renderSnapList();
     // sleutels uit cloud overnemen indien aanwezig
     var gotKeys=0;
+    if(!data.keys){
+      // nog geen sleutels in de cloud, maar wel lokaal -> alsnog opslaan
+      var hasLocal=['finnhub','eodhd','fmp','eulerpool'].some(function(s){return MULTI_KEYS[s];});
+      if(hasLocal && $('syncKeys') && $('syncKeys').checked){
+        saveKeysCloud();
+        gotKeys=-1; // markeer dat we hebben teruggeschreven
+      }
+    }
     if(data.keys){
       $('syncKeys').checked=true; // er stonden sleutels in de cloud -> sync stond aan
       var firstWithKey=null;
@@ -3220,7 +3233,8 @@ function loadCloud(){
     }
     // screener-instellingen (universum/weging/horizon/modus) herstellen
     if(data.settings && typeof applySettings==="function"){ applySettings(data.settings); }
-    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+(gotKeys?", "+gotKeys+" sleutel(s)":"")+" (cloud: "+cloud.length+", lokaal was: "+before+").");
+    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+
+      (gotKeys>0?", "+gotKeys+" sleutel(s) opgehaald":(gotKeys===-1?", je lokale sleutels zijn nu ook in de cloud bewaard":""))+" (cloud: "+cloud.length+", lokaal was: "+before+").");
     if(HISTORY.length>cloud.length)saveCloud();
   }).catch(function(e){syncMsg("Ophalen uit cloud mislukt: "+(e&&e.message||e));});
 }
