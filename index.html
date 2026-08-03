@@ -220,6 +220,7 @@
   <div class="control-panel">
     <div class="control-row">
       <span class="inline-lbl" id="srcIndicator">Bronnen worden beheerd bij <b>Instellingen</b></span>
+      <span class="inline-lbl" id="quotaBar" style="font-size:11px;margin-left:12px"></span>
       <button class="btn-go" id="run" style="margin-left:auto">Screenen</button>
       <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
@@ -244,7 +245,7 @@
           <option value="HOLDINGS">Holdings / investeringsmaatschappijen (~21)</option>
         </select>
       </div>
-      <div class="field"><label>Toon top</label><select id="limit"><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option></select></div>
+      <div class="field"><label>Kosten<span id="costHint" style="text-transform:none;letter-spacing:0;margin-left:4px"></span></label><select id="limit"><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option></select></div>
       <div class="field">
         <label title="Stijgers: rangschikt op de vier factoren met jouw weging. Overdreven dalers: zoekt aandelen die hard zijn gedaald maar fundamenteel gezond bleven.">Zoekmodus</label>
         <select id="mode"><option value="stijgers" selected>Stijgers (momentum)</option><option value="herstel">Overdreven dalers</option></select>
@@ -554,6 +555,12 @@
     </div>
     <div class="status" id="settingsStatus"></div>
 
+    <div class="snap" style="border-left:3px solid var(--green);font-size:12.5px;color:var(--muted)">
+      <b>Verbruik per bron</b> <span style="opacity:.6">(eigen telling in deze browser, geen officieel saldo van de aanbieder)</span>
+      <div id="quotaDetail" style="margin-top:8px"></div>
+      <button class="btn-ghost" id="resetQuota" style="margin-top:8px">Teller op nul zetten</button>
+    </div>
+
     <div class="snap" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
       <b>Bronvoorkeur per markt</b> (gebruikt wanneer automatisch kiezen aanstaat):<br>
       &bull; Amerikaanse aandelen &rarr; <b>SecuritiesDB</b> (fundamentals, geen sleutel) + <b>Finnhub</b> (koers)<br>
@@ -811,6 +818,7 @@ function render(){
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
       (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
+      linkMenu(d)+
       overlapBadge(d)+
       (isHolding(d.symbol)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
@@ -1123,6 +1131,21 @@ function holdingScore(d){
   return Math.max(0,Math.min(100,Math.round(score/sum)));
 }
 
+// toont bij de universumkeuze hoeveel calls die screening ongeveer kost
+function showCostEstimate(){
+  var el=document.getElementById('costHint'); if(!el)return;
+  var syms=chosenUniverse();
+  var est=estimateCalls(syms.length,syms);
+  var warn="";
+  var eu=remainingFor('eulerpool');
+  if(eu&&eu.dayLeft!=null&&est.eulerpool>eu.dayLeft){
+    warn=' <span class="neg">\u26a0\ufe0f meer dan je resterende Eulerpool-budget ('+eu.dayLeft+')</span>';
+  }
+  el.innerHTML = syms.length
+    ? '\u2248 '+est.total+' API-calls voor '+syms.length+' waarden'+warn
+    : '';
+}
+
 function chosenUniverse(){
   var ex=$('exchange').value;
   var us,eu;
@@ -1151,7 +1174,18 @@ function passesFilters(d){
 }
 
 // Algemene JSON-helper met foutdetectie
+// leidt de bron af uit de URL, zodat elke aanroep automatisch geteld wordt
+function sourceFromUrl(u){
+  if(!u)return null;
+  if(u.indexOf("securitiesdb.com")>-1)return "securitiesdb";
+  if(u.indexOf("finnhub.io")>-1)return "finnhub";
+  if(u.indexOf("eulerpool.com")>-1)return "eulerpool";
+  if(u.indexOf("eodhd.com")>-1)return "eodhd";
+  if(u.indexOf("financialmodelingprep.com")>-1)return "fmp";
+  return null;
+}
 function getJson(url){
+  if(typeof recordCall==="function"){ var s=sourceFromUrl(url); if(s)recordCall(s,1); }
   return fetch(url).then(function(r){
     if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText}; }
     return r.text();
@@ -1172,6 +1206,159 @@ function getJson(url){
 }
 
 // dispatcher: kiest de juiste bron
+// ---- Laatste screening bewaren en terugladen ----
+// Zo hoef je bij het opstarten niet meteen opnieuw API-calls te verbruiken om iets te zien.
+function saveLastRun(kind,data,params){
+  var payload={ts:Date.now(),kind:kind,params:params||{},data:data||[]};
+  try{ LS.set('lastRun_'+kind,JSON.stringify(payload)); }catch(e){}
+  // ook naar de cloud, zodat je hem op je andere apparaten terugziet
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    var upd={}; upd['lastRun_'+kind]=payload;
+    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true}).catch(function(){});
+  }
+}
+function loadLastRun(kind){
+  return LS.get('lastRun_'+kind).then(function(r){
+    if(!r||!r.value)return null;
+    try{ return JSON.parse(r.value); }catch(e){ return null; }
+  }).catch(function(){return null;});
+}
+// leesbare samenvatting van wanneer en met welke instellingen
+function describeRun(run){
+  if(!run)return "";
+  var d=new Date(run.ts);
+  var mins=Math.round((Date.now()-run.ts)/60000);
+  var age = mins<60 ? mins+" min geleden"
+          : mins<1440 ? Math.round(mins/60)+" uur geleden"
+          : Math.round(mins/1440)+" dag(en) geleden";
+  var p=run.params||{};
+  var bits=[];
+  if(p.universum)bits.push(p.universum);
+  if(p.mode)bits.push(p.mode==="herstel"?"dalers":"stijgers");
+  if(p.horizon)bits.push(p.horizon==="lang"?"lange termijn":"korte termijn");
+  if(p.weights)bits.push("weging "+p.weights);
+  if(p.categorie)bits.push(p.categorie);
+  return '<span title="'+d.toLocaleString()+'">'+d.toLocaleDateString()+' '+
+    d.toLocaleTimeString().slice(0,5)+' \u00b7 '+age+'</span>'+
+    (bits.length?' \u00b7 <span style="opacity:.75">'+bits.join(" \u00b7 ")+'</span>':'');
+}
+// huidige screener-instellingen vastleggen bij een run
+function currentRunParams(){
+  var ex=$('exchange'), lim=$('limit'), md=$('mode'), hz=$('horizon');
+  var label = ex ? (ex.options[ex.selectedIndex]||{}).text : null;
+  return {
+    universum: label ? label.replace(/\s*\(.*?\)\s*/,"") : null,
+    exchange: ex?ex.value:null,
+    limit: lim?lim.value:null,
+    mode: md?md.value:null,
+    horizon: hz?hz.value:null,
+    weights: (wmEl&&wvEl&&wgEl&&wqEl) ? ("M"+wmEl.value+"/W"+wvEl.value+"/G"+wgEl.value+"/K"+wqEl.value) : null,
+    mcap: $('mcap')?$('mcap').value:null,
+    pemax: $('pemax')?$('pemax').value:null
+  };
+}
+
+// ---- Call-teller: houdt zelf bij hoeveel aanroepen je per bron hebt gedaan ----
+// De meeste API's melden geen resterend saldo (en browsers mogen die headers vaak niet lezen),
+// dus tellen we zelf mee tegen de gepubliceerde limieten. Het is een eigen boekhouding,
+// geen officieel saldo van de aanbieder.
+var API_LIMITS={
+  finnhub:{perMin:60, perDay:null, label:"Finnhub"},
+  eulerpool:{perMin:null, perDay:1000, label:"Eulerpool"},
+  securitiesdb:{perMin:100, perDay:null, label:"SecuritiesDB"},
+  eodhd:{perMin:null, perDay:20, label:"EODHD"},
+  fmp:{perMin:null, perDay:250, label:"FMP"}
+};
+var CALL_LOG={}; // src -> {day:"2026-08-01", dayCount:n, minuteStamp:ms, minuteCount:n}
+
+function todayKey(){return new Date().toISOString().slice(0,10);}
+function loadCallLog(){
+  LS.get('callLog').then(function(r){
+    if(r&&r.value){ try{ CALL_LOG=JSON.parse(r.value)||{}; }catch(e){ CALL_LOG={}; } }
+    // dagteller resetten als het een nieuwe dag is
+    var t=todayKey();
+    Object.keys(CALL_LOG).forEach(function(s){ if(CALL_LOG[s].day!==t){ CALL_LOG[s].day=t; CALL_LOG[s].dayCount=0; } });
+    renderQuota();
+  }).catch(function(){renderQuota();});
+}
+function saveCallLog(){ try{ LS.set('callLog',JSON.stringify(CALL_LOG)); }catch(e){} }
+
+function recordCall(src,n){
+  if(!src)return;
+  n=n||1;
+  var t=todayKey(), now=Date.now();
+  if(!CALL_LOG[src]) CALL_LOG[src]={day:t,dayCount:0,minuteStamp:now,minuteCount:0};
+  var c=CALL_LOG[src];
+  if(c.day!==t){ c.day=t; c.dayCount=0; }
+  if(now-c.minuteStamp>60000){ c.minuteStamp=now; c.minuteCount=0; }
+  c.dayCount+=n; c.minuteCount+=n;
+  saveCallLog();
+  renderQuota();
+}
+function remainingFor(src){
+  var lim=API_LIMITS[src]; if(!lim)return null;
+  var c=CALL_LOG[src]||{dayCount:0,minuteCount:0,minuteStamp:0};
+  var t=todayKey();
+  var dayUsed=(c.day===t)?c.dayCount:0;
+  var minUsed=(Date.now()-c.minuteStamp<60000)?c.minuteCount:0;
+  return {
+    label:lim.label,
+    dayLeft: lim.perDay!=null ? Math.max(0,lim.perDay-dayUsed) : null,
+    dayTotal: lim.perDay,
+    minLeft: lim.perMin!=null ? Math.max(0,lim.perMin-minUsed) : null,
+    minTotal: lim.perMin,
+    dayUsed: dayUsed
+  };
+}
+// hoeveel calls kost een screening van n aandelen? (ruwe schatting per route)
+function estimateCalls(n,universeSymbols){
+  var us=0,eu=0;
+  (universeSymbols||[]).forEach(function(s){ if(/\./.test(s))eu++; else us++; });
+  if(!us&&!eu){ us=n; }
+  return {
+    securitiesdb: us*2,          // quant-health + dcf
+    finnhub: us*2,               // quote + metrics
+    eulerpool: eu*2,             // profile + aaqs
+    total: us*4 + eu*2
+  };
+}
+function renderQuotaDetail(){
+  var el=document.getElementById('quotaDetail'); if(!el)return;
+  var rows=Object.keys(API_LIMITS).map(function(s){
+    if(s==="fmp"&&typeof FMP_ENABLED!=="undefined"&&!FMP_ENABLED)return "";
+    var r=remainingFor(s); if(!r)return "";
+    var limTxt = r.dayTotal!=null ? r.dayTotal+" per dag" : (r.minTotal!=null ? r.minTotal+" per minuut" : "onbekend");
+    var usedTxt = r.dayTotal!=null
+      ? r.dayUsed+" gebruikt \u00b7 <b>"+r.dayLeft+"</b> over"
+      : r.dayUsed+" vandaag \u00b7 <b>"+r.minLeft+"</b> over deze minuut";
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid var(--line)">'+
+      '<span>'+r.label+' <span style="opacity:.6">('+limTxt+')</span></span><span>'+usedTxt+'</span></div>';
+  }).filter(Boolean).join("");
+  el.innerHTML=rows||'<span style="opacity:.6">Nog geen aanroepen geregistreerd.</span>';
+}
+function renderQuota(){
+  renderQuotaDetail();
+  var el=document.getElementById('quotaBar'); if(!el)return;
+  var srcs=['securitiesdb','finnhub','eulerpool'];
+  if(typeof MULTI_KEYS!=="undefined"&&MULTI_KEYS.eodhd)srcs.push('eodhd');
+  var parts=srcs.map(function(s){
+    var r=remainingFor(s); if(!r)return "";
+    var txt=r.label+": ";
+    var cls="";
+    if(r.dayTotal!=null){
+      var pct=r.dayLeft/r.dayTotal;
+      cls = pct<0.15 ? "neg" : (pct<0.4 ? "" : "pos");
+      txt+='<b class="'+cls+'">'+r.dayLeft+'</b>/'+r.dayTotal+' vandaag';
+    }else if(r.minTotal!=null){
+      txt+='<b>'+r.minLeft+'</b>/'+r.minTotal+' deze minuut';
+      if(r.dayUsed) txt+=' <span style="opacity:.6">('+r.dayUsed+' vandaag)</span>';
+    }
+    return '<span style="margin-right:14px">'+txt+'</span>';
+  }).filter(Boolean).join("");
+  el.innerHTML='<span style="opacity:.7">Verbruik:</span> '+parts+
+    '<span style="opacity:.5;font-size:10.5px">eigen telling, geen officieel saldo</span>';
+}
+
 // ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
 var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
@@ -1576,6 +1763,10 @@ function run(){
     }
     render();
     if(typeof renderDailyDiff==="function")renderDailyDiff();
+    // resultaat bewaren zodat je het bij het opstarten terugziet zonder nieuwe calls
+    if(CURRENT.length&&typeof saveLastRun==="function"){
+      saveLastRun('stocks',SCORESET&&SCORESET.length?SCORESET:CURRENT,currentRunParams());
+    }
   });
 }
 
@@ -1743,6 +1934,11 @@ function testAllKeys(){
     st.textContent="Testresultaat \u2014 "+results.join("  \u00b7  ");
   });
 }
+if($('resetQuota'))$('resetQuota').onclick=function(){
+  CALL_LOG={}; saveCallLog(); renderQuota();
+  var st=$('settingsStatus'); st.className="status";
+  st.textContent="Teller op nul gezet. Let op: dit wist alleen je eigen telling, niet het werkelijke verbruik bij de aanbieder.";
+};
 if($('saveAllKeys'))$('saveAllKeys').onclick=saveAllKeys;
 if($('testKeys'))$('testKeys').onclick=testAllKeys;
 loadAllKeys();
@@ -1924,7 +2120,7 @@ function renderEtf(){
     if(d.isLeveraged)riskBadge+='<span class="trap danger" title="Hefboomfonds: versterkt zowel winst als verlies, en is door dagelijkse herbalancering ongeschikt om lang aan te houden." style="margin-left:4px">hefboom</span>';
     if(d.isInverse)riskBadge+='<span class="trap danger" title="Invers fonds: beweegt tegengesteld aan de index. Door dagelijkse herbalancering ongeschikt voor lange termijn." style="margin-left:4px">invers</span>';
     return '<tr>'+
-      '<td class="l"><span class="tk">'+d.symbol+'</span>'+riskBadge+overlapBadge(d)+
+      '<td class="l"><span class="tk">'+d.symbol+'</span>'+linkMenu(d)+riskBadge+overlapBadge(d)+
       '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+(d.name||"")+'</span></td>'+
       '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
         (d.isin?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+d.isin+'\',this)">'+d.isin+'</span>':'\u2014')+'</td>'+
@@ -2219,6 +2415,10 @@ function runEtf(){
       ETF_CURRENT=[]; renderEtf(); return;
     }
     ETF_CURRENT=all;
+    if(typeof saveLastRun==="function"){
+      var catEl=$('etfCategory');
+      saveLastRun('etfs',all,{categorie: catEl?(catEl.options[catEl.selectedIndex]||{}).text:null});
+    }
     st.className="status";
     st.textContent="Klaar \u2014 "+all.length+" ETF's vergeleken via SecuritiesDB"+(failed.length?"  \u00b7  niet gevonden: "+failed.join(", "):"")+".";
     renderEtf();
@@ -2241,6 +2441,14 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
 ETF_CURRENT=[];
+loadLastRun('etfs').then(function(run){
+  if(!run||!run.data||!run.data.length)return;
+  ETF_CURRENT=run.data;
+  renderEtf();
+  $('etfStatus').className="status";
+  $('etfStatus').innerHTML='\ud83d\udcbe Laatste vergelijking geladen \u2014 '+describeRun(run)+
+    ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
+});
 $('etfStatus').innerHTML='Kies een selectie en klik <b>Vergelijk ETF\'s</b>. VS-fondsen via SecuritiesDB (geen sleutel nodig), Europese via Eulerpool.';
 renderEtf();
 
@@ -2369,6 +2577,61 @@ function dataCompleteness(d){
   return {level:level, missing:missing, hasPrice:hasPrice};
 }
 // externe onderzoekslink voor aandelen waar wij geen fundamentals hebben
+// ---- Externe onderzoekslinks per aandeel/fonds ----
+// Niet elke site heeft een voorspelbare URL-structuur: investing.com gebruikt interne ID's,
+// dus daarvoor openen we een zoekopdracht in plaats van een gokte directe link.
+function externalLinks(d){
+  var sym=(d.symbol||"").toUpperCase();
+  var base=sym.split(".")[0];
+  var isin=(typeof isinOf==="function")?isinOf(d):(d.isin||null);
+  var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L)$/i.test(sym);
+  var isEtf=(typeof ETF_HINT!=="undefined"&&ETF_HINT.test(sym))||d.ter!=null||d.aum!=null;
+  var q=encodeURIComponent(isin||sym);
+  var links=[];
+
+  if(isEtf){
+    if(isin) links.push({u:"https://www.justetf.com/en/etf-profile.html?isin="+encodeURIComponent(isin),t:"justETF",d:"Kosten, samenstelling en alle noteringen"});
+    if(!isEU) links.push({u:"https://stockanalysis.com/etf/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Holdings, rendement en dividend"});
+    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Sterrenrating en analistenoordeel"});
+  }else{
+    if(!isEU) links.push({u:"https://stockanalysis.com/stocks/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Cijfers, ratio's en historiek"});
+    if(isEU) links.push({u:"https://www.marketscreener.com/search/?q="+q,t:"MarketScreener",d:"Europese analistenschattingen"});
+    links.push({u:"https://finance.yahoo.com/quote/"+encodeURIComponent(sym),t:"Yahoo Finance",d:"Koers, nieuws en kerncijfers"});
+    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Moat-rating en fair value"});
+  }
+  // investing.com heeft geen voorspelbare URL per ticker -> zoekopdracht
+  links.push({u:"https://www.investing.com/search/?q="+q,t:"Investing.com",d:"Zoekresultaat"});
+  return links;
+}
+// klein linkicoontje met uitklapbaar menu
+function linkMenu(d){
+  var ls=externalLinks(d);
+  if(!ls.length)return "";
+  var id="lnk_"+(d.symbol||"").replace(/[^A-Za-z0-9]/g,"_");
+  var items=ls.map(function(l){
+    return '<a href="'+l.u+'" target="_blank" rel="noopener" style="display:block;padding:6px 10px;color:var(--ink);text-decoration:none;font-size:12px;white-space:nowrap">'+
+           l.t+'<span style="display:block;font-size:10px;color:var(--muted)">'+l.d+'</span></a>';
+  }).join("");
+  return '<span style="position:relative;display:inline-block;margin-left:6px">'+
+    '<span onclick="toggleLinkMenu(\''+id+'\',event)" title="Meer informatie opzoeken" '+
+      'style="cursor:pointer;color:var(--blue);font-size:12px">\u2197</span>'+
+    '<span id="'+id+'" style="display:none;position:absolute;top:100%;left:0;z-index:50;'+
+      'background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 0;'+
+      'box-shadow:0 6px 20px rgba(0,0,0,.5);min-width:190px">'+items+'</span></span>';
+}
+function toggleLinkMenu(id,ev){
+  if(ev){ev.stopPropagation();}
+  var el=document.getElementById(id); if(!el)return;
+  var open=el.style.display!=="none";
+  // sluit andere menu's
+  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
+  el.style.display=open?"none":"block";
+}
+window.toggleLinkMenu=toggleLinkMenu;
+document.addEventListener('click',function(){
+  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
+});
+
 function researchLinkFor(symbol){
   var base=symbol.split(".")[0];
   var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i.test(symbol);
@@ -2471,7 +2734,7 @@ function renderPortfolio(){
     var pl = plOf(p);
     var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
-      '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
+      '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+linkMenu(p._fresh?Object.assign({symbol:p.symbol,isin:p.isin},p._fresh.etf||{}):{symbol:p.symbol,isin:p.isin})+
       (p._fresh
         ? (p._fresh.completeness && p._fresh.completeness.level==="price-only"
             ? '<span style="color:var(--muted);font-size:12px" title="Alleen koersdata beschikbaar via deze bron \u2014 geen betrouwbare score mogelijk">score n.v.t.</span>'
@@ -2525,6 +2788,7 @@ function renderPortfolio(){
   renderOverlap();
 }
 if($('typeFilter'))$('typeFilter').onchange=function(){if(CURRENT.length)render();};
+if($('exchange'))$('exchange').addEventListener('change',function(){if(typeof showCostEstimate==="function")showCostEstimate();});
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
@@ -3427,6 +3691,31 @@ function loadCloud(){
     }
     // screener-instellingen (universum/weging/horizon/modus) herstellen
     if(data.settings && typeof applySettings==="function"){ applySettings(data.settings); }
+    // laatste screenings uit de cloud overnemen als ze nieuwer zijn dan wat lokaal staat
+    ['stocks','etfs'].forEach(function(kind){
+      var cloudRun=data['lastRun_'+kind];
+      if(!cloudRun||!cloudRun.data||!cloudRun.data.length)return;
+      LS.get('lastRun_'+kind).then(function(r){
+        var localTs=0;
+        if(r&&r.value){ try{ localTs=(JSON.parse(r.value)||{}).ts||0; }catch(e){} }
+        if(cloudRun.ts>localTs){
+          LS.set('lastRun_'+kind,JSON.stringify(cloudRun));
+          if(kind==='etfs'&&(!ETF_CURRENT||!ETF_CURRENT.length)){
+            ETF_CURRENT=cloudRun.data; renderEtf();
+            $('etfStatus').className="status";
+            $('etfStatus').innerHTML='\u2601\ufe0f Laatste vergelijking van een ander apparaat \u2014 '+describeRun(cloudRun);
+          }
+          if(kind==='stocks'&&(!CURRENT||!CURRENT.length)){
+            SCORESET=cloudRun.data.slice(); buildPeers(SCORESET);
+            var lim=parseInt((cloudRun.params&&cloudRun.params.limit)||25,10);
+            CURRENT=cloudRun.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
+            render();
+            $('status').className="status";
+            $('status').innerHTML='\u2601\ufe0f Laatste screening van een ander apparaat \u2014 '+describeRun(cloudRun);
+          }
+        }
+      }).catch(function(){});
+    });
     syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b> \u2014 "+HISTORY.length+" momentopnamen"+
       (gotKeys>0?", "+gotKeys+" sleutel(s) opgehaald":(gotKeys===-1?", je lokale sleutels zijn nu ook in de cloud bewaard":""))+" (cloud: "+cloud.length+", lokaal was: "+before+").");
     if(HISTORY.length>cloud.length)saveCloud();
@@ -3481,7 +3770,31 @@ function saveKeysCloud(){
 }
 
 CURRENT=[];DEMO_ACTIVE=false;
+if(typeof loadCallLog==="function")loadCallLog();
+setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate();},300);
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
+
+// laatste screening terugladen (geen API-calls nodig)
+loadLastRun('stocks').then(function(run){
+  if(!run||!run.data||!run.data.length)return;
+  SCORESET=run.data.slice();
+  var lim=parseInt((run.params&&run.params.limit)||25,10);
+  buildPeers(SCORESET);
+  var sorted=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);});
+  CURRENT=sorted.slice(0,lim);
+  // instellingen herstellen zoals ze bij die run waren
+  if(run.params){
+    ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
+      var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
+    });
+    if(typeof syncWeightUI==="function")syncWeightUI();
+  }
+  render();
+  $('status').className="status";
+  $('status').innerHTML='\ud83d\udcbe Laatste screening geladen \u2014 '+describeRun(run)+
+    ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span> Klik <b>Screenen</b> voor verse gegevens.';
+  if(typeof showCostEstimate==="function")showCostEstimate();
+});
 (function(){var sc=document.querySelector('th[data-k="score"]');if(sc){var ar=document.createElement('span');ar.className='arrow';ar.textContent=' \u25be';sc.appendChild(ar);}})();
 
 // ---- PWA / mobiel ----
