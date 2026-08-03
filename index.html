@@ -255,6 +255,14 @@
       </div>
       <div class="field"><label>Marktwaarde &gt;</label><input type="number" id="mcap" value="0" style="width:60px"><span class="inline-lbl">mld $</span></div>
       <div class="field"><label>P/E &lt;</label><input type="number" id="pemax" value="40" style="width:60px"></div>
+      <div class="field">
+        <label title="Filter de resultaten op type: alleen holdings (investeringsmaatschappijen) of juist alleen operationele bedrijven.">Type</label>
+        <select id="typeFilter">
+          <option value="all">Alles</option>
+          <option value="operating">Alleen bedrijven</option>
+          <option value="holding">Alleen holdings</option>
+        </select>
+      </div>
     </div>
     <div class="control-row compact">
       <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging<span id="wnote" style="color:var(--accent);font-weight:400"></span>:</span>
@@ -275,6 +283,7 @@
       <thead>
         <tr>
           <th class="l" data-k="symbol" title="Het beurssymbool (ticker) en de bedrijfsnaam. Aandelen met een puntsuffix zoals .AS of .PA zijn Europees.">Ticker<span class="q">?</span></th>
+          <th class="l" data-k="isin" title="De ISIN-code: het internationale identificatienummer van dit effect. Hiermee kun je het aandeel exact terugvinden bij je broker, ongeacht op welke beurs het noteert. Klik op de code om hem te kopiëren.">ISIN<span class="q">?</span></th>
           <th class="l" data-k="sector" title="De sector waarin het bedrijf actief is. De waarderingsscore (P/E, PEG, K/B) wordt berekend t.o.v. andere aandelen in dezelfde sector, want wat 'duur' of 'goedkoop' is verschilt sterk per sector.">Sector<span class="q">?</span></th>
           <th data-k="price" title="De huidige aandelenkoers. Op de gratis databron is dit meestal de slotkoers van de vorige handelsdag, niet realtime.">Koers<span class="q">?</span></th>
           <th data-k="chg" title="Hoeveel de koers vandaag is veranderd, in procent. Groen = gestegen, rood = gedaald.">&Delta; Dag<span class="q">?</span></th>
@@ -361,6 +370,7 @@
         <thead>
           <tr>
             <th class="l" data-k="symbol">Ticker</th>
+            <th class="l" data-k="isin" title="De ISIN-code van het fonds. Hiermee vind je het exact terug bij je broker, ongeacht op welke beurs het noteert. Klik om te kopiëren.">ISIN<span class="q">?</span></th>
             <th data-k="aum" title="Fondsomvang (assets under management) in miljarden dollar. Groter fonds = doorgaans lagere kosten en betere liquiditeit, minder kans dat het fonds ooit sluit.">AUM<span class="q">?</span></th>
             <th data-k="ter" title="Total Expense Ratio: het jaarlijkse kostenpercentage dat automatisch van je rendement wordt afgehaald. Het enige cijfer dat je vooraf zeker weet. Lager is vrijwel altijd beter.">Kosten<span class="q">?</span></th>
             <th data-k="holdings" title="Aantal onderliggende posities. Meer posities = bredere spreiding = minder afhankelijk van één bedrijf of sector.">Posities<span class="q">?</span></th>
@@ -772,8 +782,14 @@ function renderHoldingsNote(){
 
 function render(){
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT); // relatief t.o.v. volledige gescreende set
-  var rows=CURRENT.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
-  var km={symbol:"symbol",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",qual:"_q",trap:"_trap",score:"_s"};
+  // typefilter: holdings vs operationele bedrijven
+  var tf=document.getElementById('typeFilter');
+  var typeMode=tf?tf.value:"all";
+  var source=CURRENT;
+  if(typeMode==="holding") source=CURRENT.filter(function(d){return isHolding(d.symbol);});
+  else if(typeMode==="operating") source=CURRENT.filter(function(d){return !isHolding(d.symbol);});
+  var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",qual:"_q",trap:"_trap",score:"_s"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -785,6 +801,11 @@ function render(){
       (isHolding(d.symbol)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
       '<span class="nm">'+(d.name||"")+'</span></td>'+
+      (function(){
+        var code=isinOf(d);
+        return '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
+          (code?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+code+'\',this)">'+code+'</span>':'\u2014')+'</td>';
+      })()+
       '<td class="l" style="color:var(--muted);font-size:12px">'+(d.sector||"\u2014")+'</td>'+
       '<td class="num">'+fmt(d.price)+'</td>'+
       '<td class="num '+cls(d.chg)+'">'+signed(d.chg)+'</td>'+
@@ -1516,11 +1537,11 @@ if($('demo'))$('demo').onclick=function(){DEMO_ACTIVE=true;CURRENT=DEMO;render()
 $('csv').onclick=function(){
   if(!CURRENT.length){$('status').className="status";$('status').textContent="Niets te exporteren \u2014 draai eerst een screening.";return;}
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT);
-  var head=["symbool","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","valtrap","totaalscore"];
+  var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","valtrap","totaalscore"];
   function esc(v){if(v==null)return"";var s=String(v);return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
   var rows=CURRENT.map(function(d){
     var t=valueTrap(d);
-    return [d.symbol,d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.revG,d.epsG,d.roe,d.margin,d.de,
+    return [d.symbol,isinOf(d),d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.revG,d.epsG,d.roe,d.margin,d.de,
       momentumScore(d),valuationScore(d),growthScore(d),qualityScore(d),
       (t.level===2?"val-trap":t.level===1?"let op":"consistent"),totalScore(d)].map(esc).join(";");
   });
@@ -1858,6 +1879,8 @@ function renderEtf(){
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span>'+riskBadge+
       '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+(d.name||"")+'</span></td>'+
+      '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
+        (d.isin?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+d.isin+'\',this)">'+d.isin+'</span>':'\u2014')+'</td>'+
       '<td class="num">'+(d.aum!=null?"$"+d.aum+"mld":"\u2014")+'</td>'+
       '<td class="num">'+(d.ter!=null?d.ter.toFixed(2)+"%":"\u2014")+'</td>'+
       '<td class="num">'+(d.holdings!=null?d.holdings.toLocaleString():"\u2014")+'</td>'+
@@ -1944,6 +1967,20 @@ var ISIN_MAP={
   "ING.AS":"NL0011821202","INGA.AS":"NL0011821202","LOTB.BR":"BE0003604155",
   "BESI.AS":"NL0012866412","TNOW.PA":"FR0011871128"
 };
+// ISIN's voor Amerikaanse aandelen (SecuritiesDB levert die niet mee)
+var ISIN_US={
+  AAPL:"US0378331005",MSFT:"US5949181045",NVDA:"US67066G1040",GOOGL:"US02079K3059",
+  AMZN:"US0231351067",META:"US30303M1027",TSLA:"US88160R1014",AVGO:"US11135F1012",
+  "BRK-B":"US0846707026","BRK-A":"US0846701086",JPM:"US46625H1005",V:"US92826C8394",
+  MA:"US57636Q1040",JNJ:"US4781601046",UNH:"US91324P1021",LLY:"US5324571083",
+  XOM:"US30231G1022",CVX:"US1667641005",WMT:"US9311421039",PG:"US7427181091",
+  KO:"US1912161007",PEP:"US7134481081",COST:"US22160K1051",HD:"US4370761029",
+  ORCL:"US68389X1054",CRM:"US79466L3024",AMD:"US0079031078",INTC:"US4581401001",
+  QCOM:"US7475251036",TXN:"US8825081040",CSCO:"US17275R1023",IBM:"US4592001014",
+  NFLX:"US64110L1061",DIS:"US2546871060",PFE:"US7170811035",MRK:"US58933Y1055",
+  ABBV:"US00287Y1091",TMO:"US8835561023",GILD:"US3755581036",AMGN:"US0311621009",
+  MELI:"US58733R1023",PLTR:"US69608A1088",L:"US5404241086",IEP:"US4511071064"
+};
 function isinFor(symbol){
   // eerst uit de portefeuille (Saxo-import bewaart de ISIN), dan uit de vaste tabel
   if(typeof PORTFOLIO!=="undefined"&&PORTFOLIO&&PORTFOLIO.length){
@@ -1951,7 +1988,12 @@ function isinFor(symbol){
       if(PORTFOLIO[i].symbol===symbol&&PORTFOLIO[i].isin)return PORTFOLIO[i].isin;
     }
   }
-  return ISIN_MAP[symbol]||null;
+  return ISIN_MAP[symbol]||ISIN_US[symbol]||null;
+}
+// ISIN uit een opgehaald record, met terugval op de tabellen
+function isinOf(d){
+  if(!d)return null;
+  return d.isin || isinFor(d.symbol) || null;
 }
 function enrichEulerpool(symbol,token){
   var isin=isinFor(symbol);
@@ -2388,7 +2430,9 @@ function renderPortfolio(){
             : '<span class="scorecell">'+p._fresh.score+'</span>')
         : '<span style="color:var(--muted);font-size:12px">nog niet gecheckt</span>')+
       '<button class="pf-remove" onclick="removePosition(\''+p.id+'\')">verwijderen</button></div>'+
-      '<div class="pf-meta">'+p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
+      '<div class="pf-meta">'+
+      (function(){var c=p.isin||isinFor(p.symbol);return c?'<span style="font-family:\'IBM Plex Mono\';cursor:pointer" title="ISIN \u2014 klik om te kopiëren" onclick="copyIsin(\''+c+'\',this)">'+c+'</span> \u00b7 ':'';})()+
+      p.qty+' stuks'+(p.buyPrice?' \u00b7 aankoop $'+p.buyPrice:'')+(p.buyDate?' \u00b7 '+p.buyDate:'')+
       (val!=null?' \u00b7 waarde $'+val.toFixed(0):'')+
       (p._fresh&&p._fresh.src?' \u00b7 <span style="opacity:0.7">via '+p._fresh.src+'</span>':'')+
       (pl!=null?' \u00b7 <span class="'+(pl>=0?"pos":"neg")+'">'+(pl>=0?"+":"")+pl.toFixed(1)+"% sinds aankoop</span>":'')+'</div>'+
@@ -2430,6 +2474,7 @@ function renderPortfolio(){
   }).join("");
   renderOverlap();
 }
+if($('typeFilter'))$('typeFilter').onchange=function(){if(CURRENT.length)render();};
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
@@ -3067,6 +3112,29 @@ function removeSnapshot(ts){
   }
 }
 window.removeSnapshot=removeSnapshot;
+
+// ISIN naar klembord kopiëren (handig om bij je broker te plakken)
+function copyIsin(code,el){
+  var done=function(){
+    if(!el)return;
+    var orig=el.textContent;
+    el.textContent="gekopieerd";
+    el.style.color="var(--green)";
+    setTimeout(function(){el.textContent=orig;el.style.color="";},1200);
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(done).catch(function(){fallback();});
+  } else fallback();
+  function fallback(){
+    try{
+      var t=document.createElement('textarea');
+      t.value=code;t.style.position='fixed';t.style.opacity='0';
+      document.body.appendChild(t);t.select();document.execCommand('copy');
+      document.body.removeChild(t);done();
+    }catch(e){}
+  }
+}
+window.copyIsin=copyIsin;
 
 // handmatig een ISIN toevoegen aan een positie (nodig voor Eulerpool bij Europese aandelen)
 function setPositionIsin(id){
