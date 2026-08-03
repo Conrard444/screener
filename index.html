@@ -39,7 +39,7 @@
     background:radial-gradient(1200px 600px at 85% -10%, rgba(212,168,67,.06), transparent 60%),var(--bg);
     color:var(--ink);font-family:'IBM Plex Sans',sans-serif;line-height:1.5;padding:24px 20px 60px;
   }
-  .wrap{max-width:1240px;margin:0 auto}
+  .wrap{max-width:1600px;margin:0 auto}
   header{margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:14px}
   h1{font-family:'Fraunces',serif;font-weight:900;font-size:27px;letter-spacing:-.02em;line-height:1.05}
   h1 .x{color:var(--accent);font-style:italic}
@@ -88,9 +88,12 @@
   /* label die inline voor een control-groep staat i.p.v. erboven — voor compacte rijen */
   .inline-lbl{font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px}
   .demo-flag{color:var(--accent);font-family:'IBM Plex Mono'}
-  table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line)}
-  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
+  th,td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  /* compacte modus: nog dichter op elkaar voor smalle schermen */
+  body.compact table{font-size:11px}
+  body.compact th,body.compact td{padding:5px 4px}
+  th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap;vertical-align:bottom}
   th:hover{color:var(--ink)}
   th .q{display:inline-block;margin-left:3px;font-size:9px;width:13px;height:13px;line-height:13px;text-align:center;border-radius:50%;background:var(--panel-2);color:var(--muted);font-weight:600;vertical-align:middle;cursor:help}
   th:hover .q{background:var(--accent);color:#1a1206}
@@ -98,7 +101,7 @@
   tbody tr{transition:background .12s}
   tbody tr:hover{background:var(--panel)}
   .tk{font-family:'IBM Plex Mono';font-weight:600;font-size:14px}
-  .nm{color:var(--muted);font-size:11.5px;display:block;margin-top:2px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nm{color:var(--muted);font-size:10px;display:block;margin-top:1px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mkt{display:inline-block;font-size:9.5px;padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono';letter-spacing:.05em;margin-left:6px;vertical-align:middle}
   .mkt.US{background:rgba(90,169,230,.15);color:var(--blue)}
   .mkt.EU{background:rgba(212,168,67,.15);color:var(--accent)}
@@ -221,6 +224,12 @@
     <div class="control-row">
       <span class="inline-lbl" id="srcIndicator">Bronnen worden beheerd bij <b>Instellingen</b></span>
       <span class="inline-lbl" id="quotaBar" style="font-size:11px;margin-left:12px"></span>
+      <select id="colPreset" style="margin-left:auto;max-width:170px" title="Kies welke kolommen zichtbaar zijn, zodat alles op je scherm past">
+        <option value="essentie">Kolommen: essentie</option>
+        <option value="waardering">Kolommen: waardering</option>
+        <option value="kwaliteit">Kolommen: kwaliteit</option>
+        <option value="alles" selected>Kolommen: alles</option>
+      </select>
       <button class="btn-go" id="run" style="margin-left:auto">Screenen</button>
       <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
@@ -297,7 +306,7 @@
           <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
           <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
-          <th data-k="upside" title="Geschat opwaarts potentieel: het verschil tussen de berekende faire waarde en de huidige koers, in procent. Voor VS-aandelen uit een DCF-model (SecuritiesDB), voor Europese uit Eulerpool's verwacht rendement. Belangrijk: dit is een modeluitkomst op basis van aannames over toekomstige kasstromen &mdash; geen voorspelling, en modellen verschillen sterk in uitkomst.">Potentieel<span class="q">?</span></th>
+          <th data-k="upside" title="Geschat opwaarts potentieel. VS-aandelen: DCF-model (SecuritiesDB). Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Potentieel<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
           <th data-k="score" title="Gecombineerde score 0-100, samengesteld uit momentum, waardering en groei volgens de weegregelaars hierboven. Hoger = stijgt én relatief goedkoop én groeiend. Een startpunt voor onderzoek, geen koopsignaal.">Score<span class="q">?</span></th>
         </tr>
@@ -787,6 +796,34 @@ function fmt(v,s){return (v==null||isNaN(v))?"\u2014":(v+(s||""));}
 function signed(v){return (v==null||isNaN(v))?"\u2014":((v>0?"+":"")+v.toFixed(1)+"%");}
 function cls(v){return v>0?"pos":(v<0?"neg":"");}
 
+// kolomweergaven: bepaalt welke kolommen zichtbaar zijn zodat de tabel op je scherm past
+var COL_PRESETS={
+  essentie:  ["symbol","sector","price","chg","score"],
+  waardering:["symbol","price","pe","peg","pb","dd","upside","score"],
+  kwaliteit: ["symbol","sector","revG","epsG","qual","trap","score"],
+  alles:     null
+};
+function applyColumnPreset(){
+  var sel=document.getElementById('colPreset');
+  var preset=sel?sel.value:"alles";
+  var keep=COL_PRESETS[preset];
+  var table=document.querySelector('#tab-screener table');
+  if(!table)return;
+  var heads=table.querySelectorAll('thead th');
+  var visible=[];
+  Array.prototype.forEach.call(heads,function(th,i){
+    var k=th.dataset.k;
+    var show = !keep || keep.indexOf(k)>-1 || k==="isin";
+    th.style.display = show?"":"none";
+    visible.push(show);
+  });
+  Array.prototype.forEach.call(table.querySelectorAll('tbody tr'),function(tr){
+    Array.prototype.forEach.call(tr.children,function(td,i){
+      td.style.display = visible[i]===false ? "none" : "";
+    });
+  });
+}
+
 function renderHoldingsNote(){
   var el=document.getElementById('holdingsNote'); if(!el)return;
   var isHoldingsRun = $('exchange') && $('exchange').value==="HOLDINGS";
@@ -867,15 +904,29 @@ function render(){
         var up = d.upside!=null ? d.upside : (d.expectedReturn!=null ? d.expectedReturn : null);
         if(up==null) return '<td class="num">\u2014</td>';
         var cls = up>=15 ? "pos" : (up<=-10 ? "neg" : "");
-        var tip = d.fairValue!=null ? "Faire waarde: "+d.fairValue+(d.price!=null?" vs koers "+d.price:"")
-                : (d.expectedReturn!=null ? "Verwacht jaarrendement volgens Eulerpool" : "");
-        return '<td class="num '+cls+'"'+(tip?' title="'+tip+'" style="cursor:help"':'')+'>'+(up>0?"+":"")+up.toFixed(0)+'%</td>';
+        var tip;
+        if(d.upsideSource==="dcf"&&d.fairValue!=null){
+          tip = "DCF: faire waarde "+d.fairValue+(d.price!=null?" vs koers "+d.price:"");
+          if(d.fairLow!=null&&d.fairHigh!=null) tip += " \u00b7 bandbreedte "+d.fairLow+"\u2013"+d.fairHigh+" afhankelijk van aannames";
+          if(d.impliedGrowth!=null) tip += " \u00b7 markt prijst "+d.impliedGrowth+"% groei in";
+          tip += " \u00b7 modeluitkomst, geen voorspelling";
+        } else if(d.upsideSource==="pe-historie"){
+          tip = "Afgeleid: P/E ligt "+(d.peVsHist>0?"+":"")+d.peVsHist+"% t.o.v. eigen 5-jaarsgemiddelde";
+        } else if(d.expectedReturn!=null){
+          tip = "Verwacht jaarrendement volgens Eulerpool";
+        } else tip="";
+        // brede DCF-bandbreedte -> de uitkomst is erg gevoelig voor aannames, dat markeren we
+        var onzeker = (d.fairLow!=null&&d.fairHigh!=null&&d.fairValue>0&&(d.fairHigh-d.fairLow)/d.fairValue>0.5);
+        var txt=(up>0?"+":"")+up.toFixed(0)+"%";
+        if(onzeker) txt+='<span style="opacity:.6;font-size:9px"> \u00b1</span>';
+        return '<td class="num '+cls+'"'+(tip?' title="'+tip+'" style="cursor:help"':'')+'>'+txt+'</td>';
       })()+
       '<td>'+trap+'</td>'+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
   }).join("");
   renderHoldingsNote();
+  if(typeof applyColumnPreset==="function")applyColumnPreset();
 }
 
 var BASE="https://financialmodelingprep.com/stable";
@@ -1387,10 +1438,26 @@ function enrichWithSource(symbol,src,key){
 function fetchDcfSDB(symbol){
   return getJson(SDB_BASE+"/stocks/"+encodeURIComponent(symbol)+"/dcf").then(function(res){
     var d=(res&&res.data)||{};
-    var v=d.valuation||d;
-    var fair = v.fair_value!=null?+v.fair_value : (v.intrinsic_value!=null?+v.intrinsic_value:null);
-    var up = v.upside_pct!=null?+v.upside_pct : (v.upside!=null?+(v.upside*100):null);
-    return {fairValue:fair!=null?+fair.toFixed(2):null, upside:up!=null?+up.toFixed(1):null};
+    var dcf=d.dcf||{};
+    var sm=d.sensitivity_matrix||{};
+    var fair = dcf.fair_value!=null?+dcf.fair_value:null;
+    var up   = dcf.upside_pct!=null?+dcf.upside_pct:null;
+    // spreiding uit de gevoeligheidsmatrix: laat zien hoe sterk de uitkomst van de aannames afhangt
+    var lo=null,hi=null;
+    if(Array.isArray(sm.fair_values)){
+      var all=[];
+      sm.fair_values.forEach(function(row){ if(Array.isArray(row)) row.forEach(function(v){ if(v!=null)all.push(+v); }); });
+      if(all.length){ lo=Math.min.apply(null,all); hi=Math.max.apply(null,all); }
+    }
+    return {
+      fairValue: fair!=null?+fair.toFixed(2):null,
+      upside: up!=null?+up.toFixed(1):null,
+      fairLow: lo!=null?+lo.toFixed(2):null,
+      fairHigh: hi!=null?+hi.toFixed(2):null,
+      impliedGrowth: dcf.implied_growth_rate!=null?+(dcf.implied_growth_rate*100).toFixed(1):null,
+      wacc: dcf.wacc!=null?+(dcf.wacc*100).toFixed(1):null,
+      currentPrice: d.current_price!=null?+d.current_price:null
+    };
   }).catch(function(){return null;});
 }
 
@@ -1399,7 +1466,18 @@ function enrichCombinedUS(symbol){
     // koers erbij halen als er een Finnhub-sleutel is; anders werken we zonder koers
     // faire waarde erbij halen (optioneel; mislukt stilletjes als het endpoint niet bestaat)
     var withDcf = fetchDcfSDB(symbol).then(function(dcf){
-      if(dcf){ fund.fairValue=dcf.fairValue; fund.upside=dcf.upside; }
+      if(dcf&&(dcf.fairValue!=null||dcf.upside!=null)){
+        fund.fairValue=dcf.fairValue; fund.upside=dcf.upside;
+        fund.fairLow=dcf.fairLow; fund.fairHigh=dcf.fairHigh;
+        fund.impliedGrowth=dcf.impliedGrowth; fund.wacc=dcf.wacc;
+        fund.upsideSource="dcf";
+      }
+      // terugval: als er geen DCF is, leid het potentieel af uit de P/E t.o.v. de eigen 5-jaarshistorie.
+      // Handelt een aandeel 20% onder zijn eigen gemiddelde, dan is er ~20% ruimte tot dat niveau.
+      if(fund.upside==null && fund.peVsHist!=null){
+        fund.upside = +(-fund.peVsHist).toFixed(1);
+        fund.upsideSource = "pe-historie";
+      }
       return fund;
     });
     if(!MULTI_KEYS.finnhub) return withDcf;
@@ -2262,6 +2340,7 @@ function enrichEulerpool(symbol,token){
       // Eulerpool-specifiek
       aaqs: a.score!=null ? +a.score : null,
       expectedReturn: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
+      upside: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
       roce: rocePct,
       profitContinuity: a.profitContinuity10Y!=null ? +a.profitContinuity10Y : null,
       revG10Y: a.revenueGrowth10Y!=null ? +(a.revenueGrowth10Y*100).toFixed(1) : null,
@@ -2613,8 +2692,9 @@ function linkMenu(d){
            l.t+'<span style="display:block;font-size:10px;color:var(--muted)">'+l.d+'</span></a>';
   }).join("");
   return '<span style="position:relative;display:inline-block;margin-left:6px">'+
-    '<span onclick="toggleLinkMenu(\''+id+'\',event)" title="Meer informatie opzoeken" '+
-      'style="cursor:pointer;color:var(--blue);font-size:12px">\u2197</span>'+
+    '<span onclick="toggleLinkMenu(\''+id+'\',event)" title="Meer informatie opzoeken op externe sites" '+
+      'style="cursor:pointer;color:var(--blue);font-size:11px;border:1px solid var(--line);'+
+      'border-radius:4px;padding:1px 5px;background:var(--panel-2)">info \u2197</span>'+
     '<span id="'+id+'" style="display:none;position:absolute;top:100%;left:0;z-index:50;'+
       'background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 0;'+
       'box-shadow:0 6px 20px rgba(0,0,0,.5);min-width:190px">'+items+'</span></span>';
@@ -2789,6 +2869,7 @@ function renderPortfolio(){
 }
 if($('typeFilter'))$('typeFilter').onchange=function(){if(CURRENT.length)render();};
 if($('exchange'))$('exchange').addEventListener('change',function(){if(typeof showCostEstimate==="function")showCostEstimate();});
+if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
@@ -3292,40 +3373,59 @@ function takeSnapshot(){
   });
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
     weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value},items:items});
-  tStat("Vastgelegd: "+items.length+" aandelen op "+new Date().toLocaleDateString()+(isDemo?" (let op: demodata)":"")+".");
+  var zonderKoers=items.filter(function(it){return it.price==null;}).length;
+  var waarschuwing = zonderKoers
+    ? " \u26a0\ufe0f "+zonderKoers+" van "+items.length+" zonder koers \u2014 die kunnen later niet gemeten worden. "+
+      "Een Finnhub-sleutel levert koersen voor VS-aandelen; Eulerpool geeft alleen fundamentals."
+    : "";
+  tStat("Vastgelegd: "+items.length+" waarden op "+new Date().toLocaleDateString()+"."+waarschuwing, zonderKoers>0);
   renderSnapList();
   if(typeof saveCloud==="function")saveCloud();
 }
 
 // accuratesse meten: haal huidige koersen op voor aandelen in snapshots, vergelijk met toenmalige
 function measureAccuracy(){
-  var key=$('apikey').value.trim();
-  if(!key){tStat("Voor het meten zijn live koersen nodig \u2014 vul je FMP-sleutel in op het Screener-tabblad.",true);return;}
-  // verzamel snapshots ouder dan vandaag met niet-demo data
+  var hasKey = (typeof MULTI_KEYS!=="undefined") &&
+               (MULTI_KEYS.finnhub||MULTI_KEYS.eulerpool||MULTI_KEYS.eodhd);
+  if(!hasKey){tStat("Voor het meten zijn actuele koersen nodig \u2014 vul minstens \u00e9\u00e9n sleutel in bij Instellingen.",true);return;}
   var old=HISTORY.filter(function(s){return !s.demo;});
-  if(old.length===0){tStat("Nog geen bruikbare (niet-demo) momentopnamen. Leg eerst een live screening vast en kom later terug.",true);return;}
-  // unieke symbolen
-  var syms={};old.forEach(function(s){s.items.forEach(function(it){syms[it.symbol]=1;});});
+  if(old.length===0){tStat("Nog geen bruikbare momentopnamen. Leg eerst een echte screening vast.",true);return;}
+
+  // alleen symbolen waarvan we destijds een koers hebben vastgelegd - anders valt er niets te vergelijken
+  var syms={}, withoutPrice=0;
+  old.forEach(function(s){s.items.forEach(function(it){
+    if(it.price!=null&&it.price>0) syms[it.symbol]=1; else withoutPrice++;
+  });});
   var symList=Object.keys(syms);
-  tStat("Huidige koersen ophalen voor "+symList.length+" aandelen\u2026");
-  var prices={},apiErr=null;
+  if(!symList.length){
+    tStat("Geen van je "+old.length+" momentopnamen bevat een koers ("+withoutPrice+" waarden zonder koers). "+
+          "Dat gebeurt bij Europese aandelen, waar Eulerpool alleen fundamentals levert. "+
+          "Leg een screening vast waarin ook koersen zijn opgehaald (VS-aandelen, of met een Finnhub-sleutel actief).",true);
+    return;
+  }
+
+  tStat("Actuele koersen ophalen voor "+symList.length+" waarden\u2026");
+  var prices={}, failed=0;
   var seq=Promise.resolve();
-  symList.forEach(function(sym){
+  symList.forEach(function(sym,i){
     seq=seq.then(function(){
-      if(apiErr)return;
-      return fetch(BASE+"/quote?symbol="+sym+"&apikey="+key).then(function(r){return r.text();}).then(function(txt){
-        try{var d=JSON.parse(txt);var q=Array.isArray(d)?d[0]:d;if(q&&q.price!=null)prices[sym]=+q.price;}
-        catch(e){apiErr=txt.slice(0,100);}
-      }).catch(function(){});
+      return enrich(sym, MULTI_KEYS.finnhub||MULTI_KEYS.eulerpool||MULTI_KEYS.eodhd)
+        .then(function(d){
+          if(d&&d.price!=null) prices[sym]=d.price; else failed++;
+          if(i%4===0)tStat("Koersen ophalen\u2026 "+(i+1)+"/"+symList.length);
+        })
+        .catch(function(){failed++;});
     });
   });
   seq.then(function(){
-    if(apiErr){tStat("Koersen ophalen mislukte \u2014 FMP-melding: \""+apiErr+"\". Mogelijk je dag-limiet.",true);return;}
+    if(!Object.keys(prices).length){
+      tStat("Geen actuele koersen ontvangen ("+failed+" mislukt). Controleer je sleutels bij Instellingen.",true);
+      return;
+    }
     computeAndShowAccuracy(old,prices);
   });
 }
 
-// bereken: hangt hogere score samen met hoger werkelijk rendement?
 function computeAndShowAccuracy(snaps,prices){
   var pairs=[]; // {score,m,v,g,ret}
   snaps.forEach(function(s){
