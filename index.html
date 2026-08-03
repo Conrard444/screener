@@ -261,6 +261,7 @@
           <option value="all">Alles</option>
           <option value="operating">Alleen bedrijven</option>
           <option value="holding">Alleen holdings</option>
+          <option value="new">Verberg wat ik al heb</option>
         </select>
       </div>
     </div>
@@ -295,6 +296,7 @@
           <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
           <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
+          <th data-k="upside" title="Geschat opwaarts potentieel: het verschil tussen de berekende faire waarde en de huidige koers, in procent. Voor VS-aandelen uit een DCF-model (SecuritiesDB), voor Europese uit Eulerpool's verwacht rendement. Belangrijk: dit is een modeluitkomst op basis van aannames over toekomstige kasstromen &mdash; geen voorspelling, en modellen verschillen sterk in uitkomst.">Potentieel<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
           <th data-k="score" title="Gecombineerde score 0-100, samengesteld uit momentum, waardering en groei volgens de weegregelaars hierboven. Hoger = stijgt én relatief goedkoop én groeiend. Een startpunt voor onderzoek, geen koopsignaal.">Score<span class="q">?</span></th>
         </tr>
@@ -307,6 +309,10 @@
     <b>Werkwijze &mdash; onderbouwd door factoronderzoek.</b> De vier pijlers volgen de academisch best gedocumenteerde aandelenfactoren: <b>momentum</b> (recente winnaars presteren historisch vaker door; het sterkst onderbouwde effect, over 150 jaar en 46 landen), <b>waardering</b> (goedkoop t.o.v. fundamentals, sector-relatief berekend), <b>kwaliteit</b> (hoge winstgevendheid, gezonde marges, lage schulden &mdash; veerkrachtig in volatiele markten) en <b>groei</b>. Eerlijke noot: groei op zichzelf is de zwakst onderbouwde van de vier &mdash; snelgroeiende bedrijven leveren historisch g&eacute;&eacute;n premie, winstg&eacute;vende wel; daarom staat de standaardweging van groei laag en die van kwaliteit en momentum hoog.<br>
     <b>Herstel-modus (overdreven dalers):</b> zoekt aandelen die hard daalden vanaf hun 52-weeks top maar fundamenteel gezond bleven — score = 30% dalingsdiepte + 35% kwaliteit + 35% waardering, en de val-trap filtert terecht gestrafte aandelen weg. Het label bij de daling onderscheidt macro-brede dalingen ("met sector mee") van bedrijfsspecifieke ("eigen probleem?"). Eerlijke noot: onderzoek waarschuwt dat dalers op 6-12 maanden gemiddeld dóór dalen; herstel-effecten spelen vooral op jaren. Deze modus zoekt kwaliteit die goedkoop werd, geen bodem — die kan niemand timen.<br>
     <b>Val-trap weegt mee:</b> een rode <span class="trap danger">val-trap</span> kost 25% van de totaalscore, een oranje <span class="trap warn">let op</span> 10%.<br>
+    <b>Overlap met je portefeuille:</b> naast de ticker verschijnt een label als een resultaat raakt aan wat je al bezit &mdash;
+    <span class="trap danger">in bezit</span> (exact deze positie), <span class="trap danger">duplicaat</span> (zelfde effect, andere beursnotering),
+    <span class="trap warn">via ETF</span> (zit als grote positie in een fonds dat je hebt) of <span class="trap">sector</span> (je hebt er al meerdere in deze sector).
+    Met het Type-filter kun je alles wat je al hebt in &eacute;&eacute;n klik verbergen.<br>
     <b>Belangrijk:</b> ook gedocumenteerde factoren zijn historische gemiddelden met lange periodes van tegenwind &mdash; geen voorspelling. De score rangschikt aandelen op publieke cijfers die de markt al kent; het blijft een onderzoeksfilter, geen koopsignaal.
   </p>
 
@@ -520,9 +526,12 @@
         </div>
         <span id="stat_eulerpool" class="trap" style="align-self:center">niet ingesteld</span>
       </div>
-      <div class="control-row">
+      <!-- FMP is uitgeschakeld: kwam in de praktijk nooit aan de beurt (SecuritiesDB/Finnhub/Eulerpool
+           dekken alles af) en de gratis tier blokkeert Europese tickers. Code blijft intact als reserve;
+           zet display:block hieronder om hem weer zichtbaar te maken. -->
+      <div class="control-row" id="fmpRow" style="display:none">
         <div class="field" style="flex:1;min-width:220px">
-          <label>FMP-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; wisselende symbooldekking</span></label>
+          <label>FMP-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; reserve, standaard uit</span></label>
           <input type="password" id="key_fmp" placeholder="financialmodelingprep.com" autocomplete="off" style="width:100%">
         </div>
         <span id="stat_fmp" class="trap" style="align-self:center">niet ingesteld</span>
@@ -547,9 +556,9 @@
 
     <div class="snap" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
       <b>Bronvoorkeur per markt</b> (gebruikt wanneer automatisch kiezen aanstaat):<br>
-      &bull; Amerikaanse tickers (geen suffix) &rarr; Finnhub, dan FMP, dan EODHD<br>
-      &bull; Europese tickers (.AS, .BR, .PA, .DE, .ST, .CO, .OL, .HE, .MI, .SW, .L) &rarr; <b>Eulerpool</b>, dan EODHD, dan FMP, dan Finnhub<br>
-      &bull; Aziatische tickers (.HK) &rarr; EODHD, dan FMP<br>
+      &bull; Amerikaanse aandelen &rarr; <b>SecuritiesDB</b> (fundamentals, geen sleutel) + <b>Finnhub</b> (koers)<br>
+      &bull; Europese aandelen (.AS, .BR, .PA, .DE, .ST, .CO, .OL, .HE, .MI, .SW) &rarr; <b>Eulerpool</b>, dan EODHD<br>
+      &bull; ETF's &rarr; <b>SecuritiesDB</b> voor VS-fondsen, <b>Eulerpool</b> voor Europese (UCITS)<br>
       Bij een blokkade of limiet schuift de tool automatisch door naar de volgende bron in de rij.
     </div>
   </div><!-- /tab-settings -->
@@ -788,8 +797,12 @@ function render(){
   var source=CURRENT;
   if(typeMode==="holding") source=CURRENT.filter(function(d){return isHolding(d.symbol);});
   else if(typeMode==="operating") source=CURRENT.filter(function(d){return !isHolding(d.symbol);});
+  else if(typeMode==="new") source=CURRENT.filter(function(d){
+    var o=portfolioOverlapFor(d);
+    return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
+  });
   var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",qual:"_q",trap:"_trap",score:"_s"};
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",qual:"_q",trap:"_trap",score:"_s"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -798,6 +811,7 @@ function render(){
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
       (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
+      overlapBadge(d)+
       (isHolding(d.symbol)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
       '<span class="nm">'+(d.name||"")+'</span></td>'+
@@ -841,6 +855,14 @@ function render(){
         (d.aaqs!=null?'<span style="display:block;font-size:9px;color:var(--muted)">AAQS '+d.aaqs+'/10</span>':
          d.piotroski!=null?'<span style="display:block;font-size:9px;color:var(--muted)">F'+d.piotroski+(d.altmanZ!=null?' Z'+d.altmanZ:'')+'</span>':'')+
         '</td>'+
+      (function(){
+        var up = d.upside!=null ? d.upside : (d.expectedReturn!=null ? d.expectedReturn : null);
+        if(up==null) return '<td class="num">\u2014</td>';
+        var cls = up>=15 ? "pos" : (up<=-10 ? "neg" : "");
+        var tip = d.fairValue!=null ? "Faire waarde: "+d.fairValue+(d.price!=null?" vs koers "+d.price:"")
+                : (d.expectedReturn!=null ? "Verwacht jaarrendement volgens Eulerpool" : "");
+        return '<td class="num '+cls+'"'+(tip?' title="'+tip+'" style="cursor:help"':'')+'>'+(up>0?"+":"")+up.toFixed(0)+'%</td>';
+      })()+
       '<td>'+trap+'</td>'+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
@@ -1155,10 +1177,15 @@ var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
 var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
 
+// FMP staat standaard uit (zie FMP_ENABLED). De code blijft bestaan als reserve:
+// zet FMP_ENABLED op true en maak #fmpRow zichtbaar om hem weer in te schakelen.
+var FMP_ENABLED=false;
 function sourceOrderFor(symbol){
-  if(ASIA_SUFFIX.test(symbol)) return ["eodhd","fmp"];
-  if(EU_SUFFIX.test(symbol))   return ["eulerpool","eodhd","fmp","finnhub"]; // Eulerpool eerst voor Europa
-  return ["finnhub","fmp","eodhd"]; // VS
+  var order;
+  if(ASIA_SUFFIX.test(symbol))      order=["eodhd","fmp"];
+  else if(EU_SUFFIX.test(symbol))   order=["eulerpool","eodhd","fmp","finnhub"]; // Eulerpool eerst voor Europa
+  else                              order=["finnhub","fmp","eodhd"];             // VS
+  return FMP_ENABLED ? order : order.filter(function(s){return s!=="fmp";});
 }
 function multiEnabled(){var el=document.getElementById('multiSource');return el?el.checked:false;}
 function enrichWithSource(symbol,src,key){
@@ -1169,17 +1196,37 @@ function enrichWithSource(symbol,src,key){
 }
 // probeert de bronnen op volgorde; geeft het eerste bruikbare resultaat terug (met _src erin)
 // Voor VS-aandelen: SecuritiesDB voor de fundamentals (Piotroski/Altman/ROIC) + koers uit Finnhub
+// DCF-waardering: geschatte faire waarde en opwaarts potentieel (SecuritiesDB, VS-aandelen)
+function fetchDcfSDB(symbol){
+  return getJson(SDB_BASE+"/stocks/"+encodeURIComponent(symbol)+"/dcf").then(function(res){
+    var d=(res&&res.data)||{};
+    var v=d.valuation||d;
+    var fair = v.fair_value!=null?+v.fair_value : (v.intrinsic_value!=null?+v.intrinsic_value:null);
+    var up = v.upside_pct!=null?+v.upside_pct : (v.upside!=null?+(v.upside*100):null);
+    return {fairValue:fair!=null?+fair.toFixed(2):null, upside:up!=null?+up.toFixed(1):null};
+  }).catch(function(){return null;});
+}
+
 function enrichCombinedUS(symbol){
   return enrichSDBStock(symbol).then(function(fund){
     // koers erbij halen als er een Finnhub-sleutel is; anders werken we zonder koers
-    if(!MULTI_KEYS.finnhub) return fund;
-    return enrichFinnhub(symbol,MULTI_KEYS.finnhub).then(function(q){
+    // faire waarde erbij halen (optioneel; mislukt stilletjes als het endpoint niet bestaat)
+    var withDcf = fetchDcfSDB(symbol).then(function(dcf){
+      if(dcf){ fund.fairValue=dcf.fairValue; fund.upside=dcf.upside; }
+      return fund;
+    });
+    if(!MULTI_KEYS.finnhub) return withDcf;
+    return withDcf.then(function(f){return enrichFinnhub(symbol,MULTI_KEYS.finnhub).then(function(q){
       fund.price=q.price; fund.chg=q.chg; fund.mom1m=q.mom1m; fund.dd=q.dd;
       if(fund.pe==null)fund.pe=q.pe;
       if(fund._mcap==null)fund._mcap=q._mcap;
       fund._src="securitiesdb+finnhub";
+      // als we een faire waarde hebben maar geen upside, bereken die uit de koers
+      if(fund.fairValue!=null&&fund.upside==null&&fund.price!=null&&fund.price>0){
+        fund.upside=+(((fund.fairValue-fund.price)/fund.price)*100).toFixed(1);
+      }
       return fund;
-    }).catch(function(){return fund;}); // koers mislukt -> fundamentals blijven bruikbaar
+    }).catch(function(){return f;});}); // koers mislukt -> fundamentals blijven bruikbaar
   });
 }
 
@@ -1537,12 +1584,13 @@ if($('demo'))$('demo').onclick=function(){DEMO_ACTIVE=true;CURRENT=DEMO;render()
 $('csv').onclick=function(){
   if(!CURRENT.length){$('status').className="status";$('status').textContent="Niets te exporteren \u2014 draai eerst een screening.";return;}
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT);
-  var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","valtrap","totaalscore"];
+  var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","potentieel_pct","valtrap","totaalscore"];
   function esc(v){if(v==null)return"";var s=String(v);return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
   var rows=CURRENT.map(function(d){
     var t=valueTrap(d);
     return [d.symbol,isinOf(d),d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.revG,d.epsG,d.roe,d.margin,d.de,
       momentumScore(d),valuationScore(d),growthScore(d),qualityScore(d),
+      (d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),
       (t.level===2?"val-trap":t.level===1?"let op":"consistent"),totalScore(d)].map(esc).join(";");
   });
   var csv="\ufeff"+head.join(";")+"\n"+rows.join("\n"); // BOM voor Excel, puntkomma voor EU-locale
@@ -1632,7 +1680,7 @@ function updateSourceIndicator(){
   if(MULTI_KEYS.finnhub)active.push("Finnhub");
   if(MULTI_KEYS.eulerpool)active.push("Eulerpool");
   if(MULTI_KEYS.eodhd)active.push("EODHD");
-  if(MULTI_KEYS.fmp)active.push("FMP");
+  if(FMP_ENABLED&&MULTI_KEYS.fmp)active.push("FMP");
   active.push("SecuritiesDB"); // altijd beschikbaar, geen sleutel nodig
   el.innerHTML = active.length>1
     ? 'Actieve bronnen: <b style="color:var(--green)">'+active.join(", ")+'</b>'
@@ -1674,7 +1722,6 @@ function testAllKeys(){
   var tests=[
     {src:"finnhub",sym:"AAPL"},
     {src:"eodhd",sym:"ASML.AS"},
-    {src:"fmp",sym:"AAPL"},
     {src:"eulerpool",sym:"ASML.AS"}
   ].filter(function(t){return MULTI_KEYS[t.src];});
   if(!tests.length){st.className="status err";st.textContent="Geen sleutels ingevuld om te testen.";return;}
@@ -1877,7 +1924,7 @@ function renderEtf(){
     if(d.isLeveraged)riskBadge+='<span class="trap danger" title="Hefboomfonds: versterkt zowel winst als verlies, en is door dagelijkse herbalancering ongeschikt om lang aan te houden." style="margin-left:4px">hefboom</span>';
     if(d.isInverse)riskBadge+='<span class="trap danger" title="Invers fonds: beweegt tegengesteld aan de index. Door dagelijkse herbalancering ongeschikt voor lange termijn." style="margin-left:4px">invers</span>';
     return '<tr>'+
-      '<td class="l"><span class="tk">'+d.symbol+'</span>'+riskBadge+
+      '<td class="l"><span class="tk">'+d.symbol+'</span>'+riskBadge+overlapBadge(d)+
       '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+(d.name||"")+'</span></td>'+
       '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
         (d.isin?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+d.isin+'\',this)">'+d.isin+'</span>':'\u2014')+'</td>'+
@@ -2018,6 +2065,7 @@ function enrichEulerpool(symbol,token){
       de: a.netDebtToEBIT!=null ? +(+a.netDebtToEBIT).toFixed(2) : null,
       // Eulerpool-specifiek
       aaqs: a.score!=null ? +a.score : null,
+      expectedReturn: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
       roce: rocePct,
       profitContinuity: a.profitContinuity10Y!=null ? +a.profitContinuity10Y : null,
       revG10Y: a.revenueGrowth10Y!=null ? +(a.revenueGrowth10Y*100).toFixed(1) : null,
@@ -2447,7 +2495,9 @@ function renderPortfolio(){
         : '')+
       (p._fresh&&!p._fresh.isEtf? (isHolding(p.symbol)
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
-        : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span></div>'
+        : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span>'+
+          (p._fresh.upside!=null?'<span title="Modelmatig geschat opwaarts potentieel \u2014 geen voorspelling">Potentieel <b class="'+(p._fresh.upside>=15?"pos":(p._fresh.upside<=-10?"neg":""))+'">'+(p._fresh.upside>0?"+":"")+p._fresh.upside.toFixed(0)+'%</b></span>':'')+
+          '</div>'
       ) : '')+
       (!p._fresh && !p.isin && !isinFor(p.symbol)
         ? '<div class="pf-alarm-text" style="color:var(--muted)">\u2139\ufe0f Voor Europese aandelen is een <b>ISIN</b> nodig (Eulerpool werkt daarop). '+
@@ -2479,6 +2529,75 @@ if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
+// ---- Overlap met je eigen portefeuille, getoond tijdens het screenen ----
+// Vier soorten signalen, van sterk naar zwak:
+//   bezit    = je hebt dit exact al
+//   zelfde   = zelfde fonds, andere beursnotering (zelfde ISIN)
+//   in-etf   = dit aandeel zit als grote positie in een ETF die je bezit
+//   sector   = je hebt al posities in dezelfde sector
+function portfolioOverlapFor(d){
+  if(typeof PORTFOLIO==="undefined"||!PORTFOLIO||!PORTFOLIO.length) return null;
+  var sym=(d.symbol||"").toUpperCase();
+  var isin=(typeof isinOf==="function"?isinOf(d):null);
+
+  // 1) exact dezelfde positie
+  for(var i=0;i<PORTFOLIO.length;i++){
+    if((PORTFOLIO[i].symbol||"").toUpperCase()===sym){
+      return {kind:"bezit",level:"high",text:"Je bezit dit al ("+PORTFOLIO[i].qty+" stuks)"};
+    }
+  }
+  // 2) zelfde effect onder een andere notering (via ISIN)
+  if(isin){
+    for(var j=0;j<PORTFOLIO.length;j++){
+      var pIsin=PORTFOLIO[j].isin||(typeof isinFor==="function"?isinFor(PORTFOLIO[j].symbol):null);
+      if(pIsin&&pIsin===isin){
+        return {kind:"zelfde",level:"high",text:"Zelfde effect als je positie "+PORTFOLIO[j].symbol+" (ISIN "+isin+")"};
+      }
+    }
+    // zelfde fonds via de aliassen die Eulerpool meegaf
+    if(typeof EULER_ETF_ALIASES!=="undefined"&&EULER_ETF_ALIASES[sym]){
+      for(var k=0;k<PORTFOLIO.length;k++){
+        var alias=EULER_ETF_ALIASES[(PORTFOLIO[k].symbol||"").toUpperCase()];
+        if(alias&&alias===EULER_ETF_ALIASES[sym]){
+          return {kind:"zelfde",level:"high",text:"Zelfde fonds als je positie "+PORTFOLIO[k].symbol};
+        }
+      }
+    }
+  }
+  // 3) zit als grote positie in een ETF die je bezit
+  if(typeof ETF_TOP_HOLDINGS!=="undefined"){
+    var via=[];
+    PORTFOLIO.forEach(function(p){
+      var h=ETF_TOP_HOLDINGS[(p.symbol||"").toUpperCase()];
+      if(h&&h[sym]) via.push(p.symbol+" ("+h[sym]+"%)");
+    });
+    if(via.length){
+      return {kind:"in-etf",level:"mid",text:"Zit al in je "+via.join(" en ")};
+    }
+  }
+  // 4) sectoroverlap - zwakste signaal, alleen melden bij duidelijke concentratie
+  if(d.sector){
+    var same=PORTFOLIO.filter(function(p){
+      return p._fresh&&p._fresh.sector===d.sector;
+    });
+    if(same.length>=2){
+      return {kind:"sector",level:"low",
+        text:"Je hebt al "+same.length+" posities in "+d.sector+" ("+same.slice(0,3).map(function(p){return p.symbol;}).join(", ")+(same.length>3?"\u2026":"")+")"};
+    }
+  }
+  return null;
+}
+function overlapBadge(d){
+  var o=portfolioOverlapFor(d);
+  if(!o) return "";
+  var cls = o.level==="high" ? "trap danger" : (o.level==="mid" ? "trap warn" : "trap");
+  var label = o.kind==="bezit" ? "in bezit"
+            : o.kind==="zelfde" ? "duplicaat"
+            : o.kind==="in-etf" ? "via ETF"
+            : "sector";
+  return '<span class="'+cls+'" title="'+o.text.replace(/"/g,"&quot;")+'" style="margin-left:6px">'+label+'</span>';
+}
+
 // ---- Overlap-analyse: index-dubbelingen tussen ETF's + losse aandelen die ook in je ETF's zitten ----
 // haalt de ECHTE overlap op tussen alle ETF-paren in de portefeuille (SecuritiesDB, gratis)
 var REAL_OVERLAP={}; // "A|B" -> percentage
@@ -2661,7 +2780,8 @@ function checkAllPositions(){
         var comp=dataCompleteness(d);
         var fresh=holding
           ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true,src:d._src||null,completeness:comp}
-          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null,completeness:comp};
+          : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null,completeness:comp,
+             upside:(d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),fairValue:d.fairValue||null};
         pos._fresh=fresh;
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
@@ -3277,16 +3397,22 @@ function loadCloud(){
     if(data.keys){
       $('syncKeys').checked=true; // er stonden sleutels in de cloud -> sync stond aan
       var firstWithKey=null;
-      ['finnhub','fmp','eodhd'].forEach(function(src){
-        if(data.keys[src]){KEYCACHE[src]=data.keys[src];gotKeys++;
+      ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){
+        if(data.keys[src]){
+          KEYCACHE[src]=data.keys[src];
+          MULTI_KEYS[src]=data.keys[src];          // ook de actieve bronketen bijwerken
+          gotKeys++;
           if(firstWithKey===null)firstWithKey=src;
-          LS.set(keyStorageId(src),data.keys[src]);
+          LS.set(keyStorageId(src),data.keys[src]); // lokaal bewaren voor volgende keer
+          var f=$('key_'+src);                      // het zichtbare veld in Instellingen invullen
+          if(f)f.value=data.keys[src];
+          if(typeof setKeyStatus==="function")setKeyStatus(src,"ok","ingesteld");
         }
       });
-      // schakel naar de bron waarvoor een sleutel bestaat (als de huidige er geen heeft) en vul het veld
       var cur=$('source').value;
       if(!KEYCACHE[cur] && firstWithKey){ $('source').value=firstWithKey; updateKeyLabel(); cur=firstWithKey; }
       $('apikey').value=KEYCACHE[cur]||"";
+      if(typeof updateSourceIndicator==="function")updateSourceIndicator();
     }
     // portefeuille uit cloud overnemen (cloud-versie wint als hij bestaat en lokaal leeg is, anders lokaal behouden)
     if(data.portfolio && (!PORTFOLIO || PORTFOLIO.length===0)){
@@ -3346,7 +3472,7 @@ function saveKeysCloud(){
   var on=$('syncKeys')&&$('syncKeys').checked;
   if(on){
     var keys={};
-    ['finnhub','fmp','eodhd'].forEach(function(src){if(KEYCACHE[src])keys[src]=KEYCACHE[src];});
+    ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){if(KEYCACHE[src])keys[src]=KEYCACHE[src];});
     FB.db.collection("users").doc(FB.user.uid).set({keys:keys},{merge:true}).catch(function(){});
   }else{
     // checkbox uit -> sleutels uit de cloud verwijderen
