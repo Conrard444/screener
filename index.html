@@ -231,6 +231,7 @@
         <option value="alles" selected>Kolommen: alles</option>
       </select>
       <button class="btn-go" id="run" style="margin-left:auto">Screenen</button>
+      <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken">Laatste tonen</button>
       <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
       <select id="source" style="display:none"><option value="finnhub" selected>finnhub</option><option value="fmp">fmp</option><option value="eodhd">eodhd</option></select>
@@ -369,6 +370,7 @@
           <input type="text" id="etfTickers" value="SPY, QQQ, VTI, VOO, VXUS, VEA, VWO, IWM, SCHD, VYM, ARKK, XLK, XLF, XLE, BND, AGG" style="width:100%">
         </div>
         <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
+        <button class="btn-ghost" id="etfLoadLast" title="Toon de laatste vergelijking opnieuw, zonder API-calls">Laatste tonen</button>
       </div>
       <div class="control-row compact">
         <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging:</span>
@@ -567,6 +569,7 @@
     <div class="snap" style="border-left:3px solid var(--green);font-size:12.5px;color:var(--muted)">
       <b>Verbruik per bron</b> <span style="opacity:.6">(eigen telling in deze browser, geen officieel saldo van de aanbieder)</span>
       <div id="quotaDetail" style="margin-top:8px"></div>
+      <div id="storageDetail" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)"></div>
       <button class="btn-ghost" id="resetQuota" style="margin-top:8px">Teller op nul zetten</button>
     </div>
 
@@ -1259,9 +1262,40 @@ function getJson(url){
 // dispatcher: kiest de juiste bron
 // ---- Laatste screening bewaren en terugladen ----
 // Zo hoef je bij het opstarten niet meteen opnieuw API-calls te verbruiken om iets te zien.
+// alleen de velden bewaren die nodig zijn om de tabel opnieuw te tonen,
+// anders loop je bij grote screenings tegen de opslaglimiet van de browser aan
+var RUN_FIELDS=['symbol','name','isin','market','sector','price','chg','mom1m','dd','pe','peg','pb',
+  'revG','epsG','roe','margin','de','piotroski','altmanZ','altmanZone','beneishFlag','roicSpread',
+  'peVsHist','aaqs','roce','profitContinuity','expectedReturn','upside','fairValue','fairLow','fairHigh',
+  'impliedGrowth','upsideSource','vol','ter','aum','holdings','top10','yield','trackingIndex',
+  'isLeveraged','isInverse','_mcap','_src'];
+function slimRun(data){
+  return (data||[]).map(function(d){
+    var o={};
+    RUN_FIELDS.forEach(function(f){ if(d[f]!==undefined&&d[f]!==null)o[f]=d[f]; });
+    return o;
+  });
+}
 function saveLastRun(kind,data,params){
-  var payload={ts:Date.now(),kind:kind,params:params||{},data:data||[]};
-  try{ LS.set('lastRun_'+kind,JSON.stringify(payload)); }catch(e){}
+  var payload={ts:Date.now(),kind:kind,params:params||{},data:slimRun(data)};
+  var json;
+  try{ json=JSON.stringify(payload); }catch(e){ return; }
+  // te groot voor de browser-opslag? bewaar dan alleen de top om toch iets te tonen
+  if(json.length>3500000){
+    payload.data=payload.data.slice(0,80); payload.truncated=true;
+    try{ json=JSON.stringify(payload); }catch(e){ return; }
+  }
+  try{
+    LS.set('lastRun_'+kind,json).then(function(ok){
+      if(!ok)console.warn('Kompas: laatste screening kon niet lokaal bewaard worden');
+    });
+  }catch(e){ console.warn('Kompas: opslagfout',e); }
+  // ook naar Firestore, zodat je hem op je andere apparaten terugziet
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    var upd={}; upd['lastRun_'+kind]=payload;
+    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true})
+      .catch(function(e){ console.warn('Kompas: cloud-opslag screening mislukt',e&&e.message); });
+  }
   // ook naar de cloud, zodat je hem op je andere apparaten terugziet
   if(typeof FB!=="undefined"&&FB.user&&FB.ready){
     var upd={}; upd['lastRun_'+kind]=payload;
@@ -1270,8 +1304,21 @@ function saveLastRun(kind,data,params){
 }
 function loadLastRun(kind){
   return LS.get('lastRun_'+kind).then(function(r){
-    if(!r||!r.value)return null;
-    try{ return JSON.parse(r.value); }catch(e){ return null; }
+    var local=null;
+    if(r&&r.value){ try{ local=JSON.parse(r.value); }catch(e){} }
+    // als we ingelogd zijn: kijken of de cloud een nieuwere versie heeft
+    if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+      return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+        var cloud=doc.exists?doc.data()['lastRun_'+kind]:null;
+        if(cloud&&cloud.data&&cloud.data.length&&(!local||cloud.ts>local.ts)){
+          try{ LS.set('lastRun_'+kind,JSON.stringify(cloud)); }catch(e){}
+          cloud.fromCloud=true;
+          return cloud;
+        }
+        return local;
+      }).catch(function(){ return local; });
+    }
+    return local;
   }).catch(function(){return null;});
 }
 // leesbare samenvatting van wanneer en met welke instellingen
@@ -1373,7 +1420,42 @@ function estimateCalls(n,universeSymbols){
     total: us*4 + eu*2
   };
 }
+// toont wat er lokaal bewaard staat - handig om te zien of opslag werkt
+function renderStorageDetail(){
+  var el=document.getElementById('storageDetail'); if(!el)return;
+  if(!LS.available){
+    el.innerHTML='<span class="neg">\u26a0\ufe0f Browseropslag is niet beschikbaar</span> \u2014 sta opslag toe voor deze site, anders gaat alles verloren bij het sluiten.';
+    return;
+  }
+  Promise.all([loadLastRun('stocks'),loadLastRun('etfs')]).then(function(r){
+    var s=r[0],e=r[1];
+    var lines=[];
+    lines.push('Laatste aandelen-screening: '+(s&&s.data?('<b>'+s.data.length+'</b> waarden \u00b7 '+new Date(s.ts).toLocaleString()):'<span style="opacity:.6">niets bewaard</span>'));
+    lines.push('Laatste ETF-vergelijking: '+(e&&e.data?('<b>'+e.data.length+'</b> fondsen \u00b7 '+new Date(e.ts).toLocaleString()):'<span style="opacity:.6">niets bewaard</span>'));
+    var used=0;
+    try{ for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(k.indexOf('kompas_')===0)used+=(localStorage.getItem(k)||"").length;} }catch(ex){}
+    lines.push('Opslagruimte in gebruik: <b>'+(used/1024).toFixed(0)+' kB</b> <span style="opacity:.6">(limiet meestal ~5 MB)</span>');
+    // cloudstatus
+    if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+      lines.push('\u2601\ufe0f Cloud: ingelogd als <b>'+(FB.user.displayName||FB.user.email)+'</b> \u2014 screenings worden ook in je account bewaard');
+      FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+        var d=doc.exists?doc.data():{};
+        var extra=[];
+        ['stocks','etfs'].forEach(function(k){
+          var r=d['lastRun_'+k];
+          extra.push('In de cloud \u2014 '+(k==='stocks'?'aandelen':"ETF's")+': '+
+            (r&&r.data?('<b>'+r.data.length+'</b> waarden \u00b7 '+new Date(r.ts).toLocaleString()):'<span style="opacity:.6">niets</span>'));
+        });
+        el.innerHTML=lines.concat(extra).join('<br>');
+      }).catch(function(){ el.innerHTML=lines.join('<br>'); });
+    } else {
+      lines.push('\u2601\ufe0f Cloud: <b>niet ingelogd</b> \u2014 log in bij Tracking om screenings tussen apparaten te delen');
+      el.innerHTML=lines.join('<br>');
+    }
+  });
+}
 function renderQuotaDetail(){
+  renderStorageDetail();
   var el=document.getElementById('quotaDetail'); if(!el)return;
   var rows=Object.keys(API_LIMITS).map(function(s){
     if(s==="fmp"&&typeof FMP_ENABLED!=="undefined"&&!FMP_ENABLED)return "";
@@ -2520,6 +2602,21 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
 ETF_CURRENT=[];
+function showLastEtfRun(silent){
+  return loadLastRun('etfs').then(function(run){
+    if(!run||!run.data||!run.data.length){
+      if(!silent){$('etfStatus').className="status";$('etfStatus').innerHTML='Geen bewaarde vergelijking gevonden.';}
+      return false;
+    }
+    ETF_CURRENT=run.data; renderEtf();
+    $('etfStatus').className="status";
+    $('etfStatus').innerHTML='\ud83d\udcbe Laatste vergelijking \u2014 '+describeRun(run)+
+      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
+    return true;
+  }).catch(function(){return false;});
+}
+if($('etfLoadLast'))$('etfLoadLast').onclick=function(){showLastEtfRun(false);};
+
 loadLastRun('etfs').then(function(run){
   if(!run||!run.data||!run.data.length)return;
   ETF_CURRENT=run.data;
@@ -3792,6 +3889,7 @@ function loadCloud(){
     // screener-instellingen (universum/weging/horizon/modus) herstellen
     if(data.settings && typeof applySettings==="function"){ applySettings(data.settings); }
     // laatste screenings uit de cloud overnemen als ze nieuwer zijn dan wat lokaal staat
+    // (bij het opstarten was Firebase nog niet klaar, dus dit is de echte laadpoging)
     ['stocks','etfs'].forEach(function(kind){
       var cloudRun=data['lastRun_'+kind];
       if(!cloudRun||!cloudRun.data||!cloudRun.data.length)return;
@@ -3800,18 +3898,26 @@ function loadCloud(){
         if(r&&r.value){ try{ localTs=(JSON.parse(r.value)||{}).ts||0; }catch(e){} }
         if(cloudRun.ts>localTs){
           LS.set('lastRun_'+kind,JSON.stringify(cloudRun));
-          if(kind==='etfs'&&(!ETF_CURRENT||!ETF_CURRENT.length)){
+          if(kind==='etfs'){
             ETF_CURRENT=cloudRun.data; renderEtf();
             $('etfStatus').className="status";
-            $('etfStatus').innerHTML='\u2601\ufe0f Laatste vergelijking van een ander apparaat \u2014 '+describeRun(cloudRun);
+            $('etfStatus').innerHTML='\u2601\ufe0f Laatste vergelijking uit je account \u2014 '+describeRun(cloudRun)+
+              ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
           }
-          if(kind==='stocks'&&(!CURRENT||!CURRENT.length)){
+          if(kind==='stocks'){
             SCORESET=cloudRun.data.slice(); buildPeers(SCORESET);
             var lim=parseInt((cloudRun.params&&cloudRun.params.limit)||25,10);
             CURRENT=cloudRun.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
+            if(cloudRun.params){
+              ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
+                var el=$(k); if(el&&cloudRun.params[k]!=null)el.value=cloudRun.params[k];
+              });
+              if(typeof syncWeightUI==="function")syncWeightUI();
+            }
             render();
             $('status').className="status";
-            $('status').innerHTML='\u2601\ufe0f Laatste screening van een ander apparaat \u2014 '+describeRun(cloudRun);
+            $('status').innerHTML='\u2601\ufe0f Laatste screening uit je account \u2014 '+describeRun(cloudRun)+
+              ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
           }
         }
       }).catch(function(){});
@@ -3874,7 +3980,38 @@ if(typeof loadCallLog==="function")loadCallLog();
 setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate();},300);
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
 
-// laatste screening terugladen (geen API-calls nodig)
+// laatste screening tonen - herbruikbaar, ook via de knop
+function showLastRun(silent){
+  return loadLastRun('stocks').then(function(run){
+    if(!run||!run.data||!run.data.length){
+      if(!silent){
+        $('status').className="status";
+        $('status').innerHTML='Geen bewaarde screening gevonden. Klik <b>Screenen</b> om er een te maken.';
+      }
+      return false;
+    }
+    SCORESET=run.data.slice();
+    var lim=parseInt((run.params&&run.params.limit)||25,10);
+    buildPeers(SCORESET);
+    CURRENT=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
+    if(run.params){
+      ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
+        var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
+      });
+      if(typeof syncWeightUI==="function")syncWeightUI();
+    }
+    render();
+    $('status').className="status";
+    $('status').innerHTML='\ud83d\udcbe Laatste screening \u2014 '+describeRun(run)+
+      (run.truncated?' <span style="color:var(--accent)">(top 80 bewaard)</span>':'')+
+      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
+    if(typeof showCostEstimate==="function")showCostEstimate();
+    return true;
+  }).catch(function(){return false;});
+}
+if($('loadLast'))$('loadLast').onclick=function(){showLastRun(false);};
+
+// automatisch bij het opstarten
 loadLastRun('stocks').then(function(run){
   if(!run||!run.data||!run.data.length)return;
   SCORESET=run.data.slice();
