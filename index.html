@@ -767,6 +767,298 @@ function dampedScore(d,raw){
   return Math.round(avg);
 }
 // ruwe (ongedempte) totaalscore
+var SECTOR={
+  // US Tech & Communication
+  AAPL:"Technologie",MSFT:"Technologie",NVDA:"Technologie",AVGO:"Technologie",ORCL:"Technologie",
+  ADBE:"Technologie",CRM:"Technologie",AMD:"Technologie",INTC:"Technologie",QCOM:"Technologie",
+  TXN:"Technologie",CSCO:"Technologie",IBM:"Technologie",NOW:"Technologie",INTU:"Technologie",
+  AMAT:"Technologie",MU:"Technologie",ADI:"Technologie",LRCX:"Technologie",KLAC:"Technologie",
+  GOOGL:"Communicatie",META:"Communicatie",NFLX:"Communicatie",CMCSA:"Communicatie",T:"Communicatie",
+  VZ:"Communicatie",DIS:"Communicatie",
+  // US Financials
+  JPM:"Financieel",BAC:"Financieel",WFC:"Financieel",GS:"Financieel",MS:"Financieel",C:"Financieel",
+  BLK:"Financieel",SCHW:"Financieel",AXP:"Financieel",V:"Financieel",MA:"Financieel",PYPL:"Financieel",
+  // US Healthcare
+  JNJ:"Gezondheidszorg",UNH:"Gezondheidszorg",LLY:"Gezondheidszorg",PFE:"Gezondheidszorg",
+  MRK:"Gezondheidszorg",ABBV:"Gezondheidszorg",TMO:"Gezondheidszorg",ABT:"Gezondheidszorg",
+  DHR:"Gezondheidszorg",BMY:"Gezondheidszorg",AMGN:"Gezondheidszorg",GILD:"Gezondheidszorg",
+  // US Consumer
+  WMT:"Consument",COST:"Consument",HD:"Consument",LOW:"Consument",NKE:"Consument",MCD:"Consument",
+  SBUX:"Consument",TGT:"Consument",PG:"Consument",KO:"Consument",PEP:"Consument",PM:"Consument",
+  MDLZ:"Consument",AMZN:"Consument",TSLA:"Consument",
+  // US Energy & Industrials
+  XOM:"Energie",CVX:"Energie",COP:"Energie",SLB:"Energie",
+  BA:"Industrie",CAT:"Industrie",GE:"Industrie",HON:"Industrie",UNP:"Industrie",UPS:"Industrie",LMT:"Industrie",
+  // EU Tech & Communication
+  "ASML.AS":"Technologie","SAP.DE":"Technologie","ADYEN.AS":"Technologie","IFX.DE":"Technologie",
+  "PRX.AS":"Technologie","WKL.AS":"Technologie","PHIA.AS":"Technologie","DTE.DE":"Communicatie",
+  // EU Consumer & Luxury
+  "MC.PA":"Consument","OR.PA":"Consument","RMS.PA":"Consument","EL.PA":"Consument","KER.PA":"Consument",
+  "BN.PA":"Consument","ADS.DE":"Consument","HEIA.AS":"Consument","ABI.BR":"Consument","NESN.SW":"Consument",
+  // EU Financials
+  "BNP.PA":"Financieel","CS.PA":"Financieel","ALV.DE":"Financieel","MUV2.DE":"Financieel",
+  "INGA.AS":"Financieel","NN.AS":"Financieel","KBC.BR":"Financieel","UBSG.SW":"Financieel","ZURN.SW":"Financieel",
+  // EU Healthcare
+  "SAN.PA":"Gezondheidszorg","BAYN.DE":"Gezondheidszorg","UCB.BR":"Gezondheidszorg",
+  "NOVN.SW":"Gezondheidszorg","ROG.SW":"Gezondheidszorg",
+  // EU Industrials & Materials & Energy
+  "AIR.PA":"Industrie","SU.PA":"Industrie","DG.PA":"Industrie","SIE.DE":"Industrie","ABBN.SW":"Industrie",
+  "DPW.DE":"Industrie","BMW.DE":"Consument","VOW3.DE":"Consument","MBG.DE":"Consument",
+  "AI.PA":"Materialen","BAS.DE":"Materialen","DSM.AS":"Materialen",
+  "TTE.PA":"Energie","RWE.DE":"Energie",
+  // S&P uitbreiding
+  ACN:"Technologie",ANET:"Technologie",PANW:"Technologie",CRWD:"Technologie",SNPS:"Technologie",
+  CDNS:"Technologie",MSI:"Technologie",NXPI:"Technologie",MCHP:"Technologie",ON:"Technologie",
+  HPQ:"Technologie",DELL:"Technologie",FTNT:"Technologie",WDAY:"Technologie",PLTR:"Technologie",
+  TMUS:"Communicatie",CHTR:"Communicatie",EA:"Communicatie",TTWO:"Communicatie",OMC:"Communicatie",WBD:"Communicatie",
+  PGR:"Financieel",CB:"Financieel",MMC:"Financieel",AON:"Financieel",ICE:"Financieel",CME:"Financieel",
+  SPGI:"Financieel",MCO:"Financieel",COF:"Financieel",USB:"Financieel",PNC:"Financieel",TFC:"Financieel",
+  BK:"Financieel",AIG:"Financieel",MET:"Financieel",PRU:"Financieel",ALL:"Financieel",TRV:"Financieel",FIS:"Financieel",
+  ISRG:"Gezondheidszorg",SYK:"Gezondheidszorg",BSX:"Gezondheidszorg",MDT:"Gezondheidszorg",ELV:"Gezondheidszorg",
+  CI:"Gezondheidszorg",CVS:"Gezondheidszorg",HCA:"Gezondheidszorg",VRTX:"Gezondheidszorg",REGN:"Gezondheidszorg",
+  ZTS:"Gezondheidszorg",BDX:"Gezondheidszorg",EW:"Gezondheidszorg",IDXX:"Gezondheidszorg",IQV:"Gezondheidszorg",MCK:"Gezondheidszorg",
+  ORLY:"Consument",AZO:"Consument",ROST:"Consument",TJX:"Consument",DG:"Consument",DLTR:"Consument",
+  YUM:"Consument",CMG:"Consument",MAR:"Consument",HLT:"Consument",BKNG:"Consument",ABNB:"Consument",
+  GM:"Consument",F:"Consument",KMB:"Consument",GIS:"Consument",KHC:"Consument",STZ:"Consument",
+  HSY:"Consument",CL:"Consument",MNST:"Consument",KDP:"Consument",SYY:"Consument",
+  EOG:"Energie",MPC:"Energie",PSX:"Energie",VLO:"Energie",OXY:"Energie",WMB:"Energie",KMI:"Energie",HAL:"Energie",BKR:"Energie",
+  RTX:"Industrie",DE:"Industrie",EMR:"Industrie",ETN:"Industrie",ITW:"Industrie",PH:"Industrie",
+  GD:"Industrie",NOC:"Industrie",MMM:"Industrie",CSX:"Industrie",NSC:"Industrie",FDX:"Industrie",
+  WM:"Industrie",RSG:"Industrie",PCAR:"Industrie",CMI:"Industrie",JCI:"Industrie",CARR:"Industrie",
+  OTIS:"Industrie",ROK:"Industrie",AME:"Industrie",DOV:"Industrie",
+  LIN:"Materialen",APD:"Materialen",SHW:"Materialen",ECL:"Materialen",FCX:"Materialen",NEM:"Materialen",
+  NUE:"Materialen",DOW:"Materialen",DD:"Materialen",
+  PLD:"Vastgoed",AMT:"Vastgoed",EQIX:"Vastgoed",CCI:"Vastgoed",PSA:"Vastgoed",SPG:"Vastgoed",O:"Vastgoed",WELL:"Vastgoed",DLR:"Vastgoed",
+  NEE:"Nuts",DUK:"Nuts",SO:"Nuts",D:"Nuts",AEP:"Nuts",EXC:"Nuts",SRE:"Nuts",XEL:"Nuts",ED:"Nuts",WEC:"Nuts",
+  // Scandinavië
+  "NOVO-B.CO":"Gezondheidszorg","COLO-B.CO":"Gezondheidszorg","NZYM-B.CO":"Gezondheidszorg",
+  "MAERSK-B.CO":"Industrie","DSV.CO":"Industrie","VWS.CO":"Industrie","KNEBV.HE":"Industrie",
+  "ATCO-A.ST":"Industrie","SAND.ST":"Industrie","VOLV-B.ST":"Industrie",
+  "CARL-B.CO":"Consument","HM-B.ST":"Consument","ESSITY-B.ST":"Consument","MOWI.OL":"Consument","EVO.ST":"Consument",
+  "ERIC-B.ST":"Technologie","NOKIA.HE":"Technologie",
+  "INVE-B.ST":"Financieel","SEB-A.ST":"Financieel","SWED-A.ST":"Financieel","DNB.OL":"Financieel","SAMPO.HE":"Financieel",
+  "EQNR.OL":"Energie","NESTE.HE":"Energie","ORSTED.CO":"Nuts","FORTUM.HE":"Nuts",
+  "TEL.OL":"Communicatie","NHY.OL":"Materialen","UPM.HE":"Materialen",
+  // China / Hongkong
+  BABA:"Consument",PDD:"Consument",JD:"Consument",YUMC:"Consument",
+  BIDU:"Communicatie",NTES:"Communicatie",TCOM:"Consument",BILI:"Communicatie",
+  ZTO:"Industrie",LI:"Consument",NIO:"Consument",XPEV:"Consument",
+  "0700.HK":"Communicatie","9988.HK":"Consument","3690.HK":"Communicatie","1024.HK":"Communicatie","9618.HK":"Consument",
+  "1810.HK":"Technologie","2318.HK":"Financieel","0939.HK":"Financieel","1398.HK":"Financieel","3988.HK":"Financieel",
+  "0005.HK":"Financieel","0388.HK":"Financieel","0175.HK":"Consument","2020.HK":"Consument","1211.HK":"Consument","9866.HK":"Consument",
+  "0016.HK":"Vastgoed","1299.HK":"Financieel","2331.HK":"Consument","0027.HK":"Consument","0883.HK":"Energie","0857.HK":"Energie","0386.HK":"Energie",
+  // Holdings-universum (eigen sector zodat ze onderling vergeleken worden, niet met operationele bedrijven)
+  "EXO.PA":"Holding","GBLB.BR":"Holding","SOF.BR":"Holding","INVE-B.ST":"Holding","MF.PA":"Holding",
+  "ACKB.BR":"Holding","BRED.BR":"Holding","PRX.AS":"Holding","INDUC.ST":"Holding","LUND-B.ST":"Holding","HAL.AS":"Holding",
+  "0001.HK":"Holding","0019.HK":"Holding","0656.HK":"Holding","0142.HK":"Holding","0004.HK":"Holding",
+  "BRK-B":"Holding","BRK-A":"Holding","L":"Holding","IEP":"Holding","JARLF":"Holding"
+};
+// VIE-structuur: je koopt een contractuele claim op de winst, geen direct eigendom.
+// Komt voor bij Chinese internetbedrijven met een Amerikaanse of HK-notering.
+var VIE_RISK={BABA:1,PDD:1,JD:1,BIDU:1,NTES:1,TCOM:1,BILI:1,ZTO:1,
+  "KYG875721634":1,"KYG017191142":1,"KYG8208B1014":1,"KYG8586D1097":1};
+
+var ETF_INDEX_GROUPS={
+  "S&P 500":["SPY","VOO","IVV","SPLG"],
+  "Nasdaq 100":["QQQ","QQQM"],
+  "Total US Market":["VTI","ITOT","SCHB"],
+  "Developed ex-US":["VEA","IEFA","SCHF"],
+  "Emerging Markets":["VWO","IEMG","EEM"],
+  "Total World ex-US":["VXUS","IXUS"],
+  "US Small Cap":["IWM","VB","IJR"],
+  "US Aggregate Bond":["BND","AGG","SCHZ"],
+  "US Dividend":["SCHD","VYM","DVY"]
+};
+var ETF_TOP_HOLDINGS={
+  SPY:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  VOO:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  IVV:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
+  VTI:{NVDA:6.5,AAPL:5.9,MSFT:5.4,AMZN:3.5,META:2.3,GOOGL:2.2,AVGO:2.1,TSLA:1.8},
+  QQQ:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
+  QQQM:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
+  XLK:{NVDA:15.0,AAPL:14.0,MSFT:13.0,AVGO:5.0},
+  XLF:{"BRK-B":13.0,JPM:10.0,V:7.5,MA:6.5,BAC:4.5},
+  XLE:{XOM:22.0,CVX:17.0,COP:7.0,SLB:4.0},
+  SCHD:{},VYM:{},IWM:{},BND:{},AGG:{},VXUS:{},VEA:{},VWO:{},ARKK:{TSLA:9.0,COIN:7.0}
+};
+var EULER_ETF_ALIASES={
+  // iShares Core MSCI World
+  "SWDA.L":"IE00B4L5Y983","IWDA.L":"IE00B4L5Y983","IWDA.AS":"IE00B4L5Y983","EUNL.DE":"IE00B4L5Y983",
+  "EUNL.F":"IE00B4L5Y983","EUNL.MU":"IE00B4L5Y983","EUNL.SG":"IE00B4L5Y983","EUNL.BE":"IE00B4L5Y983",
+  "EUNL.DU":"IE00B4L5Y983","EUNL.HM":"IE00B4L5Y983","SWDA.MI":"IE00B4L5Y983","SWDA.SW":"IE00B4L5Y983",
+  // Vanguard FTSE All-World (acc)
+  "VWRA.L":"IE00BK5BQT80","VWCE.DE":"IE00BK5BQT80","VWCE.AS":"IE00BK5BQT80","VWCE.MI":"IE00BK5BQT80",
+  "VWCE.F":"IE00BK5BQT80","VWCE.DU":"IE00BK5BQT80","VWCE.MU":"IE00BK5BQT80",
+  // iShares MSCI EM
+  "IEMA.L":"IE00B4L5YC18","IEMA.AS":"IE00B4L5YC18","EUNM.DE":"IE00B4L5YC18","EUNM.F":"IE00B4L5YC18",
+  "EUNM.DU":"IE00B4L5YC18","EUNM.HM":"IE00B4L5YC18","EUNM.MU":"IE00B4L5YC18","SEMA.MI":"IE00B4L5YC18",
+  "SEMA.SW":"IE00B4L5YC18",
+  // Amundi Core Stoxx Europe 600
+  "MEUD.PA":"LU0908500753","MEUD.MI":"LU0908500753","MEUD.SW":"LU0908500753","MEUD.L":"LU0908500753",
+  "MEUS.L":"LU0908500753","LYP6.DE":"LU0908500753","LYP6.F":"LU0908500753","LYP6.DU":"LU0908500753",
+  "LYP6.MU":"LU0908500753","LY27.VI":"LU0908500753","STXEF":"LU0908500753"
+};
+var ISIN_MAP={
+  "ASML.AS":"NL0010273215","BESI.AS":"NL0012866412","INGA.AS":"NL0011821202",
+  "ADYEN.AS":"NL0012969182","PHIA.AS":"NL0000009538","HEIA.AS":"NL0000009165",
+  "WKL.AS":"NL0000395903","PRX.AS":"NL0013654783","NN.AS":"NL0010773842","HAL.AS":"NL0000289533",
+  "SOF.BR":"BE0003717312","ABI.BR":"BE0974293251","KBC.BR":"BE0003565737",
+  "UCB.BR":"BE0003739530","ACKB.BR":"BE0003764785","GBLB.BR":"BE0003797140","LOTB.BR":"BE0003604155",
+  "MC.PA":"FR0000121014","OR.PA":"FR0000120321","AIR.PA":"NL0000235190","SAN.PA":"FR0000120578",
+  "BNP.PA":"FR0000131104","TTE.PA":"FR0000120271","SU.PA":"FR0000121972","AI.PA":"FR0000120073",
+  "RMS.PA":"FR0000052292","EL.PA":"FR0000121667","CS.PA":"FR0000120628","DG.PA":"FR0000125486",
+  "BN.PA":"FR0000120644","KER.PA":"FR0000121485","EXO.PA":"NL0012059018","MF.PA":"FR0000121204",
+  "SAP.DE":"DE0007164600","SIE.DE":"DE0007236101","ALV.DE":"DE0008404005","BAS.DE":"DE000BASF111",
+  "BAYN.DE":"DE000BAY0017","BMW.DE":"DE0005190003","VOW3.DE":"DE0007664039","MBG.DE":"DE0007100000",
+  "ADS.DE":"DE000A1EWWW0","MUV2.DE":"DE0008430026","IFX.DE":"DE0006231004","DTE.DE":"DE0005557508",
+  "RWE.DE":"DE0007037129","DPW.DE":"DE0005552004",
+  "NESN.SW":"CH0038863350","NOVN.SW":"CH0012005267","ROG.SW":"CH0012032048",
+  "UBSG.SW":"CH0244767585","ZURN.SW":"CH0011075394","ABBN.SW":"CH0012221716",
+  "NOVO-B.CO":"DK0062498333","MAERSK-B.CO":"DK0010244508","DSV.CO":"DK0060079531",
+  "VOLV-B.ST":"SE0000115446","ERIC-B.ST":"SE0000108656","ATCO-A.ST":"SE0017486889",
+  "INVE-B.ST":"SE0015811963","SAND.ST":"SE0000667891","HM-B.ST":"SE0000106270",
+  "EQNR.OL":"NO0010096985","DNB.OL":"NO0010161896","NHY.OL":"NO0005052605",
+  "NOKIA.HE":"FI0009000681","SAMPO.HE":"FI4000552500","NESTE.HE":"FI0009013296",
+  // aanvullingen: ING heeft twee noteringen, LOTB = Lotus Bakeries
+  "ING.AS":"NL0011821202","INGA.AS":"NL0011821202","LOTB.BR":"BE0003604155",
+  "BESI.AS":"NL0012866412","TNOW.PA":"FR0011871128"
+};
+var ISIN_US={
+  AAPL:"US0378331005",MSFT:"US5949181045",NVDA:"US67066G1040",GOOGL:"US02079K3059",
+  AMZN:"US0231351067",META:"US30303M1027",TSLA:"US88160R1014",AVGO:"US11135F1012",
+  "BRK-B":"US0846707026","BRK-A":"US0846701086",JPM:"US46625H1005",V:"US92826C8394",
+  MA:"US57636Q1040",JNJ:"US4781601046",UNH:"US91324P1021",LLY:"US5324571083",
+  XOM:"US30231G1022",CVX:"US1667641005",WMT:"US9311421039",PG:"US7427181091",
+  KO:"US1912161007",PEP:"US7134481081",COST:"US22160K1051",HD:"US4370761029",
+  ORCL:"US68389X1054",CRM:"US79466L3024",AMD:"US0079031078",INTC:"US4581401001",
+  QCOM:"US7475251036",TXN:"US8825081040",CSCO:"US17275R1023",IBM:"US4592001014",
+  NFLX:"US64110L1061",DIS:"US2546871060",PFE:"US7170811035",MRK:"US58933Y1055",
+  ABBV:"US00287Y1091",TMO:"US8835561023",GILD:"US3755581036",AMGN:"US0311621009",
+  MELI:"US58733R1023",PLTR:"US69608A1088",L:"US5404241086",IEP:"US4511071064"
+};
+var BROKER_MARKETS={
+  bolero:{
+    label:"Bolero",
+    online:["US","AS","BR","PA","LS","DE","XETRA","MI","MC","L","ST","SW","VI","WA","HE","OL","CO","TO"],
+    telefonisch:["HK","T","AX","LU","AT","SG","JO"],
+    note:"Euronext + alle Amerikaanse beurzen online; Azi\u00eb en exotische markten via de orderdesk (8-22u)."
+  },
+  saxo:{
+    label:"SaxoInvestor",
+    online:["US","AS","BR","PA","LS","DE","XETRA","MI","MC","L","ST","SW","VI","WA","HE","OL","CO","TO","HK","T","AX","SG","NZ"],
+    telefonisch:[],
+    note:"Breedste dekking van de drie: Europa, Amerika en Azi\u00eb allemaal online."
+  },
+  medirect:{
+    label:"MeDirect",
+    online:["US","AS","BR","PA","DE","XETRA","MI","MC","L","SW"],
+    telefonisch:[],
+    note:"Euronext, Xetra, Milaan, Madrid, Londen, Zwitserland en de VS. G\u00e9\u00e9n Scandinavi\u00eb of Azi\u00eb. ETF-transacties zijn commissievrij."
+  }
+};
+
+function sectorOf(sym){return SECTOR[sym]||"Overig";}
+
+var UNIVERSE_HOLDINGS=[
+  // Europa - familie/investeringsholdings
+  "EXO.PA",     // Exor (Agnelli: Ferrari, Stellantis, CNH, Lingotto)
+  "GBLB.BR",    // Groupe Bruxelles Lambert (SGS, Pernod Ricard, Adidas, Umicore)
+  "SOF.BR",     // Sofina (listed + private growth)
+  "INVE-B.ST",  // Investor AB (Wallenberg)
+  "MF.PA",      // Wendel (listed private equity)
+  "ACKB.BR",    // Ackermans & van Haaren
+  "BRED.BR",    // Brederode
+  "PRX.AS",     // Prosus (Tencent-belang; klassieke NAV-kortingcase)
+  "INDUC.ST",   // Industrivärden
+  "LUND-B.ST",  // Lundbergföretagen
+  "HAL.AS",     // HAL Trust
+  // Hongkong / Azië - conglomeraten
+  "0001.HK",    // CK Hutchison (havens, retail, infra, telecom)
+  "0019.HK",    // Swire Pacific A
+  "0016.HK",    // Sun Hung Kai Properties
+  "0656.HK",    // Fosun International
+  "0142.HK",    // First Pacific
+  "0004.HK",    // Wharf Holdings
+  // VS / overig
+  "BRK-B",      // Berkshire Hathaway
+  "L",          // Loews Corp
+  "IEP",        // Icahn Enterprises
+  "JARLF"       // Jardine Matheson (OTC-notering)
+];
+
+var HOLDING_SET_DEFAULT=(function(){
+  var s={"BRK-A":1}; // extra klasse die niet in het universum staat
+  UNIVERSE_HOLDINGS.forEach(function(sym){s[sym]=1;});
+  return s;
+})();
+var HOLDING_SET=Object.assign({},HOLDING_SET_DEFAULT); // spiegel; gebruikersuitbreidingen komen hier apart bovenop
+function isHolding(symbol){ return !!HOLDING_SET[symbol]; }
+
+// ---- Automatische holding-detectie: signaleert een vermoeden, classificeert nooit stilzwijgend ----
+// Patroon: lage/grillige omzetgroei + koers/boekwaarde dicht bij 1-2 + lage schuld.
+// Sluit REIT's uit (die hebben vaak óók P/B~1, maar kenmerken zich juist door hóge schuld -> ander patroon).
+function holdingSuspicionScore(d){
+  if(!d||isHolding(d.symbol))return 0; // al bekend, geen suggestie nodig
+  if(d.sector==="Vastgoed")return 0; // REIT's uitgesloten: vergelijkbare P/B maar ander schuldpatroon
+  var pts=0, reasons=[];
+  // 1) lage/grillige omzetgroei (holdings "groeien" niet zoals operationele bedrijven)
+  if(d.revG!=null && Math.abs(d.revG)<6){pts+=35;reasons.push("lage omzetgroei ("+d.revG+"%)");}
+  // 2) koers/boekwaarde dicht bij NAV (1-2x) - typisch voor holdings, atypisch voor de meeste operationele bedrijven
+  if(d.pb!=null && d.pb>=0.7 && d.pb<=2.2){pts+=35;reasons.push("koers/boekwaarde dicht bij boekwaarde ("+d.pb+"x)");}
+  // 3) relatief lage schuldgraad (holdings lenen doorgaans minder dan operationele bedrijven met kapitaalbehoefte)
+  if(d.de!=null && d.de<0.6){pts+=20;reasons.push("lage schuldgraad ("+d.de+")");}
+  // 4) industry-classificatie als extra aanwijzing (indien de bron dit teruggeeft)
+  if(d.industry && /holding|investment|asset management|diversified financ/i.test(d.industry)){pts+=25;reasons.push("classificatie: "+d.industry);}
+  return {score:pts, reasons:reasons};
+}
+// drempel: bij 55+ punten (uit minstens 2 signalen) tonen we de suggestie
+function suggestsHolding(d){
+  var r=holdingSuspicionScore(d);
+  if(!r||typeof r!=="object")return null;
+  return r.score>=55 ? r : null;
+}
+
+function holdingScore(d){
+  // Holdings waardeer je op korting t.o.v. intrinsieke waarde, niet op winstratio's.
+  // Koers/boekwaarde is de bruikbaarste NAV-proxy; onder 1 = noteren onder boekwaarde.
+  // Absolute schaal (niet sector-relatief): holdings onderling vergelijken werkt alleen
+  // als de maatstaf niet meebeweegt met de toevallige samenstelling van je selectie.
+  var parts=[], sum=0;
+
+  // 1) korting t.o.v. boekwaarde - de kern
+  if(d.pb!=null){
+    // P/B 0.5 -> 100 punten, 1.0 -> ~70, 2.0 -> ~30, 3+ -> laag
+    var pbScore = Math.round(Math.max(0,Math.min(100,(2.6-d.pb)/2.2*100)));
+    parts.push([pbScore,0.45]); sum+=0.45;
+  }
+
+  // 2) kwaliteit van de onderliggende portefeuille: rendement op eigen vermogen
+  if(d.roe!=null){
+    parts.push([Math.round(Math.max(0,Math.min(100,(d.roe-2)/25*100))),0.20]); sum+=0.20;
+  }
+
+  // 3) schuldgraad - let op: verschillende bronnen leveren een andere maatstaf
+  if(d.de!=null){
+    var deS;
+    if(d.aaqs!=null){
+      // Eulerpool: netto schuld / EBIT. Negatief = netto cash = uitstekend.
+      deS = Math.round(Math.max(0,Math.min(100,(4-d.de)/6*100)));
+    }else{
+      // Finnhub/SecuritiesDB: schuld / eigen vermogen
+      deS = norm(d.de,0,2,true);
+    }
+    parts.push([deS,0.20]); sum+=0.20;
+  }
+
+  // 4) momentum telt licht mee - holdings zijn langetermijnposities, geen handelsobject
+  var mom=momentumScore(d);
+  if(mom!=null){ parts.push([mom,0.15]); sum+=0.15; }
+
+  if(!sum) return 50;
+  var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
+  return Math.max(0,Math.min(100,Math.round(score/sum)));
+}
+
 function rawScore(d){
   // Holdings/investeringsmaatschappijen: aparte logica, want P/E, groei en de gewone
   // kwaliteitsratio's zijn hier vertekend door portefeuille-herwaarderingen (zie toelichting bij de score).
@@ -850,6 +1142,201 @@ function renderHoldingsNote(){
     'Let bij het lezen op de kolom <b>K/B</b>: onder 1 betekent noteren onder boekwaarde. '+
     '<b>Belangrijk:</b> een korting van 10-15% is normaal en gezond (conglomeraatkorting); bij Aziatische en sommige familieholdings loopt die op tot 40-60%. Zo\'n diepe korting is g\u00e9\u00e9n automatisch koopje \u2014 hij prijst vaak governance-, politiek- of liquiditeitsrisico in, en kan jarenlang blijven bestaan zonder katalysator (verkoop, afsplitsing, aandeleninkoop).</div>';
 }
+
+function isinFor(symbol){
+  // eerst uit de portefeuille (Saxo-import bewaart de ISIN), dan uit de vaste tabel
+  if(typeof PORTFOLIO!=="undefined"&&PORTFOLIO&&PORTFOLIO.length){
+    for(var i=0;i<PORTFOLIO.length;i++){
+      if(PORTFOLIO[i].symbol===symbol&&PORTFOLIO[i].isin)return PORTFOLIO[i].isin;
+    }
+  }
+  return ISIN_MAP[symbol]||ISIN_US[symbol]||null;
+}
+// ISIN uit een opgehaald record, met terugval op de tabellen
+function isinOf(d){
+  if(!d)return null;
+  return d.isin || isinFor(d.symbol) || null;
+}
+
+// ---- Overlap met je eigen portefeuille, getoond tijdens het screenen ----
+// Vier soorten signalen, van sterk naar zwak:
+//   bezit    = je hebt dit exact al
+//   zelfde   = zelfde fonds, andere beursnotering (zelfde ISIN)
+//   in-etf   = dit aandeel zit als grote positie in een ETF die je bezit
+//   sector   = je hebt al posities in dezelfde sector
+function portfolioOverlapFor(d){
+  if(typeof PORTFOLIO==="undefined"||!PORTFOLIO||!PORTFOLIO.length) return null;
+  var sym=(d.symbol||"").toUpperCase();
+  var isin=(typeof isinOf==="function"?isinOf(d):null);
+
+  // 1) exact dezelfde positie
+  for(var i=0;i<PORTFOLIO.length;i++){
+    if((PORTFOLIO[i].symbol||"").toUpperCase()===sym){
+      return {kind:"bezit",level:"high",text:"Je bezit dit al ("+PORTFOLIO[i].qty+" stuks)"};
+    }
+  }
+  // 2) zelfde effect onder een andere notering (via ISIN)
+  if(isin){
+    for(var j=0;j<PORTFOLIO.length;j++){
+      var pIsin=PORTFOLIO[j].isin||(typeof isinFor==="function"?isinFor(PORTFOLIO[j].symbol):null);
+      if(pIsin&&pIsin===isin){
+        return {kind:"zelfde",level:"high",text:"Zelfde effect als je positie "+PORTFOLIO[j].symbol+" (ISIN "+isin+")"};
+      }
+    }
+    // zelfde fonds via de aliassen die Eulerpool meegaf
+    if(typeof EULER_ETF_ALIASES!=="undefined"&&EULER_ETF_ALIASES[sym]){
+      for(var k=0;k<PORTFOLIO.length;k++){
+        var alias=EULER_ETF_ALIASES[(PORTFOLIO[k].symbol||"").toUpperCase()];
+        if(alias&&alias===EULER_ETF_ALIASES[sym]){
+          return {kind:"zelfde",level:"high",text:"Zelfde fonds als je positie "+PORTFOLIO[k].symbol};
+        }
+      }
+    }
+  }
+  // 3) zit als grote positie in een ETF die je bezit
+  if(typeof ETF_TOP_HOLDINGS!=="undefined"){
+    var via=[];
+    PORTFOLIO.forEach(function(p){
+      var h=ETF_TOP_HOLDINGS[(p.symbol||"").toUpperCase()];
+      if(h&&h[sym]) via.push(p.symbol+" ("+h[sym]+"%)");
+    });
+    if(via.length){
+      return {kind:"in-etf",level:"mid",text:"Zit al in je "+via.join(" en ")};
+    }
+  }
+  // 4) sectoroverlap - zwakste signaal, alleen melden bij duidelijke concentratie
+  if(d.sector){
+    var same=PORTFOLIO.filter(function(p){
+      return p._fresh&&p._fresh.sector===d.sector;
+    });
+    if(same.length>=2){
+      return {kind:"sector",level:"low",
+        text:"Je hebt al "+same.length+" posities in "+d.sector+" ("+same.slice(0,3).map(function(p){return p.symbol;}).join(", ")+(same.length>3?"\u2026":"")+")"};
+    }
+  }
+  return null;
+}
+function overlapBadge(d){
+  var o=portfolioOverlapFor(d);
+  if(!o) return "";
+  var cls = o.level==="high" ? "trap danger" : (o.level==="mid" ? "trap warn" : "trap");
+  var label = o.kind==="bezit" ? "in bezit"
+            : o.kind==="zelfde" ? "duplicaat"
+            : o.kind==="in-etf" ? "via ETF"
+            : "sector";
+  return '<span class="'+cls+'" title="'+o.text.replace(/"/g,"&quot;")+'" style="margin-left:6px">'+label+'</span>';
+}
+
+
+// ---- Broker-beschikbaarheid (indicatie op basis van beursdekking) ----
+// Gebaseerd op de gepubliceerde marktendekking van elke broker. Dit is een vuistregel:
+// een broker kan een specifiek fonds uitsluiten of juist wel aanbieden buiten zijn standaarddekking.
+// Controleer altijd in het platform van je broker voordat je koopt.
+// leidt de beurscode af uit ticker of ISIN
+function marketOf(d){
+  var sym=(d.symbol||d.queriedAs||"").toUpperCase();
+  var isin=(typeof isinOf==="function")?isinOf(d):(d.isin||null);
+  var m=sym.match(/\.([A-Z]+)$/);
+  if(m){
+    var suf=m[1];
+    var map={AS:"AS",BR:"BR",PA:"PA",LS:"LS",DE:"XETRA",F:"XETRA",MU:"XETRA",SG:"XETRA",DU:"XETRA",
+             HM:"XETRA",BE:"XETRA",MI:"MI",MC:"MC",L:"L",ST:"ST",SW:"SW",VI:"VI",WA:"WA",
+             HE:"HE",OL:"OL",CO:"CO",TO:"TO",HK:"HK",T:"T",AX:"AX"};
+    return map[suf]||suf;
+  }
+  // geen suffix: Amerikaans, tenzij de ISIN iets anders zegt
+  if(isin){
+    var land=isin.slice(0,2);
+    if(land==="US")return "US";
+    if(land==="IE"||land==="LU")return "IE_UCITS"; // Iers/Luxemburgs fonds: noteert op meerdere EU-beurzen
+    if(land==="NL")return "AS"; if(land==="BE")return "BR"; if(land==="FR")return "PA";
+    if(land==="DE")return "XETRA"; if(land==="IT")return "MI"; if(land==="ES")return "MC";
+    if(land==="GB")return "L"; if(land==="CH")return "SW"; if(land==="SE")return "ST";
+    if(land==="NO")return "OL"; if(land==="DK")return "CO"; if(land==="FI")return "HE";
+    if(land==="KY"||land==="CN"||land==="HK")return "HK";
+  }
+  return "US";
+}
+function brokersFor(d){
+  var mkt=marketOf(d);
+  var res=[];
+  Object.keys(BROKER_MARKETS).forEach(function(k){
+    var b=BROKER_MARKETS[k];
+    // UCITS-fondsen noteren doorgaans op Xetra/Euronext, dus dekking daar volstaat
+    var effectief = (mkt==="IE_UCITS") ? "XETRA" : mkt;
+    if(b.online.indexOf(effectief)>-1) res.push({key:k,label:b.label,mode:"online"});
+    else if(b.telefonisch.indexOf(effectief)>-1) res.push({key:k,label:b.label,mode:"telefonisch"});
+  });
+  return {market:mkt,brokers:res};
+}
+function brokerBadge(d){
+  var r=brokersFor(d);
+  if(!r.brokers.length){
+    return '<span class="trap" title="Deze markt zit niet in de standaarddekking van Bolero, Saxo of MeDirect \u2014 controleer bij je broker." style="margin-left:6px;opacity:.7">? broker</span>';
+  }
+  var namen=r.brokers.map(function(b){return b.label+(b.mode==="telefonisch"?" (telefonisch)":"");}).join(", ");
+  var kort=r.brokers.map(function(b){return b.label.charAt(0)+(b.mode==="telefonisch"?"\u260e":"");}).join("");
+  var cls=r.brokers.length>=3?"trap ok":(r.brokers.length===2?"trap":"trap warn");
+  return '<span class="'+cls+'" title="Waarschijnlijk verkrijgbaar bij: '+namen+
+    ' \u2014 indicatie op basis van beursdekking, controleer bij je broker." style="margin-left:6px">'+kort+'</span>';
+}
+
+// ---- Externe onderzoekslinks per aandeel/fonds ----
+// Niet elke site heeft een voorspelbare URL-structuur: investing.com gebruikt interne ID's,
+// dus daarvoor openen we een zoekopdracht in plaats van een gokte directe link.
+function externalLinks(d){
+  var sym=(d.symbol||"").toUpperCase();
+  var base=sym.split(".")[0];
+  var isin=(typeof isinOf==="function")?isinOf(d):(d.isin||null);
+  var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L)$/i.test(sym);
+  var isEtf=(typeof ETF_HINT!=="undefined"&&ETF_HINT.test(sym))||d.ter!=null||d.aum!=null;
+  var q=encodeURIComponent(isin||sym);
+  var links=[];
+
+  if(isEtf){
+    if(isin) links.push({u:"https://www.justetf.com/en/etf-profile.html?isin="+encodeURIComponent(isin),t:"justETF",d:"Kosten, samenstelling en alle noteringen"});
+    if(!isEU) links.push({u:"https://stockanalysis.com/etf/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Holdings, rendement en dividend"});
+    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Sterrenrating en analistenoordeel"});
+  }else{
+    if(!isEU) links.push({u:"https://stockanalysis.com/stocks/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Cijfers, ratio's en historiek"});
+    if(isEU) links.push({u:"https://www.marketscreener.com/search/?q="+q,t:"MarketScreener",d:"Europese analistenschattingen"});
+    links.push({u:"https://finance.yahoo.com/quote/"+encodeURIComponent(sym),t:"Yahoo Finance",d:"Koers, nieuws en kerncijfers"});
+    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Moat-rating en fair value"});
+  }
+  // investing.com heeft geen voorspelbare URL per ticker -> zoekopdracht
+  links.push({u:"https://www.investing.com/search/?q="+q,t:"Investing.com",d:"Zoekresultaat"});
+  return links;
+}
+// klein linkicoontje met uitklapbaar menu
+function linkMenu(d){
+  var ls=externalLinks(d);
+  if(!ls.length)return "";
+  var id="lnk_"+(d.symbol||"").replace(/[^A-Za-z0-9]/g,"_");
+  var items=ls.map(function(l){
+    return '<a href="'+l.u+'" target="_blank" rel="noopener" style="display:block;padding:6px 10px;color:var(--ink);text-decoration:none;font-size:12px;white-space:nowrap">'+
+           l.t+'<span style="display:block;font-size:10px;color:var(--muted)">'+l.d+'</span></a>';
+  }).join("");
+  return '<span style="position:relative;display:inline-block;margin-left:6px">'+
+    '<span onclick="toggleLinkMenu(\''+id+'\',event)" title="Meer informatie opzoeken op externe sites" '+
+      'style="cursor:pointer;color:var(--blue);font-size:11px;border:1px solid var(--line);'+
+      'border-radius:4px;padding:1px 5px;background:var(--panel-2)">info \u2197</span>'+
+    '<span id="'+id+'" style="display:none;position:absolute;top:100%;left:0;z-index:50;'+
+      'background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 0;'+
+      'box-shadow:0 6px 20px rgba(0,0,0,.5);min-width:190px">'+items+'</span></span>';
+}
+function toggleLinkMenu(id,ev){
+  if(ev){ev.stopPropagation();}
+  var el=document.getElementById(id); if(!el)return;
+  var open=el.style.display!=="none";
+  // sluit andere menu's
+  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
+  el.style.display=open?"none":"block";
+}
+window.toggleLinkMenu=toggleLinkMenu;
+document.addEventListener('click',function(){
+  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
+});
+
 
 function render(){
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT); // relatief t.o.v. volledige gescreende set
@@ -1065,93 +1552,6 @@ var UNIVERSE_CHINA=[
 ];
 
 // Sector per symbool (vast, dus geen extra API-calls). Brede categorieën.
-var SECTOR={
-  // US Tech & Communication
-  AAPL:"Technologie",MSFT:"Technologie",NVDA:"Technologie",AVGO:"Technologie",ORCL:"Technologie",
-  ADBE:"Technologie",CRM:"Technologie",AMD:"Technologie",INTC:"Technologie",QCOM:"Technologie",
-  TXN:"Technologie",CSCO:"Technologie",IBM:"Technologie",NOW:"Technologie",INTU:"Technologie",
-  AMAT:"Technologie",MU:"Technologie",ADI:"Technologie",LRCX:"Technologie",KLAC:"Technologie",
-  GOOGL:"Communicatie",META:"Communicatie",NFLX:"Communicatie",CMCSA:"Communicatie",T:"Communicatie",
-  VZ:"Communicatie",DIS:"Communicatie",
-  // US Financials
-  JPM:"Financieel",BAC:"Financieel",WFC:"Financieel",GS:"Financieel",MS:"Financieel",C:"Financieel",
-  BLK:"Financieel",SCHW:"Financieel",AXP:"Financieel",V:"Financieel",MA:"Financieel",PYPL:"Financieel",
-  // US Healthcare
-  JNJ:"Gezondheidszorg",UNH:"Gezondheidszorg",LLY:"Gezondheidszorg",PFE:"Gezondheidszorg",
-  MRK:"Gezondheidszorg",ABBV:"Gezondheidszorg",TMO:"Gezondheidszorg",ABT:"Gezondheidszorg",
-  DHR:"Gezondheidszorg",BMY:"Gezondheidszorg",AMGN:"Gezondheidszorg",GILD:"Gezondheidszorg",
-  // US Consumer
-  WMT:"Consument",COST:"Consument",HD:"Consument",LOW:"Consument",NKE:"Consument",MCD:"Consument",
-  SBUX:"Consument",TGT:"Consument",PG:"Consument",KO:"Consument",PEP:"Consument",PM:"Consument",
-  MDLZ:"Consument",AMZN:"Consument",TSLA:"Consument",
-  // US Energy & Industrials
-  XOM:"Energie",CVX:"Energie",COP:"Energie",SLB:"Energie",
-  BA:"Industrie",CAT:"Industrie",GE:"Industrie",HON:"Industrie",UNP:"Industrie",UPS:"Industrie",LMT:"Industrie",
-  // EU Tech & Communication
-  "ASML.AS":"Technologie","SAP.DE":"Technologie","ADYEN.AS":"Technologie","IFX.DE":"Technologie",
-  "PRX.AS":"Technologie","WKL.AS":"Technologie","PHIA.AS":"Technologie","DTE.DE":"Communicatie",
-  // EU Consumer & Luxury
-  "MC.PA":"Consument","OR.PA":"Consument","RMS.PA":"Consument","EL.PA":"Consument","KER.PA":"Consument",
-  "BN.PA":"Consument","ADS.DE":"Consument","HEIA.AS":"Consument","ABI.BR":"Consument","NESN.SW":"Consument",
-  // EU Financials
-  "BNP.PA":"Financieel","CS.PA":"Financieel","ALV.DE":"Financieel","MUV2.DE":"Financieel",
-  "INGA.AS":"Financieel","NN.AS":"Financieel","KBC.BR":"Financieel","UBSG.SW":"Financieel","ZURN.SW":"Financieel",
-  // EU Healthcare
-  "SAN.PA":"Gezondheidszorg","BAYN.DE":"Gezondheidszorg","UCB.BR":"Gezondheidszorg",
-  "NOVN.SW":"Gezondheidszorg","ROG.SW":"Gezondheidszorg",
-  // EU Industrials & Materials & Energy
-  "AIR.PA":"Industrie","SU.PA":"Industrie","DG.PA":"Industrie","SIE.DE":"Industrie","ABBN.SW":"Industrie",
-  "DPW.DE":"Industrie","BMW.DE":"Consument","VOW3.DE":"Consument","MBG.DE":"Consument",
-  "AI.PA":"Materialen","BAS.DE":"Materialen","DSM.AS":"Materialen",
-  "TTE.PA":"Energie","RWE.DE":"Energie",
-  // S&P uitbreiding
-  ACN:"Technologie",ANET:"Technologie",PANW:"Technologie",CRWD:"Technologie",SNPS:"Technologie",
-  CDNS:"Technologie",MSI:"Technologie",NXPI:"Technologie",MCHP:"Technologie",ON:"Technologie",
-  HPQ:"Technologie",DELL:"Technologie",FTNT:"Technologie",WDAY:"Technologie",PLTR:"Technologie",
-  TMUS:"Communicatie",CHTR:"Communicatie",EA:"Communicatie",TTWO:"Communicatie",OMC:"Communicatie",WBD:"Communicatie",
-  PGR:"Financieel",CB:"Financieel",MMC:"Financieel",AON:"Financieel",ICE:"Financieel",CME:"Financieel",
-  SPGI:"Financieel",MCO:"Financieel",COF:"Financieel",USB:"Financieel",PNC:"Financieel",TFC:"Financieel",
-  BK:"Financieel",AIG:"Financieel",MET:"Financieel",PRU:"Financieel",ALL:"Financieel",TRV:"Financieel",FIS:"Financieel",
-  ISRG:"Gezondheidszorg",SYK:"Gezondheidszorg",BSX:"Gezondheidszorg",MDT:"Gezondheidszorg",ELV:"Gezondheidszorg",
-  CI:"Gezondheidszorg",CVS:"Gezondheidszorg",HCA:"Gezondheidszorg",VRTX:"Gezondheidszorg",REGN:"Gezondheidszorg",
-  ZTS:"Gezondheidszorg",BDX:"Gezondheidszorg",EW:"Gezondheidszorg",IDXX:"Gezondheidszorg",IQV:"Gezondheidszorg",MCK:"Gezondheidszorg",
-  ORLY:"Consument",AZO:"Consument",ROST:"Consument",TJX:"Consument",DG:"Consument",DLTR:"Consument",
-  YUM:"Consument",CMG:"Consument",MAR:"Consument",HLT:"Consument",BKNG:"Consument",ABNB:"Consument",
-  GM:"Consument",F:"Consument",KMB:"Consument",GIS:"Consument",KHC:"Consument",STZ:"Consument",
-  HSY:"Consument",CL:"Consument",MNST:"Consument",KDP:"Consument",SYY:"Consument",
-  EOG:"Energie",MPC:"Energie",PSX:"Energie",VLO:"Energie",OXY:"Energie",WMB:"Energie",KMI:"Energie",HAL:"Energie",BKR:"Energie",
-  RTX:"Industrie",DE:"Industrie",EMR:"Industrie",ETN:"Industrie",ITW:"Industrie",PH:"Industrie",
-  GD:"Industrie",NOC:"Industrie",MMM:"Industrie",CSX:"Industrie",NSC:"Industrie",FDX:"Industrie",
-  WM:"Industrie",RSG:"Industrie",PCAR:"Industrie",CMI:"Industrie",JCI:"Industrie",CARR:"Industrie",
-  OTIS:"Industrie",ROK:"Industrie",AME:"Industrie",DOV:"Industrie",
-  LIN:"Materialen",APD:"Materialen",SHW:"Materialen",ECL:"Materialen",FCX:"Materialen",NEM:"Materialen",
-  NUE:"Materialen",DOW:"Materialen",DD:"Materialen",
-  PLD:"Vastgoed",AMT:"Vastgoed",EQIX:"Vastgoed",CCI:"Vastgoed",PSA:"Vastgoed",SPG:"Vastgoed",O:"Vastgoed",WELL:"Vastgoed",DLR:"Vastgoed",
-  NEE:"Nuts",DUK:"Nuts",SO:"Nuts",D:"Nuts",AEP:"Nuts",EXC:"Nuts",SRE:"Nuts",XEL:"Nuts",ED:"Nuts",WEC:"Nuts",
-  // Scandinavië
-  "NOVO-B.CO":"Gezondheidszorg","COLO-B.CO":"Gezondheidszorg","NZYM-B.CO":"Gezondheidszorg",
-  "MAERSK-B.CO":"Industrie","DSV.CO":"Industrie","VWS.CO":"Industrie","KNEBV.HE":"Industrie",
-  "ATCO-A.ST":"Industrie","SAND.ST":"Industrie","VOLV-B.ST":"Industrie",
-  "CARL-B.CO":"Consument","HM-B.ST":"Consument","ESSITY-B.ST":"Consument","MOWI.OL":"Consument","EVO.ST":"Consument",
-  "ERIC-B.ST":"Technologie","NOKIA.HE":"Technologie",
-  "INVE-B.ST":"Financieel","SEB-A.ST":"Financieel","SWED-A.ST":"Financieel","DNB.OL":"Financieel","SAMPO.HE":"Financieel",
-  "EQNR.OL":"Energie","NESTE.HE":"Energie","ORSTED.CO":"Nuts","FORTUM.HE":"Nuts",
-  "TEL.OL":"Communicatie","NHY.OL":"Materialen","UPM.HE":"Materialen",
-  // China / Hongkong
-  BABA:"Consument",PDD:"Consument",JD:"Consument",YUMC:"Consument",
-  BIDU:"Communicatie",NTES:"Communicatie",TCOM:"Consument",BILI:"Communicatie",
-  ZTO:"Industrie",LI:"Consument",NIO:"Consument",XPEV:"Consument",
-  "0700.HK":"Communicatie","9988.HK":"Consument","3690.HK":"Communicatie","1024.HK":"Communicatie","9618.HK":"Consument",
-  "1810.HK":"Technologie","2318.HK":"Financieel","0939.HK":"Financieel","1398.HK":"Financieel","3988.HK":"Financieel",
-  "0005.HK":"Financieel","0388.HK":"Financieel","0175.HK":"Consument","2020.HK":"Consument","1211.HK":"Consument","9866.HK":"Consument",
-  "0016.HK":"Vastgoed","1299.HK":"Financieel","2331.HK":"Consument","0027.HK":"Consument","0883.HK":"Energie","0857.HK":"Energie","0386.HK":"Energie",
-  // Holdings-universum (eigen sector zodat ze onderling vergeleken worden, niet met operationele bedrijven)
-  "EXO.PA":"Holding","GBLB.BR":"Holding","SOF.BR":"Holding","INVE-B.ST":"Holding","MF.PA":"Holding",
-  "ACKB.BR":"Holding","BRED.BR":"Holding","PRX.AS":"Holding","INDUC.ST":"Holding","LUND-B.ST":"Holding","HAL.AS":"Holding",
-  "0001.HK":"Holding","0019.HK":"Holding","0656.HK":"Holding","0142.HK":"Holding","0004.HK":"Holding",
-  "BRK-B":"Holding","BRK-A":"Holding","L":"Holding","IEP":"Holding","JARLF":"Holding"
-};
-function sectorOf(sym){return SECTOR[sym]||"Overig";}
 
 // ---- Holdings / investeringsmaatschappijen: winst- en groeicijfers zijn hier misleidend ----
 // (holding bezit belangen in andere bedrijven i.p.v. zelf een product te verkopen; NAV/koers-boekwaarde is de juiste maatstaf, niet P/E of omzetgroei)
@@ -1160,108 +1560,12 @@ function sectorOf(sym){return SECTOR[sym]||"Overig";}
 // Deze noteren vaak met een structurele korting op hun intrinsieke waarde (10-15% is normaal;
 // in Azië en bij sommige familieholdings loopt dit op tot 40-60%). Een grote korting is géén
 // automatisch koopsignaal: zonder katalysator (verkoop, afsplitsing, inkoop) kan die jaren blijven bestaan.
-var UNIVERSE_HOLDINGS=[
-  // Europa - familie/investeringsholdings
-  "EXO.PA",     // Exor (Agnelli: Ferrari, Stellantis, CNH, Lingotto)
-  "GBLB.BR",    // Groupe Bruxelles Lambert (SGS, Pernod Ricard, Adidas, Umicore)
-  "SOF.BR",     // Sofina (listed + private growth)
-  "INVE-B.ST",  // Investor AB (Wallenberg)
-  "MF.PA",      // Wendel (listed private equity)
-  "ACKB.BR",    // Ackermans & van Haaren
-  "BRED.BR",    // Brederode
-  "PRX.AS",     // Prosus (Tencent-belang; klassieke NAV-kortingcase)
-  "INDUC.ST",   // Industrivärden
-  "LUND-B.ST",  // Lundbergföretagen
-  "HAL.AS",     // HAL Trust
-  // Hongkong / Azië - conglomeraten
-  "0001.HK",    // CK Hutchison (havens, retail, infra, telecom)
-  "0019.HK",    // Swire Pacific A
-  "0016.HK",    // Sun Hung Kai Properties
-  "0656.HK",    // Fosun International
-  "0142.HK",    // First Pacific
-  "0004.HK",    // Wharf Holdings
-  // VS / overig
-  "BRK-B",      // Berkshire Hathaway
-  "L",          // Loews Corp
-  "IEP",        // Icahn Enterprises
-  "JARLF"       // Jardine Matheson (OTC-notering)
-];
 
-var HOLDING_SET_DEFAULT=(function(){
-  var s={"BRK-A":1}; // extra klasse die niet in het universum staat
-  UNIVERSE_HOLDINGS.forEach(function(sym){s[sym]=1;});
-  return s;
-})();
-var HOLDING_SET=Object.assign({},HOLDING_SET_DEFAULT); // spiegel; gebruikersuitbreidingen komen hier apart bovenop
-function isHolding(symbol){ return !!HOLDING_SET[symbol]; }
-
-// ---- Automatische holding-detectie: signaleert een vermoeden, classificeert nooit stilzwijgend ----
-// Patroon: lage/grillige omzetgroei + koers/boekwaarde dicht bij 1-2 + lage schuld.
-// Sluit REIT's uit (die hebben vaak óók P/B~1, maar kenmerken zich juist door hóge schuld -> ander patroon).
-function holdingSuspicionScore(d){
-  if(!d||isHolding(d.symbol))return 0; // al bekend, geen suggestie nodig
-  if(d.sector==="Vastgoed")return 0; // REIT's uitgesloten: vergelijkbare P/B maar ander schuldpatroon
-  var pts=0, reasons=[];
-  // 1) lage/grillige omzetgroei (holdings "groeien" niet zoals operationele bedrijven)
-  if(d.revG!=null && Math.abs(d.revG)<6){pts+=35;reasons.push("lage omzetgroei ("+d.revG+"%)");}
-  // 2) koers/boekwaarde dicht bij NAV (1-2x) - typisch voor holdings, atypisch voor de meeste operationele bedrijven
-  if(d.pb!=null && d.pb>=0.7 && d.pb<=2.2){pts+=35;reasons.push("koers/boekwaarde dicht bij boekwaarde ("+d.pb+"x)");}
-  // 3) relatief lage schuldgraad (holdings lenen doorgaans minder dan operationele bedrijven met kapitaalbehoefte)
-  if(d.de!=null && d.de<0.6){pts+=20;reasons.push("lage schuldgraad ("+d.de+")");}
-  // 4) industry-classificatie als extra aanwijzing (indien de bron dit teruggeeft)
-  if(d.industry && /holding|investment|asset management|diversified financ/i.test(d.industry)){pts+=25;reasons.push("classificatie: "+d.industry);}
-  return {score:pts, reasons:reasons};
-}
-// drempel: bij 55+ punten (uit minstens 2 signalen) tonen we de suggestie
-function suggestsHolding(d){
-  var r=holdingSuspicionScore(d);
-  if(!r||typeof r!=="object")return null;
-  return r.score>=55 ? r : null;
-}
 window.HOLDING_SET=HOLDING_SET; // zichtbaar/uitbreidbaar vanuit de browser-console indien gewenst
 
 // Holding-score: leunt op koers/boekwaarde als NAV-proxy + momentum + schuldgraad.
 // Bewust GEEN groei- of winstmarge-factoren: die zijn bij holdings vertekend door portefeuille-herwaarderingen.
-function holdingScore(d){
-  // Holdings waardeer je op korting t.o.v. intrinsieke waarde, niet op winstratio's.
-  // Koers/boekwaarde is de bruikbaarste NAV-proxy; onder 1 = noteren onder boekwaarde.
-  // Absolute schaal (niet sector-relatief): holdings onderling vergelijken werkt alleen
-  // als de maatstaf niet meebeweegt met de toevallige samenstelling van je selectie.
-  var parts=[], sum=0;
 
-  // 1) korting t.o.v. boekwaarde - de kern
-  if(d.pb!=null){
-    // P/B 0.5 -> 100 punten, 1.0 -> ~70, 2.0 -> ~30, 3+ -> laag
-    var pbScore = Math.round(Math.max(0,Math.min(100,(2.6-d.pb)/2.2*100)));
-    parts.push([pbScore,0.45]); sum+=0.45;
-  }
-
-  // 2) kwaliteit van de onderliggende portefeuille: rendement op eigen vermogen
-  if(d.roe!=null){
-    parts.push([Math.round(Math.max(0,Math.min(100,(d.roe-2)/25*100))),0.20]); sum+=0.20;
-  }
-
-  // 3) schuldgraad - let op: verschillende bronnen leveren een andere maatstaf
-  if(d.de!=null){
-    var deS;
-    if(d.aaqs!=null){
-      // Eulerpool: netto schuld / EBIT. Negatief = netto cash = uitstekend.
-      deS = Math.round(Math.max(0,Math.min(100,(4-d.de)/6*100)));
-    }else{
-      // Finnhub/SecuritiesDB: schuld / eigen vermogen
-      deS = norm(d.de,0,2,true);
-    }
-    parts.push([deS,0.20]); sum+=0.20;
-  }
-
-  // 4) momentum telt licht mee - holdings zijn langetermijnposities, geen handelsobject
-  var mom=momentumScore(d);
-  if(mom!=null){ parts.push([mom,0.15]); sum+=0.15; }
-
-  if(!sum) return 50;
-  var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
-  return Math.max(0,Math.min(100,Math.round(score/sum)));
-}
 
 // toont bij de universumkeuze hoeveel calls die screening ongeveer kost
 function showCostEstimate(){
@@ -2267,30 +2571,7 @@ function etfCatalogTickers(cat){
 // ---- Overlap-kennisbank: welke ETF's volgen dezelfde index, en wat zijn hun grootste posities? ----
 // Ingebouwd omdat de live holdings-endpoints premium zijn. Cijfers zijn indicatief (gewichten schuiven
 // mee met de markt) en bedoeld om verborgen dubbeltellingen te signaleren, niet als exacte allocatie.
-var ETF_INDEX_GROUPS={
-  "S&P 500":["SPY","VOO","IVV","SPLG"],
-  "Nasdaq 100":["QQQ","QQQM"],
-  "Total US Market":["VTI","ITOT","SCHB"],
-  "Developed ex-US":["VEA","IEFA","SCHF"],
-  "Emerging Markets":["VWO","IEMG","EEM"],
-  "Total World ex-US":["VXUS","IXUS"],
-  "US Small Cap":["IWM","VB","IJR"],
-  "US Aggregate Bond":["BND","AGG","SCHZ"],
-  "US Dividend":["SCHD","VYM","DVY"]
-};
 // grootste posities per ETF (indicatief gewicht in %) - alleen de namen die er echt toe doen voor overlap
-var ETF_TOP_HOLDINGS={
-  SPY:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
-  VOO:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
-  IVV:{NVDA:7.5,AAPL:6.8,MSFT:6.2,AMZN:4.0,META:2.6,GOOGL:2.5,AVGO:2.4,TSLA:2.0},
-  VTI:{NVDA:6.5,AAPL:5.9,MSFT:5.4,AMZN:3.5,META:2.3,GOOGL:2.2,AVGO:2.1,TSLA:1.8},
-  QQQ:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
-  QQQM:{NVDA:9.0,AAPL:8.5,MSFT:7.8,AMZN:5.5,AVGO:5.0,META:3.8,TSLA:3.0,GOOGL:2.6},
-  XLK:{NVDA:15.0,AAPL:14.0,MSFT:13.0,AVGO:5.0},
-  XLF:{"BRK-B":13.0,JPM:10.0,V:7.5,MA:6.5,BAC:4.5},
-  XLE:{XOM:22.0,CVX:17.0,COP:7.0,SLB:4.0},
-  SCHD:{},VYM:{},IWM:{},BND:{},AGG:{},VXUS:{},VEA:{},VWO:{},ARKK:{TSLA:9.0,COIN:7.0}
-};
 function indexGroupOf(sym){
   for(var g in ETF_INDEX_GROUPS){ if(ETF_INDEX_GROUPS[g].indexOf(sym)>-1) return g; }
   return null;
@@ -2392,23 +2673,6 @@ function renderEtf(){
 // ticker -> ISIN. Vooraf gevuld met de grote UCITS-fondsen (uit Eulerpool-profielen),
 // zodat dubbele noteringen meteen herkend worden - ook vóór je een ETF hebt opgehaald.
 // Hetzelfde fonds noteert vaak op 5-10 beurzen onder verschillende tickers.
-var EULER_ETF_ALIASES={
-  // iShares Core MSCI World
-  "SWDA.L":"IE00B4L5Y983","IWDA.L":"IE00B4L5Y983","IWDA.AS":"IE00B4L5Y983","EUNL.DE":"IE00B4L5Y983",
-  "EUNL.F":"IE00B4L5Y983","EUNL.MU":"IE00B4L5Y983","EUNL.SG":"IE00B4L5Y983","EUNL.BE":"IE00B4L5Y983",
-  "EUNL.DU":"IE00B4L5Y983","EUNL.HM":"IE00B4L5Y983","SWDA.MI":"IE00B4L5Y983","SWDA.SW":"IE00B4L5Y983",
-  // Vanguard FTSE All-World (acc)
-  "VWRA.L":"IE00BK5BQT80","VWCE.DE":"IE00BK5BQT80","VWCE.AS":"IE00BK5BQT80","VWCE.MI":"IE00BK5BQT80",
-  "VWCE.F":"IE00BK5BQT80","VWCE.DU":"IE00BK5BQT80","VWCE.MU":"IE00BK5BQT80",
-  // iShares MSCI EM
-  "IEMA.L":"IE00B4L5YC18","IEMA.AS":"IE00B4L5YC18","EUNM.DE":"IE00B4L5YC18","EUNM.F":"IE00B4L5YC18",
-  "EUNM.DU":"IE00B4L5YC18","EUNM.HM":"IE00B4L5YC18","EUNM.MU":"IE00B4L5YC18","SEMA.MI":"IE00B4L5YC18",
-  "SEMA.SW":"IE00B4L5YC18",
-  // Amundi Core Stoxx Europe 600
-  "MEUD.PA":"LU0908500753","MEUD.MI":"LU0908500753","MEUD.SW":"LU0908500753","MEUD.L":"LU0908500753",
-  "MEUS.L":"LU0908500753","LYP6.DE":"LU0908500753","LYP6.F":"LU0908500753","LYP6.DU":"LU0908500753",
-  "LYP6.MU":"LU0908500753","LY27.VI":"LU0908500753","STXEF":"LU0908500753"
-};
 function fetchEtfEulerpool(identifier,token){
   return getJson(EULER_BASE+"/etf/profile/"+encodeURIComponent(identifier)+"?token="+encodeURIComponent(token))
     .then(function(d){
@@ -2457,45 +2721,7 @@ function fetchEtfEulerpool(identifier,token){
 var EULER_BASE="https://api.eulerpool.com/api/1";
 // ISIN-tabel voor het ingebouwde EU-universum (Eulerpool werkt op ISIN, niet op ticker).
 // Uit een Saxo-import worden ISIN's automatisch aangevuld.
-var ISIN_MAP={
-  "ASML.AS":"NL0010273215","BESI.AS":"NL0012866412","INGA.AS":"NL0011821202",
-  "ADYEN.AS":"NL0012969182","PHIA.AS":"NL0000009538","HEIA.AS":"NL0000009165",
-  "WKL.AS":"NL0000395903","PRX.AS":"NL0013654783","NN.AS":"NL0010773842","HAL.AS":"NL0000289533",
-  "SOF.BR":"BE0003717312","ABI.BR":"BE0974293251","KBC.BR":"BE0003565737",
-  "UCB.BR":"BE0003739530","ACKB.BR":"BE0003764785","GBLB.BR":"BE0003797140","LOTB.BR":"BE0003604155",
-  "MC.PA":"FR0000121014","OR.PA":"FR0000120321","AIR.PA":"NL0000235190","SAN.PA":"FR0000120578",
-  "BNP.PA":"FR0000131104","TTE.PA":"FR0000120271","SU.PA":"FR0000121972","AI.PA":"FR0000120073",
-  "RMS.PA":"FR0000052292","EL.PA":"FR0000121667","CS.PA":"FR0000120628","DG.PA":"FR0000125486",
-  "BN.PA":"FR0000120644","KER.PA":"FR0000121485","EXO.PA":"NL0012059018","MF.PA":"FR0000121204",
-  "SAP.DE":"DE0007164600","SIE.DE":"DE0007236101","ALV.DE":"DE0008404005","BAS.DE":"DE000BASF111",
-  "BAYN.DE":"DE000BAY0017","BMW.DE":"DE0005190003","VOW3.DE":"DE0007664039","MBG.DE":"DE0007100000",
-  "ADS.DE":"DE000A1EWWW0","MUV2.DE":"DE0008430026","IFX.DE":"DE0006231004","DTE.DE":"DE0005557508",
-  "RWE.DE":"DE0007037129","DPW.DE":"DE0005552004",
-  "NESN.SW":"CH0038863350","NOVN.SW":"CH0012005267","ROG.SW":"CH0012032048",
-  "UBSG.SW":"CH0244767585","ZURN.SW":"CH0011075394","ABBN.SW":"CH0012221716",
-  "NOVO-B.CO":"DK0062498333","MAERSK-B.CO":"DK0010244508","DSV.CO":"DK0060079531",
-  "VOLV-B.ST":"SE0000115446","ERIC-B.ST":"SE0000108656","ATCO-A.ST":"SE0017486889",
-  "INVE-B.ST":"SE0015811963","SAND.ST":"SE0000667891","HM-B.ST":"SE0000106270",
-  "EQNR.OL":"NO0010096985","DNB.OL":"NO0010161896","NHY.OL":"NO0005052605",
-  "NOKIA.HE":"FI0009000681","SAMPO.HE":"FI4000552500","NESTE.HE":"FI0009013296",
-  // aanvullingen: ING heeft twee noteringen, LOTB = Lotus Bakeries
-  "ING.AS":"NL0011821202","INGA.AS":"NL0011821202","LOTB.BR":"BE0003604155",
-  "BESI.AS":"NL0012866412","TNOW.PA":"FR0011871128"
-};
 // ISIN's voor Amerikaanse aandelen (SecuritiesDB levert die niet mee)
-var ISIN_US={
-  AAPL:"US0378331005",MSFT:"US5949181045",NVDA:"US67066G1040",GOOGL:"US02079K3059",
-  AMZN:"US0231351067",META:"US30303M1027",TSLA:"US88160R1014",AVGO:"US11135F1012",
-  "BRK-B":"US0846707026","BRK-A":"US0846701086",JPM:"US46625H1005",V:"US92826C8394",
-  MA:"US57636Q1040",JNJ:"US4781601046",UNH:"US91324P1021",LLY:"US5324571083",
-  XOM:"US30231G1022",CVX:"US1667641005",WMT:"US9311421039",PG:"US7427181091",
-  KO:"US1912161007",PEP:"US7134481081",COST:"US22160K1051",HD:"US4370761029",
-  ORCL:"US68389X1054",CRM:"US79466L3024",AMD:"US0079031078",INTC:"US4581401001",
-  QCOM:"US7475251036",TXN:"US8825081040",CSCO:"US17275R1023",IBM:"US4592001014",
-  NFLX:"US64110L1061",DIS:"US2546871060",PFE:"US7170811035",MRK:"US58933Y1055",
-  ABBV:"US00287Y1091",TMO:"US8835561023",GILD:"US3755581036",AMGN:"US0311621009",
-  MELI:"US58733R1023",PLTR:"US69608A1088",L:"US5404241086",IEP:"US4511071064"
-};
 // aliassen bewaren zodat elk fonds dat je ooit opzocht permanent herkend blijft
 function saveAliases(){
   try{ LS.set('etfAliases',JSON.stringify(EULER_ETF_ALIASES)); }catch(e){}
@@ -2510,20 +2736,7 @@ function loadAliases(){
   }).catch(function(){});
 }
 
-function isinFor(symbol){
-  // eerst uit de portefeuille (Saxo-import bewaart de ISIN), dan uit de vaste tabel
-  if(typeof PORTFOLIO!=="undefined"&&PORTFOLIO&&PORTFOLIO.length){
-    for(var i=0;i<PORTFOLIO.length;i++){
-      if(PORTFOLIO[i].symbol===symbol&&PORTFOLIO[i].isin)return PORTFOLIO[i].isin;
-    }
-  }
-  return ISIN_MAP[symbol]||ISIN_US[symbol]||null;
-}
-// ISIN uit een opgehaald record, met terugval op de tabellen
-function isinOf(d){
-  if(!d)return null;
-  return d.isin || isinFor(d.symbol) || null;
-}
+
 // maakt van een lange bedrijfsnaam een korte, herkenbare weergave voor de tabel
 function shortName(n){
   if(!n)return n;
@@ -2895,135 +3108,6 @@ function dataCompleteness(d){
   return {level:level, missing:missing, hasPrice:hasPrice};
 }
 // externe onderzoekslink voor aandelen waar wij geen fundamentals hebben
-// ---- Broker-beschikbaarheid (indicatie op basis van beursdekking) ----
-// Gebaseerd op de gepubliceerde marktendekking van elke broker. Dit is een vuistregel:
-// een broker kan een specifiek fonds uitsluiten of juist wel aanbieden buiten zijn standaarddekking.
-// Controleer altijd in het platform van je broker voordat je koopt.
-var BROKER_MARKETS={
-  bolero:{
-    label:"Bolero",
-    online:["US","AS","BR","PA","LS","DE","XETRA","MI","MC","L","ST","SW","VI","WA","HE","OL","CO","TO"],
-    telefonisch:["HK","T","AX","LU","AT","SG","JO"],
-    note:"Euronext + alle Amerikaanse beurzen online; Azi\u00eb en exotische markten via de orderdesk (8-22u)."
-  },
-  saxo:{
-    label:"SaxoInvestor",
-    online:["US","AS","BR","PA","LS","DE","XETRA","MI","MC","L","ST","SW","VI","WA","HE","OL","CO","TO","HK","T","AX","SG","NZ"],
-    telefonisch:[],
-    note:"Breedste dekking van de drie: Europa, Amerika en Azi\u00eb allemaal online."
-  },
-  medirect:{
-    label:"MeDirect",
-    online:["US","AS","BR","PA","DE","XETRA","MI","MC","L","SW"],
-    telefonisch:[],
-    note:"Euronext, Xetra, Milaan, Madrid, Londen, Zwitserland en de VS. G\u00e9\u00e9n Scandinavi\u00eb of Azi\u00eb. ETF-transacties zijn commissievrij."
-  }
-};
-// leidt de beurscode af uit ticker of ISIN
-function marketOf(d){
-  var sym=(d.symbol||d.queriedAs||"").toUpperCase();
-  var isin=(typeof isinOf==="function")?isinOf(d):(d.isin||null);
-  var m=sym.match(/\.([A-Z]+)$/);
-  if(m){
-    var suf=m[1];
-    var map={AS:"AS",BR:"BR",PA:"PA",LS:"LS",DE:"XETRA",F:"XETRA",MU:"XETRA",SG:"XETRA",DU:"XETRA",
-             HM:"XETRA",BE:"XETRA",MI:"MI",MC:"MC",L:"L",ST:"ST",SW:"SW",VI:"VI",WA:"WA",
-             HE:"HE",OL:"OL",CO:"CO",TO:"TO",HK:"HK",T:"T",AX:"AX"};
-    return map[suf]||suf;
-  }
-  // geen suffix: Amerikaans, tenzij de ISIN iets anders zegt
-  if(isin){
-    var land=isin.slice(0,2);
-    if(land==="US")return "US";
-    if(land==="IE"||land==="LU")return "IE_UCITS"; // Iers/Luxemburgs fonds: noteert op meerdere EU-beurzen
-    if(land==="NL")return "AS"; if(land==="BE")return "BR"; if(land==="FR")return "PA";
-    if(land==="DE")return "XETRA"; if(land==="IT")return "MI"; if(land==="ES")return "MC";
-    if(land==="GB")return "L"; if(land==="CH")return "SW"; if(land==="SE")return "ST";
-    if(land==="NO")return "OL"; if(land==="DK")return "CO"; if(land==="FI")return "HE";
-    if(land==="KY"||land==="CN"||land==="HK")return "HK";
-  }
-  return "US";
-}
-function brokersFor(d){
-  var mkt=marketOf(d);
-  var res=[];
-  Object.keys(BROKER_MARKETS).forEach(function(k){
-    var b=BROKER_MARKETS[k];
-    // UCITS-fondsen noteren doorgaans op Xetra/Euronext, dus dekking daar volstaat
-    var effectief = (mkt==="IE_UCITS") ? "XETRA" : mkt;
-    if(b.online.indexOf(effectief)>-1) res.push({key:k,label:b.label,mode:"online"});
-    else if(b.telefonisch.indexOf(effectief)>-1) res.push({key:k,label:b.label,mode:"telefonisch"});
-  });
-  return {market:mkt,brokers:res};
-}
-function brokerBadge(d){
-  var r=brokersFor(d);
-  if(!r.brokers.length){
-    return '<span class="trap" title="Deze markt zit niet in de standaarddekking van Bolero, Saxo of MeDirect \u2014 controleer bij je broker." style="margin-left:6px;opacity:.7">? broker</span>';
-  }
-  var namen=r.brokers.map(function(b){return b.label+(b.mode==="telefonisch"?" (telefonisch)":"");}).join(", ");
-  var kort=r.brokers.map(function(b){return b.label.charAt(0)+(b.mode==="telefonisch"?"\u260e":"");}).join("");
-  var cls=r.brokers.length>=3?"trap ok":(r.brokers.length===2?"trap":"trap warn");
-  return '<span class="'+cls+'" title="Waarschijnlijk verkrijgbaar bij: '+namen+
-    ' \u2014 indicatie op basis van beursdekking, controleer bij je broker." style="margin-left:6px">'+kort+'</span>';
-}
-
-// ---- Externe onderzoekslinks per aandeel/fonds ----
-// Niet elke site heeft een voorspelbare URL-structuur: investing.com gebruikt interne ID's,
-// dus daarvoor openen we een zoekopdracht in plaats van een gokte directe link.
-function externalLinks(d){
-  var sym=(d.symbol||"").toUpperCase();
-  var base=sym.split(".")[0];
-  var isin=(typeof isinOf==="function")?isinOf(d):(d.isin||null);
-  var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L)$/i.test(sym);
-  var isEtf=(typeof ETF_HINT!=="undefined"&&ETF_HINT.test(sym))||d.ter!=null||d.aum!=null;
-  var q=encodeURIComponent(isin||sym);
-  var links=[];
-
-  if(isEtf){
-    if(isin) links.push({u:"https://www.justetf.com/en/etf-profile.html?isin="+encodeURIComponent(isin),t:"justETF",d:"Kosten, samenstelling en alle noteringen"});
-    if(!isEU) links.push({u:"https://stockanalysis.com/etf/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Holdings, rendement en dividend"});
-    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Sterrenrating en analistenoordeel"});
-  }else{
-    if(!isEU) links.push({u:"https://stockanalysis.com/stocks/"+encodeURIComponent(base)+"/",t:"StockAnalysis",d:"Cijfers, ratio's en historiek"});
-    if(isEU) links.push({u:"https://www.marketscreener.com/search/?q="+q,t:"MarketScreener",d:"Europese analistenschattingen"});
-    links.push({u:"https://finance.yahoo.com/quote/"+encodeURIComponent(sym),t:"Yahoo Finance",d:"Koers, nieuws en kerncijfers"});
-    links.push({u:"https://www.morningstar.com/search?query="+q,t:"Morningstar",d:"Moat-rating en fair value"});
-  }
-  // investing.com heeft geen voorspelbare URL per ticker -> zoekopdracht
-  links.push({u:"https://www.investing.com/search/?q="+q,t:"Investing.com",d:"Zoekresultaat"});
-  return links;
-}
-// klein linkicoontje met uitklapbaar menu
-function linkMenu(d){
-  var ls=externalLinks(d);
-  if(!ls.length)return "";
-  var id="lnk_"+(d.symbol||"").replace(/[^A-Za-z0-9]/g,"_");
-  var items=ls.map(function(l){
-    return '<a href="'+l.u+'" target="_blank" rel="noopener" style="display:block;padding:6px 10px;color:var(--ink);text-decoration:none;font-size:12px;white-space:nowrap">'+
-           l.t+'<span style="display:block;font-size:10px;color:var(--muted)">'+l.d+'</span></a>';
-  }).join("");
-  return '<span style="position:relative;display:inline-block;margin-left:6px">'+
-    '<span onclick="toggleLinkMenu(\''+id+'\',event)" title="Meer informatie opzoeken op externe sites" '+
-      'style="cursor:pointer;color:var(--blue);font-size:11px;border:1px solid var(--line);'+
-      'border-radius:4px;padding:1px 5px;background:var(--panel-2)">info \u2197</span>'+
-    '<span id="'+id+'" style="display:none;position:absolute;top:100%;left:0;z-index:50;'+
-      'background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 0;'+
-      'box-shadow:0 6px 20px rgba(0,0,0,.5);min-width:190px">'+items+'</span></span>';
-}
-function toggleLinkMenu(id,ev){
-  if(ev){ev.stopPropagation();}
-  var el=document.getElementById(id); if(!el)return;
-  var open=el.style.display!=="none";
-  // sluit andere menu's
-  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
-  el.style.display=open?"none":"block";
-}
-window.toggleLinkMenu=toggleLinkMenu;
-document.addEventListener('click',function(){
-  Array.prototype.forEach.call(document.querySelectorAll('[id^="lnk_"]'),function(m){m.style.display="none";});
-});
-
 function researchLinkFor(symbol){
   var base=symbol.split(".")[0];
   var isEU=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i.test(symbol);
@@ -3211,75 +3295,6 @@ if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
-// ---- Overlap met je eigen portefeuille, getoond tijdens het screenen ----
-// Vier soorten signalen, van sterk naar zwak:
-//   bezit    = je hebt dit exact al
-//   zelfde   = zelfde fonds, andere beursnotering (zelfde ISIN)
-//   in-etf   = dit aandeel zit als grote positie in een ETF die je bezit
-//   sector   = je hebt al posities in dezelfde sector
-function portfolioOverlapFor(d){
-  if(typeof PORTFOLIO==="undefined"||!PORTFOLIO||!PORTFOLIO.length) return null;
-  var sym=(d.symbol||"").toUpperCase();
-  var isin=(typeof isinOf==="function"?isinOf(d):null);
-
-  // 1) exact dezelfde positie
-  for(var i=0;i<PORTFOLIO.length;i++){
-    if((PORTFOLIO[i].symbol||"").toUpperCase()===sym){
-      return {kind:"bezit",level:"high",text:"Je bezit dit al ("+PORTFOLIO[i].qty+" stuks)"};
-    }
-  }
-  // 2) zelfde effect onder een andere notering (via ISIN)
-  if(isin){
-    for(var j=0;j<PORTFOLIO.length;j++){
-      var pIsin=PORTFOLIO[j].isin||(typeof isinFor==="function"?isinFor(PORTFOLIO[j].symbol):null);
-      if(pIsin&&pIsin===isin){
-        return {kind:"zelfde",level:"high",text:"Zelfde effect als je positie "+PORTFOLIO[j].symbol+" (ISIN "+isin+")"};
-      }
-    }
-    // zelfde fonds via de aliassen die Eulerpool meegaf
-    if(typeof EULER_ETF_ALIASES!=="undefined"&&EULER_ETF_ALIASES[sym]){
-      for(var k=0;k<PORTFOLIO.length;k++){
-        var alias=EULER_ETF_ALIASES[(PORTFOLIO[k].symbol||"").toUpperCase()];
-        if(alias&&alias===EULER_ETF_ALIASES[sym]){
-          return {kind:"zelfde",level:"high",text:"Zelfde fonds als je positie "+PORTFOLIO[k].symbol};
-        }
-      }
-    }
-  }
-  // 3) zit als grote positie in een ETF die je bezit
-  if(typeof ETF_TOP_HOLDINGS!=="undefined"){
-    var via=[];
-    PORTFOLIO.forEach(function(p){
-      var h=ETF_TOP_HOLDINGS[(p.symbol||"").toUpperCase()];
-      if(h&&h[sym]) via.push(p.symbol+" ("+h[sym]+"%)");
-    });
-    if(via.length){
-      return {kind:"in-etf",level:"mid",text:"Zit al in je "+via.join(" en ")};
-    }
-  }
-  // 4) sectoroverlap - zwakste signaal, alleen melden bij duidelijke concentratie
-  if(d.sector){
-    var same=PORTFOLIO.filter(function(p){
-      return p._fresh&&p._fresh.sector===d.sector;
-    });
-    if(same.length>=2){
-      return {kind:"sector",level:"low",
-        text:"Je hebt al "+same.length+" posities in "+d.sector+" ("+same.slice(0,3).map(function(p){return p.symbol;}).join(", ")+(same.length>3?"\u2026":"")+")"};
-    }
-  }
-  return null;
-}
-function overlapBadge(d){
-  var o=portfolioOverlapFor(d);
-  if(!o) return "";
-  var cls = o.level==="high" ? "trap danger" : (o.level==="mid" ? "trap warn" : "trap");
-  var label = o.kind==="bezit" ? "in bezit"
-            : o.kind==="zelfde" ? "duplicaat"
-            : o.kind==="in-etf" ? "via ETF"
-            : "sector";
-  return '<span class="'+cls+'" title="'+o.text.replace(/"/g,"&quot;")+'" style="margin-left:6px">'+label+'</span>';
-}
-
 // ---- Overlap-analyse: index-dubbelingen tussen ETF's + losse aandelen die ook in je ETF's zitten ----
 // haalt de ECHTE overlap op tussen alle ETF-paren in de portefeuille (SecuritiesDB, gratis)
 var REAL_OVERLAP={}; // "A|B" -> percentage
