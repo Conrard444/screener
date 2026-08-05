@@ -2046,6 +2046,8 @@ function renderQuota(){
 
 // ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
 var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
+// ISIN-formaat: 2 letters (land) + 9 tekens + 1 controlecijfer, bv. NL0010273215
+var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
 var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
 
@@ -2156,8 +2158,15 @@ function enrichMultiFallback(symbol){
       if(!hasPrice) return fillPriceFrom(d,symbol,order,i);
       return d;
     }).catch(function(e){
-      // korte, niet-geneste foutreden per bron (voorkomt dat hele ketens in elkaar geplakt worden)
-      var raw=(e&&e.msg)||"fout";
+      // korte, niet-geneste foutreden per bron. Vang álle vormen af: onze eigen {msg},
+      // een gewone Error, of een onverwacht object - anders staat er alleen "fout".
+      var raw;
+      if(e&&e.msg)raw=e.msg;
+      else if(e&&e.message)raw=e.message;
+      else if(e instanceof Error)raw=String(e);
+      else if(typeof e==="string")raw=e;
+      else if(e)raw="onverwacht: "+(JSON.stringify(e)||String(e)).slice(0,60);
+      else raw="onbekende fout (geen details)";
       var short=/CORS|netwerkfout/i.test(raw) ? "geen browsertoegang"
               : /403|access denied|don't have access/i.test(raw) ? "geen toegang op je tier"
               : /404|not found/i.test(raw) ? "niet gevonden"
