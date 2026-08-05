@@ -2157,7 +2157,7 @@ function enrichMultiFallback(symbol){
               : /403|access denied|don't have access/i.test(raw) ? "geen toegang op je tier"
               : /404|not found/i.test(raw) ? "niet gevonden"
               : /limit|429/i.test(raw) ? "limiet bereikt"
-              : raw.split("(")[0].slice(0,40);
+              : raw.slice(0,90);   // niet afkappen op haakjes: de reden staat er vaak juist ín
       if(errors.indexOf(src+": "+short)===-1) errors.push(src+": "+short);
       return attempt(i+1);
     });
@@ -3185,6 +3185,9 @@ function enrichEulerpool(symbol,token){
         profitContinuity: a.profitContinuity10Y!=null ? +a.profitContinuity10Y : null,
         isin:isin, _src:"eulerpool"
       };
+    }).catch(function(eOud){
+      // beide routes gefaald: beide redenen doorgeven, anders valt het niet te herleiden
+      throw {kind:"api",msg:redenMetrics+" | terugval: "+((eOud&&eOud.msg)?eOud.msg:"profiel mislukt")};
     });
   }).then(function(d){
     // koershistorie voor echt momentum en de 52-weeks daling
