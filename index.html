@@ -18,6 +18,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+// ---- Bronopties (moeten vóór elk gebruik staan) ----
+var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
+var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
+var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
+
   // Firebase-config (mag openbaar zijn; beveiliging zit in de Firestore-regels)
   var FIREBASE_CONFIG = {
     apiKey: "AIzaSyBE5MdwAbiWwksN49LQUr_KEMo6kp19sIo",
@@ -721,8 +726,14 @@ function valuationScore(d){
   // in plaats van één jaar. Voorkomt dat een cyclisch bedrijf in een dieptejaar als extreem
   // duur oogt (BESI: P/E 129 op dieptejaarwinst, 86 op het vijfjaarsgemiddelde).
   if(d.peNorm!=null&&d.peNorm>0){
-    var normS=norm(d.peNorm,8,60,true);
-    var pbS=(d.pb!=null)?norm(d.pb,1,25,true):null;
+    // Ruimere schalen dan voorheen: met een bovengrens van 60 kregen een P/E van 70 en
+    // eentje van 200 allebei een 0, waardoor je geen onderscheid meer zag tussen "duur"
+    // en "absurd duur". Logaritmisch, want het verschil tussen 10 en 20 telt zwaarder
+    // dan tussen 110 en 120.
+    var normS=Math.round(Math.max(0,Math.min(100,
+      (1-(Math.log10(Math.max(3,d.peNorm))-Math.log10(6))/(Math.log10(150)-Math.log10(6)))*100)));
+    var pbS=(d.pb!=null)?Math.round(Math.max(0,Math.min(100,
+      (1-(Math.log10(Math.max(0.3,d.pb))-Math.log10(0.6))/(Math.log10(60)-Math.log10(0.6)))*100))):null;
     if(pbS!=null)return capSuspectValue(d, Math.round(normS*0.65+pbS*0.35));
     return capSuspectValue(d, normS);
   }
@@ -755,7 +766,16 @@ function growthScore(d){
     var a=pctRank(d.revG,PEERS.revG,false),b=pctRank(d.epsG,PEERS.epsG,false);
     g = (a!=null&&b!=null) ? Math.round(a*0.45+b*0.55) : null;
   }
-  if(g==null) g = Math.round(norm(d.revG,-5,40,false)*0.45+norm(d.epsG,-10,60,false)*0.55);
+  // Ruimere ondergrens: met -5% als bodem kregen een krimp van 6% en van 40% dezelfde nul.
+  // Nu loopt de schaal van -40% tot +40%, zodat de mate van krimp meetelt.
+  if(g==null){
+    var rs=(d.revG!=null)?norm(d.revG,-40,40,false):null;
+    var es=(d.epsG!=null)?norm(d.epsG,-50,60,false):null;
+    if(rs!=null&&es!=null)g=Math.round(rs*0.45+es*0.55);
+    else if(es!=null)g=es;
+    else if(rs!=null)g=rs;
+    else g=40;
+  }
 
   // Groei zonder winstgevendheid is geen kwaliteit maar risico: het onderzoek laat zien dat
   // snelgroeiende bedrijven géén premie opleveren, winstgévende groeiers wél. Daarom wordt
@@ -2056,6 +2076,8 @@ function renderQuota(){
 // ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
 var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
 // ISIN-formaat: 2 letters (land) + 9 tekens + 1 controlecijfer, bv. NL0010273215
+// Werkt, mits de geneste responsstructuur correct gelezen wordt (valuation.pe, perShare.eps, etc).
+// Geeft in één call waardering, winstgevendheid, groei, per-aandeel-gegevens en 12 jaar historie.
 var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
 var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
@@ -2952,11 +2974,6 @@ function fetchEtfEulerpool(identifier,token){
 // ---- Eulerpool: Europese fundamentals (werkt op ISIN, dekt Euronext/Xetra/etc.) ----
 var EULER_BASE="https://api.eulerpool.com/api/1";
 // Opties die extra API-calls kosten. Alle drie uit te zetten bij een krap maandbudget.
-// Werkt, mits de geneste responsstructuur correct gelezen wordt (valuation.pe, perShare.eps, etc).
-// Geeft in één call waardering, winstgevendheid, groei, per-aandeel-gegevens en 12 jaar historie.
-var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
-var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
-var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 // Jaarrekeningcijfers ophalen om P/E, P/B en marge te berekenen. Kost één extra call per
 // ISIN-tabel voor het ingebouwde EU-universum (Eulerpool werkt op ISIN, niet op ticker).
 // Uit een Saxo-import worden ISIN's automatisch aangevuld.
@@ -3751,7 +3768,7 @@ function renderPortfolio(){
         : '')+
       (p._fresh&&!p._fresh.isEtf? (isHolding({symbol:p.symbol,isin:p.isin,sector:p._fresh.sector})
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
-        : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span>'+
+        : '<div class="pf-scores"><span>Momentum <b>'+(p._fresh.m==null?'\u2014':p._fresh.m)+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span>'+
           (p._fresh.upside!=null?'<span title="Modelmatig geschat opwaarts potentieel \u2014 geen voorspelling">Potentieel <b class="'+(p._fresh.upside>=15?"pos":(p._fresh.upside<=-10?"neg":""))+'">'+(p._fresh.upside>0?"+":"")+p._fresh.upside.toFixed(0)+'%</b></span>':'')+
           '</div>'
       ) : '')+
