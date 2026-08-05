@@ -572,9 +572,9 @@
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
-          <input type="checkbox" id="eulerMetrics" checked style="width:auto">
-          <span>Volledige cijferset ophalen voor Europese aandelen (P/E, koers/boekwaarde, EV/EBITDA,
-            ROIC, marges, groei, dividend). <b style="color:var(--green)">1 call per aandeel</b> &mdash; vervangt drie losse aanroepen.</span>
+          <input type="checkbox" id="eulerMetrics" style="width:auto">
+          <span>Uitgebreide cijferset proberen via <code>/equity/metrics</code> (P/E, EV/EBITDA, ROIC, marges).
+            <b style="color:var(--accent)">Experimenteel</b> &mdash; leek in tests niets terug te geven; laat uit als je twijfelt.</span>
         </label>
       </div>
       <div class="control-row compact">
@@ -2152,7 +2152,13 @@ function enrichMultiFallback(symbol){
       // (geen koers), dus een ontbrekende prijs mag geen reden zijn om het weg te gooien.
       var hasFundamentals = d && (d.aaqs!=null||d.pe!=null||d.roe!=null||d.revG!=null||d.piotroski!=null);
       var hasPrice = d && d.price!=null;
-      if(!d || (!hasFundamentals && !hasPrice)){errors.push(src+": geen data");return attempt(i+1);}
+      if(!d || (!hasFundamentals && !hasPrice)){
+        // vertel wélke velden er dan wél binnenkwamen, anders is dit niet te herleiden
+        var aanwezig=d?Object.keys(d).filter(function(k){return d[k]!=null&&k.charAt(0)!=="_";}).slice(0,8):[];
+        errors.push(src+": respons zonder bruikbare cijfers"+
+          (aanwezig.length?" (wel: "+aanwezig.join(", ")+")":" (leeg object)"));
+        return attempt(i+1);
+      }
       d._src=src;
       // koers ontbreekt maar fundamentals zijn er: vul de koers aan uit een andere bron
       if(!hasPrice) return fillPriceFrom(d,symbol,order,i);
@@ -2184,6 +2190,8 @@ function fillPriceFrom(d,symbol,order,skipIndex){
   if(!priceSources.length) return Promise.resolve(d);
   function tryNext(j){
     if(j>=priceSources.length) return d; // geen koers gevonden: fundamentals blijven bruikbaar
+    // let op: fouten hier zijn niet erg - we hebben de fundamentals al. Ze mogen dus
+    // niet in de hoofdfoutmelding terechtkomen (dat gaf geneste, onleesbare teksten).
     return enrichWithSource(symbol,priceSources[j],MULTI_KEYS[priceSources[j]]).then(function(q){
       if(q&&q.price!=null){
         d.price=q.price;
@@ -2695,7 +2703,7 @@ if($('eulerMetrics'))$('eulerMetrics').onchange=function(){
   if(typeof showCostEstimate==="function")showCostEstimate();
 };
 LS.get('eulerMetrics').then(function(r){
-  if(r&&r.value==="0"){EULER_METRICS=false;var e=$('eulerMetrics');if(e)e.checked=false;}
+  if(r&&r.value==="1"){EULER_METRICS=true;var e=$('eulerMetrics');if(e)e.checked=true;}
 }).catch(function(){});
 LS.get('eulerFund').then(function(r){
   if(r&&r.value==="0"){EULER_FUNDAMENTALS=false;var e=$('eulerFundamentals');if(e)e.checked=false;}
@@ -2935,7 +2943,10 @@ function fetchEtfEulerpool(identifier,token){
 // ---- Eulerpool: Europese fundamentals (werkt op ISIN, dekt Euronext/Xetra/etc.) ----
 var EULER_BASE="https://api.eulerpool.com/api/1";
 // Opties die extra API-calls kosten. Alle drie uit te zetten bij een krap maandbudget.
-var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs+financials)
+// Standaard UIT: het /equity/metrics-endpoint staat wel in de OpenAPI-spec, maar bleek in de
+// praktijk niets bruikbaars terug te geven (mogelijk een hoger toegangsniveau vereist).
+// De route via profiel + AAQS is getest en werkt. Aan te zetten in Instellingen om te proberen.
+var EULER_METRICS=false;      // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 // Jaarrekeningcijfers ophalen om P/E, P/B en marge te berekenen. Kost één extra call per
