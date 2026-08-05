@@ -673,10 +673,31 @@ function peerArr(d,f){
 function currentHorizon(){var el=document.getElementById('horizon');return el?el.value:'kort';}
 function isLong(){return currentHorizon()==='lang';}
 
+// null = geen momentumdata beschikbaar (bv. Europese aandelen via Eulerpool, dat geen koersen levert).
+// Dat is iets anders dan "slecht momentum" en mag de totaalscore niet omlaag trekken.
 function momentumScore(d){
-  if(!isLong()&&PEERS){var a=pctRank(d.chg,PEERS.chg,false),b=pctRank(d.mom1m,PEERS.mom1m,false);
-    if(a!=null&&b!=null)return Math.round(a*0.4+b*0.6);}
-  return Math.round(norm(d.chg,-5,8,false)*0.4+norm(d.mom1m,-15,25,false)*0.6);
+  var heeftData = (d.chg!=null&&!isNaN(d.chg)) || (d.mom1m!=null&&!isNaN(d.mom1m));
+  if(!heeftData) return null;
+  if(!isLong()&&PEERS){
+    var a=pctRank(d.chg,PEERS.chg,false),b=pctRank(d.mom1m,PEERS.mom1m,false);
+    if(a!=null&&b!=null)return Math.round(a*0.4+b*0.6);
+  }
+  var parts=[],sum=0;
+  if(d.chg!=null&&!isNaN(d.chg)){parts.push([norm(d.chg,-5,8,false),0.4]);sum+=0.4;}
+  if(d.mom1m!=null&&!isNaN(d.mom1m)){parts.push([norm(d.mom1m,-15,25,false),0.6]);sum+=0.6;}
+  if(!sum)return null;
+  var m=0;parts.forEach(function(p){m+=p[0]*p[1];});
+  return Math.round(m/sum);
+}
+// Is dit "goedkoop" of "goedkoop met reden"? Bij financiële nood of krimpende winst is een lage
+// waardering geen koopje maar een waarschuwing - de markt prijst het risico in.
+function valuationIsSuspect(d){
+  if(d.altmanZ!=null&&d.altmanZ<1.81)return true;          // distress-zone
+  if(d.piotroski!=null&&d.piotroski<=3)return true;          // zwakke financiële kracht
+  if(d.epsG!=null&&d.epsG<-15)return true;                   // winst stort in
+  if(d.roicSpread!=null&&d.roicSpread<-5)return true;        // vernietigt kapitaalwaarde
+  if(d.aaqs!=null&&d.aaqs<=3)return true;                    // zwakke AAQS
+  return false;
 }
 function valuationScore(d){
   // Beste signaal indien beschikbaar: hoe verhoudt de huidige P/E zich tot de EIGEN 5-jaarshistorie
@@ -688,19 +709,40 @@ function valuationScore(d){
     // aanvullen met PEG (waardering t.o.v. groei) waar beschikbaar
     if(d.peg!=null){
       var pegS = norm(d.peg,0.5,4,true);
-      return Math.round(hist*0.65 + pegS*0.35);
+      return capSuspectValue(d, Math.round(hist*0.65 + pegS*0.35));
     }
-    return hist;
+    return capSuspectValue(d, hist);
   }
   // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels
   if(!isLong()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
-    if(a!=null&&b!=null&&c!=null)return Math.round(a*0.4+b*0.4+c*0.2);}
-  return Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2);
+    if(a!=null&&b!=null&&c!=null)return capSuspectValue(d, Math.round(a*0.4+b*0.4+c*0.2));}
+  return capSuspectValue(d, Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2));
+}
+// begrenst de waarderingsscore wanneer de goedkoopte verdacht is: nooit hoger dan 55,
+// zodat een bedrijf in nood niet bovenaan eindigt puur omdat het optisch goedkoop is
+function capSuspectValue(d,score){
+  return valuationIsSuspect(d) ? Math.min(score,55) : score;
 }
 function growthScore(d){
-  if(!isLong()&&PEERS){var a=pctRank(d.revG,PEERS.revG,false),b=pctRank(d.epsG,PEERS.epsG,false);
-    if(a!=null&&b!=null)return Math.round(a*0.45+b*0.55);}
-  return Math.round(norm(d.revG,-5,40,false)*0.45+norm(d.epsG,-10,60,false)*0.55);
+  var g;
+  if(!isLong()&&PEERS){
+    var a=pctRank(d.revG,PEERS.revG,false),b=pctRank(d.epsG,PEERS.epsG,false);
+    g = (a!=null&&b!=null) ? Math.round(a*0.45+b*0.55) : null;
+  }
+  if(g==null) g = Math.round(norm(d.revG,-5,40,false)*0.45+norm(d.epsG,-10,60,false)*0.55);
+
+  // Groei zonder winstgevendheid is geen kwaliteit maar risico: het onderzoek laat zien dat
+  // snelgroeiende bedrijven géén premie opleveren, winstgévende groeiers wél. Daarom wordt
+  // hoge groei getemperd als het bedrijf geen waarde creëert of geen winst maakt.
+  var onrendabel = (d.roicSpread!=null&&d.roicSpread<0) ||
+                   (d.margin!=null&&d.margin<0) ||
+                   (d.roe!=null&&d.roe<0);
+  if(onrendabel && g>60) g = 60 + Math.round((g-60)*0.4); // top afvlakken, niet wegvagen
+
+  // Omzetgroei zonder winstgroei: groeien tegen elke prijs
+  if(d.revG!=null&&d.epsG!=null&&d.revG>20&&d.epsG<0) g=Math.round(g*0.7);
+
+  return Math.max(0,Math.min(100,g));
 }
 // Kwaliteit (academisch best onderbouwd na momentum): winstgevendheid hoog, marge hoog, schuld laag.
 function qualityScore(d){
@@ -1070,7 +1112,28 @@ function rawScore(d){
     base=drawdownScore(d)*0.30+qualityScore(d)*0.35+valuationScore(d)*0.35;
   }else{
     var w=weights();
-    base=momentumScore(d)*w.wm+valuationScore(d)*w.wv+growthScore(d)*w.wg+qualityScore(d)*w.wq;
+    var mom=momentumScore(d), val=valuationScore(d), gro=growthScore(d), qual=qualityScore(d);
+
+    // Geen momentumdata? Verdeel dat gewicht over de fundamentele factoren in plaats van
+    // een verzonnen middenwaarde in te vullen - anders krijgt een Europees kwaliteitsaandeel
+    // zonder koersfeed onterecht een lagere score dan een Amerikaans.
+    if(mom==null){
+      var rest=w.wv+w.wg+w.wq;
+      base = (val*w.wv + gro*w.wg + qual*w.wq)/rest;
+      var t0=valueTrap(d);
+      return Math.round(base*(t0.level===2?0.75:(t0.level===1?0.90:1)));
+    }
+
+    // Momentum is de best onderbouwde factor, maar mag niet in zijn eentje een aandeel
+    // omhoog dragen waarvan de fundamenten dat niet rechtvaardigen. Bij een zwakke
+    // fundamentele basis (waardering + kwaliteit) telt momentum minder zwaar mee -
+    // dat is precies het patroon van een opgeblazen koers zonder onderbouwing.
+    var fundament=(val+qual)/2;
+    if(fundament<40 && mom>70){
+      var demping = 0.5 + (fundament/40)*0.5;   // 50-100% naargelang hoe zwak het fundament is
+      mom = Math.round(qual*0.3 + mom*demping*0.7);
+    }
+    base=mom*w.wm+val*w.wv+gro*w.wg+qual*w.wq;
   }
   var t=valueTrap(d);
   var penalty=t.level===2?0.75:(t.level===1?0.90:1);
@@ -1086,9 +1149,12 @@ function valueTrap(d){
   if(cheap&&d.epsG!=null&&d.epsG<0){lvl=2;r.push("oogt goedkoop maar winst krimpt");}
   if(cheap&&d.revG!=null&&d.revG<0){lvl=Math.max(lvl,2);r.push("oogt goedkoop maar omzet krimpt");}
   if(d.mom1m!=null&&d.mom1m>5&&d.epsG!=null&&d.epsG<0){lvl=Math.max(lvl,2);r.push("koers stijgt op dalende winst");}
-  if(d.peg!=null&&d.peg>3&&d.epsG!=null&&d.epsG<5){lvl=Math.max(lvl,1);r.push("hoge PEG, weinig groei");}
-  if(d.mom1m!=null&&d.mom1m<-5&&d.epsG!=null&&d.epsG>10){lvl=Math.max(lvl,1);r.push("dalende koers ondanks groei");}
-  if(d.pe!=null&&d.pe>40&&d.epsG!=null&&d.epsG<10){lvl=Math.max(lvl,1);r.push("hoge P/E, magere groei");}
+  // Let op: een hoge PEG of P/E bij lage groei is een wáárderingsoordeel, geen valstrik.
+  // Een stabiel dividendaandeel als Coca-Cola hoort geen waarschuwing te krijgen omdat het
+  // traag groeit - dat verwart "duur" met "gevaarlijk". Alleen markeren als de prijs
+  // extreem is én er geen groei tegenover staat.
+  if(d.pe!=null&&d.pe>60&&d.epsG!=null&&d.epsG<5){lvl=Math.max(lvl,1);r.push("zeer hoge P/E ("+d.pe+") zonder groei om het te dragen");}
+  if(d.mom1m!=null&&d.mom1m<-15&&d.epsG!=null&&d.epsG>10){lvl=Math.max(lvl,1);r.push("koers daalt fors ondanks winstgroei \u2014 markt ziet iets");}
   // harde signalen uit SecuritiesDB (indien beschikbaar): faillissementsrisico en manipulatie-vlag
   if(d.altmanZ!=null&&d.altmanZ<1.81){lvl=2;r.push("Altman Z "+d.altmanZ+" \u2014 financi\u00eble distress-zone");}
   else if(d.altmanZ!=null&&d.altmanZ<2.99){lvl=Math.max(lvl,1);r.push("Altman Z "+d.altmanZ+" \u2014 grijze zone");}
@@ -2614,10 +2680,12 @@ function etfCostScore(d){return d.ter!=null?Math.round(Math.max(0,Math.min(100,(
 function etfDiversityScore(d){
   var a=d.holdings!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,d.holdings))/Math.log10(3000))*100))):null;
   var b=d.top10!=null?Math.round(Math.max(0,Math.min(100,(1-(d.top10-8)/62)*100))):null;
-  if(a!=null&&b!=null)return Math.round(a*0.5+b*0.5);
+  // concentratie weegt zwaarder dan het aantal posities: 500 posities waarvan 70% in tien namen
+  // geeft minder spreiding dan 100 posities die gelijkmatig verdeeld zijn
+  if(a!=null&&b!=null)return Math.round(a*0.38+b*0.62);
   return a!=null?a:(b!=null?b:50);
 }
-function etfLiquidityScore(d){return d.aum!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,d.aum))+1.3)/2.3*100))):50;}
+function etfLiquidityScore(d){return d.aum!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,d.aum))+1.3)/3.6*100))):50;}
 function etfTrackScore(d){ // proxy: track record vergt historische returns die we niet los ophalen; blijft licht gewogen en neutraal
   return 55;
 }
@@ -2642,7 +2710,11 @@ function etfCloseRisk(d){
 }
 function renderEtf(){
   buildEtfPeers(ETF_CURRENT);
-  var rows=ETF_CURRENT.map(function(d){var s=etfTotalScore(d);return Object.assign({},d,{_s:(s==null?null:s)});});
+  var rows=ETF_CURRENT.map(function(d){
+    var s=etfTotalScore(d);
+    var det=(typeof etfPortfolioScore==="function")?etfPortfolioScore(d):null;
+    return Object.assign({},d,{_s:(s==null?null:s),_dek:det?det.basedOn:null});
+  });
   rows.sort(function(a,b){return b._s-a._s;});
   $('etfBody').innerHTML=rows.map(function(d){
     var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
@@ -2665,7 +2737,9 @@ function renderEtf(){
       '<td class="num">'+(d.weightedPe!=null?d.weightedPe.toFixed(1):"\u2014")+'</td>'+
       '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+(d.vol!=null?d.vol.toFixed(1)+"%":"\u2014")+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+(d.chg!=null?((d.chg>0?"+":"")+d.chg.toFixed(1)+"%"):"\u2014")+'</td>'+
-      '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
+      '<td class="num"><div class="scorecell">'+(d._s==null?"\u2014":d._s)+' '+badge+
+        (d._dek!=null&&d._dek<100?'<span style="font-size:9px;color:var(--muted)" title="Score berekend over '+d._dek+'% van de factoren \u2014 niet alle gegevens beschikbaar"> \u00b7'+d._dek+'%</span>':'')+
+        '</div><div class="bar"><i style="width:'+(d._s||0)+'%"></i></div></td>'+
     '</tr>';
   }).join("");
 }
@@ -3050,34 +3124,45 @@ function etfPortfolioScore(e){
   var parts=[], sum=0, detail={};
 
   if(e.ter!=null){
-    // schaal 0,03% (beste indexfondsen) tot 0,60% (dure actieve fondsen); Europese UCITS
-    // liggen doorgaans tussen 0,07% en 0,40%, dus deze schaal onderscheidt daar goed binnen
+    // schaal 0,03% (beste indexfondsen) tot 0,60%; Europese UCITS liggen doorgaans
+    // tussen 0,07% en 0,40%, dus deze schaal onderscheidt daar goed binnen
     var cost=Math.round(Math.max(0,Math.min(100,(1-(e.ter-0.03)/0.57)*100)));
-    parts.push([cost,0.40]); sum+=0.40; detail.cost=cost;
+    parts.push([cost,0.38]); sum+=0.38; detail.cost=cost;
   }
   if(e.holdings!=null){
     var div=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(1,e.holdings))/Math.log10(3000))*100)));
-    parts.push([div,0.20]); sum+=0.20; detail.div=div;
+    parts.push([div,0.17]); sum+=0.17; detail.div=div;
   }
+  // Concentratie zwaarder laten wegen: een fonds waarvan 68% in tien namen zit, geeft veel
+  // minder spreiding dan het aantal posities doet vermoeden. Dit is precies het verschil
+  // tussen een brede index en een sectorfonds.
   if(e.top10!=null){
     var conc=Math.round(Math.max(0,Math.min(100,(1-(e.top10-8)/62)*100)));
-    parts.push([conc,0.20]); sum+=0.20; detail.conc=conc;
+    parts.push([conc,0.28]); sum+=0.28; detail.conc=conc;
   }
+  // Geen top-10-cijfer? Dan laten we die factor bewust weg in plaats van te schatten.
+  // Ik heb geprobeerd de concentratie af te leiden uit het aantal posities, maar dat is
+  // onbetrouwbaar: VTI heeft 3700 posities en tóch 32% in de top 10, terwijl de formule
+  // 15% voorspelde. Een verkeerde schatting is misleidender dan een eerlijk gat.
   if(e.aum!=null){
     // omvang als risico-indicator: kleine fondsen sluiten vaker en hebben bredere spreads.
-    // Boven ~$10 mld is groter nauwelijks nog beter, dus de schaal vlakt daar af.
-    var size=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,e.aum))+1.3)/2.3*100)));
-    parts.push([size,0.20]); sum+=0.20; detail.size=size;
+    // Schaal loopt door tot ~$200 mld zodat grote fondsen onderling nog onderscheiden worden.
+    var size=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,e.aum))+1.3)/3.6*100)));
+    parts.push([size,0.17]); sum+=0.17; detail.size=size;
   }
   if(!sum) return null; // geen enkel bruikbaar cijfer -> geen score i.p.v. misleidende 50
 
   var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
   score=Math.round(score/sum); // herschalen naar wat we wél weten
 
+  // Onbekende concentratie is een blinde vlek: we weten niet of dit fonds breed of smal is.
+  // Een lichte korting voorkomt dat onwetendheid als voordeel telt.
+  if(e.top10==null && e.holdings!=null && e.holdings<500) score=Math.round(score*0.92);
+
   // harde afstraffing voor constructies die ongeschikt zijn om lang aan te houden
   if(e.isLeveraged||e.isInverse) score=Math.round(score*0.5);
 
-  detail.score=score;
+  detail.score=Math.max(0,Math.min(100,score));
   detail.basedOn=Math.round(sum*100); // hoeveel procent van de weging we konden invullen
   return detail;
 }
