@@ -572,6 +572,20 @@
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="eulerFundamentals" checked style="width:auto">
+          <span>Waarderingscijfers (P/E, koers/boekwaarde, marge) ophalen voor Europese aandelen.
+            <b style="color:var(--accent)">+1 call per aandeel</b></span>
+        </label>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="eulerCharting" checked style="width:auto">
+          <span>Koershistorie ophalen voor echte momentumcijfers en 52-weeks daling.
+            <b style="color:var(--accent)">+1 call per aandeel</b> &mdash; zonder dit wordt de koers afgeleid uit de marktwaarde.</span>
+        </label>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
           <input type="checkbox" id="multiSource" checked style="width:auto">
           <span>Automatisch de beste bron per aandeel kiezen en doorschuiven bij blokkades <b>(aanbevolen)</b></span>
         </label>
@@ -585,7 +599,10 @@
       <b>Verbruik per bron</b> <span style="opacity:.6">(eigen telling in deze browser, geen officieel saldo van de aanbieder)</span>
       <div id="quotaDetail" style="margin-top:8px"></div>
       <div id="storageDetail" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)"></div>
-      <button class="btn-ghost" id="resetQuota" style="margin-top:8px">Teller op nul zetten</button>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn-ghost" id="resetQuota">Teller op nul zetten</button>
+        <button class="btn-ghost" id="syncQuota" title="Vul de stand in die Eulerpool zelf toont, zodat de teller weer klopt">Stand gelijkzetten</button>
+      </div>
     </div>
 
     <div class="snap" style="border-left:3px solid var(--blue);font-size:12.5px;color:var(--muted)">
@@ -1438,7 +1455,8 @@ function render(){
           (code?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+code+'\',this)">'+code+'</span>':'\u2014')+'</td>';
       })()+
       '<td class="l" style="color:var(--muted);font-size:12px">'+(d.sector||"\u2014")+'</td>'+
-      '<td class="num">'+fmt(d.price)+'</td>'+
+      '<td class="num"'+(d.priceDerived?' title="Afgeleid uit marktwaarde \u00f7 aantal aandelen (Eulerpool levert geen koersfeed). Slotkoers van de laatste update, in '+(d.currency||"lokale valuta")+'." style="cursor:help"':'')+'>'+
+        fmt(d.price)+(d.priceDerived?'<span style="font-size:8px;color:var(--muted)">*</span>':'')+'</td>'+
       '<td class="num '+cls(d.chg)+'">'+signed(d.chg)+'</td>'+
       '<td class="num '+cls(d.mom1m)+'">'+signed(d.mom1m)+'</td>'+
       (function(){
@@ -1640,8 +1658,14 @@ function showCostEstimate(){
   var est=estimateCalls(syms.length,syms);
   var warn="";
   var eu=remainingFor('eulerpool');
-  if(eu&&eu.dayLeft!=null&&est.eulerpool>eu.dayLeft){
-    warn=' <span class="neg">\u26a0\ufe0f meer dan je resterende Eulerpool-budget ('+eu.dayLeft+')</span>';
+  var over = eu ? (eu.monthLeft!=null?eu.monthLeft:eu.dayLeft) : null;
+  var periode = (eu&&eu.monthLeft!=null)?"deze maand":"vandaag";
+  if(over!=null&&est.eulerpool>0){
+    if(est.eulerpool>over){
+      warn=' <span class="neg">\u26a0\ufe0f meer dan je Eulerpool-budget ('+over+' over '+periode+')</span>';
+    }else if(est.eulerpool>over*0.25){
+      warn=' <span class="warn">\u2014 dat is '+Math.round(est.eulerpool/over*100)+'% van je resterende Eulerpool-budget</span>';
+    }
   }
   el.innerHTML = syms.length
     ? '\u2248 '+est.total+' API-calls voor '+syms.length+' waarden'+warn
@@ -1820,7 +1844,7 @@ function currentRunParams(){
 // geen officieel saldo van de aanbieder.
 var API_LIMITS={
   finnhub:{perMin:60, perDay:null, label:"Finnhub"},
-  eulerpool:{perMin:null, perDay:1000, label:"Eulerpool"},
+  eulerpool:{perMin:null, perDay:null, perMonth:1000, label:"Eulerpool"},
   securitiesdb:{perMin:100, perDay:null, label:"SecuritiesDB"},
   eodhd:{perMin:null, perDay:20, label:"EODHD"},
   fmp:{perMin:null, perDay:250, label:"FMP"}
@@ -1828,6 +1852,7 @@ var API_LIMITS={
 var CALL_LOG={}; // src -> {day:"2026-08-01", dayCount:n, minuteStamp:ms, minuteCount:n}
 
 function todayKey(){return new Date().toISOString().slice(0,10);}
+function monthKey(){return new Date().toISOString().slice(0,7);} // "2026-08"
 function loadCallLog(){
   LS.get('callLog').then(function(r){
     if(r&&r.value){ try{ CALL_LOG=JSON.parse(r.value)||{}; }catch(e){ CALL_LOG={}; } }
@@ -1842,28 +1867,33 @@ function saveCallLog(){ try{ LS.set('callLog',JSON.stringify(CALL_LOG)); }catch(
 function recordCall(src,n){
   if(!src)return;
   n=n||1;
-  var t=todayKey(), now=Date.now();
-  if(!CALL_LOG[src]) CALL_LOG[src]={day:t,dayCount:0,minuteStamp:now,minuteCount:0};
+  var t=todayKey(), mk=monthKey(), now=Date.now();
+  if(!CALL_LOG[src]) CALL_LOG[src]={day:t,dayCount:0,month:mk,monthCount:0,minuteStamp:now,minuteCount:0};
   var c=CALL_LOG[src];
   if(c.day!==t){ c.day=t; c.dayCount=0; }
+  if(c.month!==mk){ c.month=mk; c.monthCount=0; }   // nieuwe maand -> teller op nul
   if(now-c.minuteStamp>60000){ c.minuteStamp=now; c.minuteCount=0; }
-  c.dayCount+=n; c.minuteCount+=n;
+  c.dayCount+=n; c.minuteCount+=n; c.monthCount=(c.monthCount||0)+n;
   saveCallLog();
   renderQuota();
 }
 function remainingFor(src){
   var lim=API_LIMITS[src]; if(!lim)return null;
-  var c=CALL_LOG[src]||{dayCount:0,minuteCount:0,minuteStamp:0};
-  var t=todayKey();
+  var c=CALL_LOG[src]||{dayCount:0,minuteCount:0,minuteStamp:0,monthCount:0};
+  var t=todayKey(), mk=monthKey();
   var dayUsed=(c.day===t)?c.dayCount:0;
+  var monthUsed=(c.month===mk)?(c.monthCount||0):0;
   var minUsed=(Date.now()-c.minuteStamp<60000)?c.minuteCount:0;
   return {
     label:lim.label,
     dayLeft: lim.perDay!=null ? Math.max(0,lim.perDay-dayUsed) : null,
     dayTotal: lim.perDay,
+    monthLeft: lim.perMonth!=null ? Math.max(0,lim.perMonth-monthUsed) : null,
+    monthTotal: lim.perMonth,
     minLeft: lim.perMin!=null ? Math.max(0,lim.perMin-minUsed) : null,
     minTotal: lim.perMin,
-    dayUsed: dayUsed
+    dayUsed: dayUsed,
+    monthUsed: monthUsed
   };
 }
 // hoeveel calls kost een screening van n aandelen? (ruwe schatting per route)
@@ -1874,8 +1904,8 @@ function estimateCalls(n,universeSymbols){
   return {
     securitiesdb: us*2,          // quant-health + dcf
     finnhub: us*2,               // quote + metrics
-    eulerpool: eu*2,             // profile + aaqs
-    total: us*4 + eu*2
+    eulerpool: eu*(2+(EULER_FUNDAMENTALS?1:0)+(EULER_CHARTING?1:0)),  // profile + aaqs + opties
+    total: us*4 + eu*(2+(EULER_FUNDAMENTALS?1:0)+(EULER_CHARTING?1:0))
   };
 }
 // toont wat er lokaal bewaard staat - handig om te zien of opslag werkt
@@ -1918,10 +1948,14 @@ function renderQuotaDetail(){
   var rows=Object.keys(API_LIMITS).map(function(s){
     if(s==="fmp"&&typeof FMP_ENABLED!=="undefined"&&!FMP_ENABLED)return "";
     var r=remainingFor(s); if(!r)return "";
-    var limTxt = r.dayTotal!=null ? r.dayTotal+" per dag" : (r.minTotal!=null ? r.minTotal+" per minuut" : "onbekend");
-    var usedTxt = r.dayTotal!=null
-      ? r.dayUsed+" gebruikt \u00b7 <b>"+r.dayLeft+"</b> over"
-      : r.dayUsed+" vandaag \u00b7 <b>"+r.minLeft+"</b> over deze minuut";
+    var limTxt = r.monthTotal!=null ? r.monthTotal+" per maand"
+               : (r.dayTotal!=null ? r.dayTotal+" per dag"
+               : (r.minTotal!=null ? r.minTotal+" per minuut" : "onbekend"));
+    var usedTxt = r.monthTotal!=null
+      ? r.monthUsed+" deze maand gebruikt \u00b7 <b>"+r.monthLeft+"</b> over"+(r.dayUsed?' <span style="opacity:.6">('+r.dayUsed+" vandaag)</span>":"")
+      : (r.dayTotal!=null
+        ? r.dayUsed+" gebruikt \u00b7 <b>"+r.dayLeft+"</b> over"
+        : r.dayUsed+" vandaag \u00b7 <b>"+r.minLeft+"</b> over deze minuut");
     return '<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid var(--line)">'+
       '<span>'+r.label+' <span style="opacity:.6">('+limTxt+')</span></span><span>'+usedTxt+'</span></div>';
   }).filter(Boolean).join("");
@@ -1936,7 +1970,12 @@ function renderQuota(){
     var r=remainingFor(s); if(!r)return "";
     var txt=r.label+": ";
     var cls="";
-    if(r.dayTotal!=null){
+    if(r.monthTotal!=null){
+      var pctM=r.monthLeft/r.monthTotal;
+      cls = pctM<0.15 ? "neg" : (pctM<0.4 ? "warn" : "pos");
+      txt+='<b class="'+cls+'">'+r.monthLeft+'</b>/'+r.monthTotal+' deze maand';
+      if(r.dayUsed) txt+=' <span style="opacity:.6">('+r.dayUsed+' vandaag)</span>';
+    }else if(r.dayTotal!=null){
       var pct=r.dayLeft/r.dayTotal;
       cls = pct<0.15 ? "neg" : (pct<0.4 ? "" : "pos");
       txt+='<b class="'+cls+'">'+r.dayLeft+'</b>/'+r.dayTotal+' vandaag';
@@ -2554,11 +2593,42 @@ function testAllKeys(){
     st.textContent="Testresultaat \u2014 "+results.join("  \u00b7  ");
   });
 }
+if($('syncQuota'))$('syncQuota').onclick=function(){
+  var r=remainingFor('eulerpool');
+  var huidig=r?r.monthUsed:0;
+  var v=prompt("Hoeveel calls heb je deze maand werkelijk verbruikt volgens Eulerpool?\n"+
+    "(de tool telt er nu "+huidig+")", String(huidig));
+  if(v===null)return;
+  var n=parseInt(v.trim(),10);
+  if(isNaN(n)||n<0){ $('settingsStatus').className="status err"; $('settingsStatus').textContent="Geef een geldig aantal."; return; }
+  if(!CALL_LOG.eulerpool)CALL_LOG.eulerpool={day:todayKey(),dayCount:0,minuteStamp:Date.now(),minuteCount:0};
+  CALL_LOG.eulerpool.month=monthKey();
+  CALL_LOG.eulerpool.monthCount=n;
+  saveCallLog(); renderQuota();
+  $('settingsStatus').className="status";
+  $('settingsStatus').textContent="Stand gelijkgezet op "+n+" calls deze maand.";
+};
 if($('resetQuota'))$('resetQuota').onclick=function(){
   CALL_LOG={}; saveCallLog(); renderQuota();
   var st=$('settingsStatus'); st.className="status";
   st.textContent="Teller op nul gezet. Let op: dit wist alleen je eigen telling, niet het werkelijke verbruik bij de aanbieder.";
 };
+if($('eulerCharting'))$('eulerCharting').onchange=function(){
+  EULER_CHARTING=this.checked;
+  LS.set('eulerChart',this.checked?"1":"0");
+  if(typeof showCostEstimate==="function")showCostEstimate();
+};
+LS.get('eulerChart').then(function(r){
+  if(r&&r.value==="0"){EULER_CHARTING=false;var e=$('eulerCharting');if(e)e.checked=false;}
+}).catch(function(){});
+if($('eulerFundamentals'))$('eulerFundamentals').onchange=function(){
+  EULER_FUNDAMENTALS=this.checked;
+  LS.set('eulerFund',this.checked?"1":"0");
+  if(typeof showCostEstimate==="function")showCostEstimate();
+};
+LS.get('eulerFund').then(function(r){
+  if(r&&r.value==="0"){EULER_FUNDAMENTALS=false;var e=$('eulerFundamentals');if(e)e.checked=false;}
+}).catch(function(){});
 if($('saveAllKeys'))$('saveAllKeys').onclick=saveAllKeys;
 if($('testKeys'))$('testKeys').onclick=testAllKeys;
 loadAllKeys();
@@ -2793,6 +2863,11 @@ function fetchEtfEulerpool(identifier,token){
 
 // ---- Eulerpool: Europese fundamentals (werkt op ISIN, dekt Euronext/Xetra/etc.) ----
 var EULER_BASE="https://api.eulerpool.com/api/1";
+// Jaarrekeningcijfers ophalen om P/E, P/B en marge te berekenen. Kost één extra call per
+// aandeel, dus uit te zetten wanneer je maandbudget krap wordt.
+var EULER_FUNDAMENTALS=true;
+// Koershistorie ophalen voor echte momentumcijfers. Kost één extra call per aandeel.
+var EULER_CHARTING=true;
 // ISIN-tabel voor het ingebouwde EU-universum (Eulerpool werkt op ISIN, niet op ticker).
 // Uit een Saxo-import worden ISIN's automatisch aangevuld.
 // ISIN's voor Amerikaanse aandelen (SecuritiesDB levert die niet mee)
@@ -2822,6 +2897,145 @@ function shortName(n){
   var sp=cut.lastIndexOf(" ");
   return (sp>8 ? cut.slice(0,sp) : cut).replace(/[.,\s]+$/,"")+"\u2026";
 }
+// Momentum uit je eigen tracking-geschiedenis: als hetzelfde aandeel eerder is vastgelegd
+// mét koers, kunnen we de verandering sindsdien berekenen. Kost geen enkele API-call en
+// werkt juist voor Europese aandelen, waar geen koersfeed beschikbaar is.
+function momentumFromHistory(symbol,huidigeKoers){
+  if(typeof HISTORY==="undefined"||!HISTORY||!HISTORY.length||huidigeKoers==null)return null;
+  var beste=null;
+  var nu=Date.now();
+  HISTORY.forEach(function(s){
+    if(s.demo)return;
+    var leeftijd=(nu-s.ts)/86400000; // dagen
+    if(leeftijd<5||leeftijd>120)return;  // te vers zegt niets, te oud is geen momentum meer
+    (s.items||[]).forEach(function(it){
+      if(it.symbol!==symbol||it.price==null||it.price<=0)return;
+      // kies de meting die het dichtst bij ~30 dagen ligt
+      var afstand=Math.abs(leeftijd-30);
+      if(!beste||afstand<beste.afstand)beste={price:it.price,dagen:leeftijd,afstand:afstand};
+    });
+  });
+  if(!beste)return null;
+  var pct=((huidigeKoers-beste.price)/beste.price)*100;
+  // normaliseren naar een maand, zodat een meting van 60 dagen niet dubbel telt
+  var perMaand=pct*(30/Math.max(5,beste.dagen));
+  return {mom1m:+perMaand.toFixed(1), overDagen:Math.round(beste.dagen), ruw:+pct.toFixed(1)};
+}
+
+// ---- Eulerpool charting: dagelijkse koersen, waarmee momentum echt berekend wordt ----
+// Eén call geeft een reeks slotkoersen; daaruit halen we de huidige koers, de dagverandering,
+// het momentum over ~1 maand en de daling vanaf de top van de afgelopen 52 weken.
+function fetchOhlcvEuler(isin,token,dagen){
+  dagen=dagen||400;
+  var tot=new Date();
+  var van=new Date(tot.getTime()-dagen*86400000);
+  var f=function(d){return d.toISOString().slice(0,10);};
+  return getJson(EULER_BASE+"/charting/ohlcv/"+encodeURIComponent(isin)+
+                 "?resolution=D&from="+f(van)+"&to="+f(tot)+"&token="+encodeURIComponent(token))
+    .then(function(res){
+      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:(res&&res.candles?res.candles:[]));
+      if(!rijen||!rijen.length)return null;
+      // normaliseren: verschillende veldnamen kunnen voorkomen
+      var reeks=rijen.map(function(r){
+        return {
+          t: r.date||r.time||r.t||r.timestamp||null,
+          c: (r.close!=null?+r.close:(r.c!=null?+r.c:null))
+        };
+      }).filter(function(r){return r.c!=null&&!isNaN(r.c);});
+      if(reeks.length<2)return null;
+      // op datum sorteren, oudste eerst
+      reeks.sort(function(a,b){return new Date(a.t)-new Date(b.t);});
+
+      var laatste=reeks[reeks.length-1].c;
+      var vorige=reeks[reeks.length-2].c;
+      var chg = vorige>0 ? +(((laatste-vorige)/vorige)*100).toFixed(2) : null;
+
+      // momentum ~1 maand: ongeveer 21 handelsdagen terug
+      var idx1m=Math.max(0,reeks.length-22);
+      var koers1m=reeks[idx1m].c;
+      var mom1m = koers1m>0 ? +(((laatste-koers1m)/koers1m)*100).toFixed(1) : null;
+
+      // hoogste slotkoers van de reeks (benadering van de 52-weeks top)
+      var top=0;
+      reeks.forEach(function(r){ if(r.c>top)top=r.c; });
+      var dd = top>0 ? +(((laatste-top)/top)*100).toFixed(1) : null;
+
+      return {price:+laatste.toFixed(2), chg:chg, mom1m:mom1m, dd:dd,
+              punten:reeks.length, hoogste:+top.toFixed(2)};
+    }).catch(function(){return null;});
+}
+
+// ---- Eulerpool market quotes: echte koersen (queryparameter, niet in het pad) ----
+function fetchQuotesEuler(isins,token){
+  if(!isins||!isins.length)return Promise.resolve({});
+  var lijst=isins.slice(0,50).join(","); // in blokken, scheelt calls
+  return getJson(EULER_BASE+"/market/quotes/latest?stocks="+encodeURIComponent(lijst)+
+                 "&token="+encodeURIComponent(token))
+    .then(function(res){
+      var uit={};
+      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
+      rijen.forEach(function(q){
+        var key=q.isin||q.symbol||q.ticker;
+        if(!key)return;
+        var koers=q.price!=null?+q.price:(q.close!=null?+q.close:(q.last!=null?+q.last:null));
+        var verschil=q.change_percent!=null?+q.change_percent:
+                     (q.changePercent!=null?+q.changePercent:
+                     (q.change_p!=null?+q.change_p:null));
+        uit[key]={price:koers!=null?+koers.toFixed(2):null,
+                  chg:verschil!=null?+verschil.toFixed(2):null,
+                  currency:q.currency||null};
+      });
+      return uit;
+    }).catch(function(){return {};});
+}
+
+// ---- Eulerpool fundamentals: losse SEC-feiten omzetten naar bruikbare cijfers ----
+// De respons is een platte lijst van XBRL-feiten (tag + waarde + periode), geen net overzicht.
+// We vissen de tags eruit die we nodig hebben en nemen telkens de meest recente jaarwaarde.
+var FIN_TAGS={
+  omzet:["Revenues","RevenueFromContractWithCustomerExcludingAssessedTax","SalesRevenueNet"],
+  nettowinst:["NetIncomeLoss","ProfitLoss"],
+  eigenVermogen:["StockholdersEquity","StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+  aandelen:["CommonStockSharesOutstanding","WeightedAverageNumberOfDilutedSharesOutstanding"]
+};
+function fetchFinancialsEuler(isin,token){
+  return getJson(EULER_BASE+"/fundamentals/financials/"+encodeURIComponent(isin)+
+                 "?limit=60&token="+encodeURIComponent(token))
+    .then(function(res){
+      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
+      if(!rijen.length)return null;
+      function nieuwste(tags){
+        var beste=null;
+        rijen.forEach(function(r){
+          if(tags.indexOf(r.tag)===-1)return;
+          if(r.fiscal_period&&r.fiscal_period!=="FY")return;   // alleen jaarcijfers
+          if(r.val==null)return;
+          var d=r.period_end?new Date(r.period_end).getTime():0;
+          if(!beste||d>beste.d)beste={val:+r.val,d:d,jaar:r.fiscal_year};
+        });
+        return beste;
+      }
+      var omzet=nieuwste(FIN_TAGS.omzet),
+          winst=nieuwste(FIN_TAGS.nettowinst),
+          ev=nieuwste(FIN_TAGS.eigenVermogen);
+      return {
+        omzet: omzet?omzet.val:null,
+        nettowinst: winst?winst.val:null,
+        eigenVermogen: ev?ev.val:null,
+        jaar: winst?winst.jaar:(omzet?omzet.jaar:null)
+      };
+    }).catch(function(){return null;});
+}
+// leidt P/E, P/B en marge af uit de absolute cijfers plus de marktwaarde
+function ratiosUitFinancials(mcap,fin){
+  if(!fin||mcap==null)return {};
+  var uit={};
+  if(fin.nettowinst!=null&&fin.nettowinst>0) uit.pe=+(mcap/fin.nettowinst).toFixed(1);
+  if(fin.eigenVermogen!=null&&fin.eigenVermogen>0) uit.pb=+(mcap/fin.eigenVermogen).toFixed(1);
+  if(fin.nettowinst!=null&&fin.omzet!=null&&fin.omzet>0) uit.margin=+((fin.nettowinst/fin.omzet)*100).toFixed(1);
+  return uit;
+}
+
 function enrichEulerpool(symbol,token){
   var isin=isinFor(symbol);
   if(!isin) return Promise.reject({kind:"config",msg:"geen ISIN bekend voor "+symbol+" (voeg toe via Saxo-import of Instellingen)"});
@@ -2840,7 +3054,16 @@ function enrichEulerpool(symbol,token){
       name:p.name||symbol, market:"EU",
       sector: p.sector || sectorOf(symbol),
       _mcap: p.mcap!=null ? +p.mcap*1e6 : null,   // Eulerpool geeft mcap in miljoenen
-      price:null, chg:null,                        // koers via andere bron indien beschikbaar
+      // Koers afgeleid uit marktwaarde / aantal aandelen. Eulerpool levert geen koersfeed,
+      // maar wel beide bouwstenen - en dat geeft een bruikbare koers (getest: ASML komt
+      // uit op ~1434 EUR, wat klopt). Let op: dit is de slotkoers van de laatste update,
+      // niet realtime, en staat in de valuta van de notering.
+      price: (p.mcap!=null&&p.shares!=null&&p.shares>0) ? +(p.mcap/p.shares).toFixed(2) : null,
+      currency: p.currency||null,
+      priceDerived: (p.mcap!=null&&p.shares!=null&&p.shares>0),
+      chg:null,
+      // momentum uit eerdere metingen halen (kost geen API-call)
+      _histMom: null,
       pe:null, pb:null, peg:null,
       revG: a.revenueGrowth3Y!=null ? +(a.revenueGrowth3Y*100).toFixed(1) : null,
       epsG: a.ebitGrowth3Y!=null ? +(a.ebitGrowth3Y*100).toFixed(1) : null,
@@ -2857,6 +3080,41 @@ function enrichEulerpool(symbol,token){
       isin:isin,
       _src:"eulerpool"
     };
+  }).then(function(d){
+    // Echte koershistorie ophalen indien ingeschakeld: geeft koers, dagverandering,
+    // momentum en de daling vanaf de top - allemaal uit één call.
+    if(d && d.isin && EULER_CHARTING){
+      return fetchOhlcvEuler(d.isin,token).then(function(k){
+        if(k){
+          d.price=k.price; d.chg=k.chg; d.mom1m=k.mom1m; d.dd=k.dd;
+          d.priceDerived=false;
+          d._momSource="koershistorie ("+k.punten+" dagen)";
+        }
+        return d;
+      }).catch(function(){return d;});
+    }
+    return d;
+  }).then(function(d){
+    // terugval: momentum uit je eigen tracking-geschiedenis (geen extra API-call)
+    if(d && d.price!=null && d.mom1m==null && typeof momentumFromHistory==="function"){
+      var h=momentumFromHistory(d.symbol,d.price) || momentumFromHistory(d.queriedAs,d.price);
+      if(h){ d.mom1m=h.mom1m; d._momSource="eigen tracking ("+h.overDagen+" dagen)"; }
+    }
+    // waarderingsratio's afleiden uit de jaarrekening (kost 1 extra call per aandeel)
+    if(d && d.isin && d._mcap!=null && EULER_FUNDAMENTALS){
+      return fetchFinancialsEuler(d.isin,token).then(function(fin){
+        if(fin){
+          var r=ratiosUitFinancials(d._mcap,fin);
+          if(r.pe!=null){d.pe=r.pe;}
+          if(r.pb!=null){d.pb=r.pb;}
+          if(r.margin!=null){d.margin=r.margin;}
+          if(d.pe!=null&&d.epsG!=null&&d.epsG>0)d.peg=+(d.pe/d.epsG).toFixed(2);
+          d._finJaar=fin.jaar;
+        }
+        return d;
+      }).catch(function(){return d;});
+    }
+    return d;
   });
 }
 
