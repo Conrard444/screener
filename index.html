@@ -572,9 +572,9 @@
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
-          <input type="checkbox" id="eulerMetrics" style="width:auto">
-          <span>Uitgebreide cijferset proberen via <code>/equity/metrics</code> (P/E, EV/EBITDA, ROIC, marges).
-            <b style="color:var(--accent)">Experimenteel</b> &mdash; leek in tests niets terug te geven; laat uit als je twijfelt.</span>
+          <input type="checkbox" id="eulerMetrics" checked style="width:auto">
+          <span>Volledige cijferset voor Europese aandelen: P/E, koers/boekwaarde, ROIC, marges, groei
+            en een genormaliseerde P/E over 5 jaar. <b style="color:var(--green)">1 call per aandeel</b></span>
         </label>
       </div>
       <div class="control-row compact">
@@ -717,6 +717,15 @@ function valuationIsSuspect(d){
   return false;
 }
 function valuationScore(d){
+  // Genormaliseerde P/E indien beschikbaar: gebaseerd op de gemiddelde winst over vijf jaar
+  // in plaats van één jaar. Voorkomt dat een cyclisch bedrijf in een dieptejaar als extreem
+  // duur oogt (BESI: P/E 129 op dieptejaarwinst, 86 op het vijfjaarsgemiddelde).
+  if(d.peNorm!=null&&d.peNorm>0){
+    var normS=norm(d.peNorm,8,60,true);
+    var pbS=(d.pb!=null)?norm(d.pb,1,25,true):null;
+    if(pbS!=null)return capSuspectValue(d, Math.round(normS*0.65+pbS*0.35));
+    return capSuspectValue(d, normS);
+  }
   // Beste signaal indien beschikbaar: hoe verhoudt de huidige P/E zich tot de EIGEN 5-jaarshistorie
   // van dit bedrijf? Dat corrigeert automatisch voor sector, bedrijfsmodel en groeiprofiel -
   // een tech-P/E van 35 is niet duur als dat bedrijf historisch op 40 handelde.
@@ -2943,10 +2952,9 @@ function fetchEtfEulerpool(identifier,token){
 // ---- Eulerpool: Europese fundamentals (werkt op ISIN, dekt Euronext/Xetra/etc.) ----
 var EULER_BASE="https://api.eulerpool.com/api/1";
 // Opties die extra API-calls kosten. Alle drie uit te zetten bij een krap maandbudget.
-// Standaard UIT: het /equity/metrics-endpoint staat wel in de OpenAPI-spec, maar bleek in de
-// praktijk niets bruikbaars terug te geven (mogelijk een hoger toegangsniveau vereist).
-// De route via profiel + AAQS is getest en werkt. Aan te zetten in Instellingen om te proberen.
-var EULER_METRICS=false;      // 40+ ratio's in één call (vervangt profile+aaqs)
+// Werkt, mits de geneste responsstructuur correct gelezen wordt (valuation.pe, perShare.eps, etc).
+// Geeft in één call waardering, winstgevendheid, groei, per-aandeel-gegevens en 12 jaar historie.
+var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 // Jaarrekeningcijfers ophalen om P/E, P/B en marge te berekenen. Kost één extra call per
@@ -3012,35 +3020,63 @@ function enrichEulerMetrics(isin,token){
                  "?token="+encodeURIComponent(token))
     .then(function(res){
       var m=(res&&res.data)?res.data:res;
-      if(!m||m.error)throw {kind:"api",msg:m&&m.error?m.error:"geen metrics"};
+      if(Array.isArray(m))m=m[0];
+      if(!m||m.error)throw {kind:"api",msg:"metrics: "+((m&&m.error)||"lege respons")};
+
+      // De velden zitten genest in groepen, niet plat in het hoofdobject.
+      var val=m.valuation||{}, prof=m.profitability||{}, ps=m.perShare||{},
+          lev=m.leverage||{}, gro=m.growth||{}, oth=m.other||{}, hist=m.historical||[];
+
       var pct=function(v){return v!=null&&!isNaN(v)?+(+v*100).toFixed(1):null;};
-      var num=function(v,d){return v!=null&&!isNaN(v)?+(+v).toFixed(d==null?2:d):null;};
+      var num=function(v,d){return (v!=null&&!isNaN(v)&&v!==0)?+(+v).toFixed(d==null?2:d):null;};
+
+      var mcap = val.marketCap!=null ? +val.marketCap*1e6 : null;   // staat in miljoenen
+      var shares = oth.shares!=null ? +oth.shares*1e6 : null;
+      var koers = (mcap&&shares&&shares>0) ? +(mcap/shares).toFixed(2) : null;
+
+      // P/E en P/B liever zelf berekenen uit koers en per-aandeel-gegevens: de kant-en-klare
+      // ratio's in de respons staan regelmatig op 0 of wijken af.
+      var pe = (koers!=null&&ps.eps!=null&&ps.eps>0) ? +(koers/ps.eps).toFixed(1) : num(val.pe,1);
+      var pb = (koers!=null&&ps.bps!=null&&ps.bps>0) ? +(koers/ps.bps).toFixed(1) : num(val.pb,1);
+
+      // Genormaliseerde P/E over de laatste vijf jaar: dempt uitschieters van een diepte- of
+      // piekjaar. Volgt de gedachte achter Shillers CAPE - waardeer op een gemiddelde winst,
+      // niet op één toevallig jaar.
+      var peNorm=null, epsGem=null;
+      if(koers!=null&&hist.length){
+        var epsReeks=hist.slice(0,5).map(function(h){return h.eps;}).filter(function(v){return v!=null&&!isNaN(v);});
+        if(epsReeks.length>=3){
+          epsGem=epsReeks.reduce(function(a,b){return a+b;},0)/epsReeks.length;
+          if(epsGem>0)peNorm=+(koers/epsGem).toFixed(1);
+        }
+      }
+
       return {
         isin: m.isin||isin,
         ticker: m.ticker||null,
         currency: m.currency||null,
+        price: koers, priceDerived: true,
+        _mcap: mcap, shares: shares,
         // waardering
-        pe: num(m.pe,1), pb: num(m.pb,1), ps: num(m.ps,1),
-        evEbitda: num(m.evEbitda,1), pebit: num(m.pebit,1),
-        _mcap: m.marketCap!=null?+m.marketCap:null,
-        // winstgevendheid - ROIC is zuiverder dan ROE, dus die krijgt voorrang
-        roe: pct(m.roic)!=null?pct(m.roic):pct(m.roe),
-        roeRaw: pct(m.roe), roa: pct(m.roa), roce: pct(m.roce),
-        margin: pct(m.netMargin),
-        grossMargin: pct(m.grossMargin), operatingMargin: pct(m.operatingMargin),
+        pe: pe, pb: pb, ps: num(val.ps,1), evEbitda: num(val.evEbitda,1),
+        peNorm: peNorm, epsGem: epsGem!=null?+epsGem.toFixed(2):null,
+        // winstgevendheid - ROIC is zuiverder dan ROE
+        roe: pct(prof.roic)!=null?pct(prof.roic):pct(prof.roe),
+        roeRaw: pct(prof.roe), roce: pct(prof.roce),
+        margin: prof.netMargin!=null?+(+prof.netMargin).toFixed(1):null,
+        grossMargin: prof.grossMargin!=null?+(+prof.grossMargin).toFixed(1):null,
         // per aandeel
-        eps: num(m.eps), bps: num(m.bps), dps: num(m.dps),
-        dividendYield: pct(m.dividendYield),
-        shares: m.shares!=null?+m.shares:null,
+        eps: num(ps.eps), bps: num(ps.bps), dps: num(ps.dps),
+        dividendYield: pct(ps.dividendYield),
         // hefboom
-        de: num(m.debtToEquity), currentRatio: num(m.currentRatio),
-        netDebt: m.netDebt!=null?+m.netDebt:null,
-        // groei: 3-jaars is representatiever dan één jaar
-        revG: pct(m.revenueGrowth3Y), epsG: pct(m.earningsGrowth3Y),
-        revG5Y: pct(m.revenueGrowth5Y), epsG5Y: pct(m.earningsGrowth5Y),
-        // kwaliteitsscore
-        aaqs: m.aaqs!=null?+m.aaqs:null,
-        employees: m.employees!=null?+m.employees:null,
+        de: num(lev.debtToEquity), currentRatio: num(lev.currentRatio),
+        // groei: 3-jaars, met 5-jaars als context
+        revG: pct(gro.revenueGrowth3Y), epsG: pct(gro.earningsGrowth3Y),
+        revG5Y: pct(gro.revenueGrowth5Y), epsG5Y: pct(gro.earningsGrowth5Y),
+        // kwaliteit
+        aaqs: oth.aaqs!=null?+oth.aaqs:null,
+        employees: oth.employees!=null?+oth.employees:null,
+        _histJaren: hist.length,
         _src:"eulerpool"
       };
     });
