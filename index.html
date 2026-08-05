@@ -572,9 +572,9 @@
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
-          <input type="checkbox" id="eulerFundamentals" checked style="width:auto">
-          <span>Waarderingscijfers (P/E, koers/boekwaarde, marge) ophalen voor Europese aandelen.
-            <b style="color:var(--accent)">+1 call per aandeel</b></span>
+          <input type="checkbox" id="eulerMetrics" checked style="width:auto">
+          <span>Volledige cijferset ophalen voor Europese aandelen (P/E, koers/boekwaarde, EV/EBITDA,
+            ROIC, marges, groei, dividend). <b style="color:var(--green)">1 call per aandeel</b> &mdash; vervangt drie losse aanroepen.</span>
         </label>
       </div>
       <div class="control-row compact">
@@ -762,6 +762,15 @@ function growthScore(d){
   return Math.max(0,Math.min(100,g));
 }
 // Kwaliteit (academisch best onderbouwd na momentum): winstgevendheid hoog, marge hoog, schuld laag.
+// Bij banken en verzekeraars is een hoge schuldgraad geen zwakte maar het bedrijfsmodel:
+// zij lenen geld in om het uit te lenen. Ze afstraffen op D/E is dezelfde denkfout als
+// een holding afrekenen op winstgroei.
+function isFinancieel(d){
+  if(!d)return false;
+  var s=(d.sector||"").toLowerCase();
+  return s.indexOf("financ")>-1||s.indexOf("bank")>-1||s.indexOf("verzeker")>-1||
+         s.indexOf("insurance")>-1;
+}
 function qualityScore(d){
   // Eulerpool AAQS (0-10): kwaliteitsscore over 10 dimensies - beste maatstaf voor EU-aandelen
   if(d.aaqs!=null){
@@ -775,6 +784,13 @@ function qualityScore(d){
     var parts=[[base,0.55]], sum=0.55;
     if(roceS!=null){parts.push([roceS,0.25]);sum+=0.25;}
     if(stabS!=null){parts.push([stabS,0.20]);sum+=0.20;}
+    // AAQS bevat zelf al een schuldcomponent; bij financials is die minder betekenisvol,
+    // dus laten we de kernscore zwaarder wegen en corrigeren we licht omhoog
+    if(isFinancieel(d)&&d.de!=null&&d.de>1.5){
+      var correctie=Math.min(8,Math.round((d.de-1.5)*3));
+      var q0=0; parts.forEach(function(p){q0+=p[0]*p[1];});
+      return Math.max(0,Math.min(100,Math.round(q0/sum)+correctie));
+    }
     var q=0; parts.forEach(function(p){q+=p[0]*p[1];});
     return Math.max(0,Math.min(100,Math.round(q/sum)));
   }
@@ -1051,13 +1067,23 @@ var HOLDING_SET_DEFAULT=(function(){
   return s;
 })();
 var HOLDING_SET=Object.assign({},HOLDING_SET_DEFAULT); // spiegel; gebruikersuitbreidingen komen hier apart bovenop
-function isHolding(symbol){ return !!HOLDING_SET[symbol]; }
+// Herkent een holding op ticker, ISIN of de queriedAs-waarde. Nodig omdat dezelfde
+// onderneming binnenkomt als "SOF.BR" (ticker), "BE0003717312" (ISIN uit het universum)
+// of "SOF" (ticker uit het metrics-endpoint).
+function isHolding(symbolOrData){
+  if(!symbolOrData)return false;
+  if(typeof symbolOrData==="string")return !!HOLDING_SET[symbolOrData];
+  var d=symbolOrData;
+  return !!(HOLDING_SET[d.symbol]||HOLDING_SET[d.queriedAs]||HOLDING_SET[d.isin]||
+            (d.ticker&&HOLDING_SET[d.ticker])||
+            (d.sector==="Holding"));
+}
 
 // ---- Automatische holding-detectie: signaleert een vermoeden, classificeert nooit stilzwijgend ----
 // Patroon: lage/grillige omzetgroei + koers/boekwaarde dicht bij 1-2 + lage schuld.
 // Sluit REIT's uit (die hebben vaak óók P/B~1, maar kenmerken zich juist door hóge schuld -> ander patroon).
 function holdingSuspicionScore(d){
-  if(!d||isHolding(d.symbol))return 0; // al bekend, geen suggestie nodig
+  if(!d||isHolding(d))return 0; // al bekend, geen suggestie nodig
   if(d.sector==="Vastgoed")return 0; // REIT's uitgesloten: vergelijkbare P/B maar ander schuldpatroon
   var pts=0, reasons=[];
   // 1) lage/grillige omzetgroei (holdings "groeien" niet zoals operationele bedrijven)
@@ -1121,7 +1147,7 @@ function holdingScore(d){
 function rawScore(d){
   // Holdings/investeringsmaatschappijen: aparte logica, want P/E, groei en de gewone
   // kwaliteitsratio's zijn hier vertekend door portefeuille-herwaarderingen (zie toelichting bij de score).
-  if(isHolding(d.symbol)){
+  if(isHolding(d)){
     return holdingScore(d); // geen val-trap-penalty: die is gebouwd op P/E/PEG-signalen die hier niet gelden
   }
   var base;
@@ -1427,8 +1453,8 @@ function render(){
   var tf=document.getElementById('typeFilter');
   var typeMode=tf?tf.value:"all";
   var source=CURRENT;
-  if(typeMode==="holding") source=CURRENT.filter(function(d){return isHolding(d.symbol);});
-  else if(typeMode==="operating") source=CURRENT.filter(function(d){return !isHolding(d.symbol);});
+  if(typeMode==="holding") source=CURRENT.filter(function(d){return isHolding(d);});
+  else if(typeMode==="operating") source=CURRENT.filter(function(d){return !isHolding(d);});
   else if(typeMode==="new") source=CURRENT.filter(function(d){
     var o=portfolioOverlapFor(d);
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
@@ -1446,7 +1472,7 @@ function render(){
       linkMenu(d)+
       brokerBadge(d)+
       overlapBadge(d)+
-      (isHolding(d.symbol)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
+      (isHolding(d)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
       '<span class="nm">'+(d.name||"")+'</span></td>'+
       (function(){
@@ -1904,8 +1930,8 @@ function estimateCalls(n,universeSymbols){
   return {
     securitiesdb: us*2,          // quant-health + dcf
     finnhub: us*2,               // quote + metrics
-    eulerpool: eu*(2+(EULER_FUNDAMENTALS?1:0)+(EULER_CHARTING?1:0)),  // profile + aaqs + opties
-    total: us*4 + eu*(2+(EULER_FUNDAMENTALS?1:0)+(EULER_CHARTING?1:0))
+    eulerpool: eu*((EULER_METRICS?1:2)+(EULER_CHARTING?1:0)),  // metrics (1) of profile+aaqs (2), + charting
+    total: us*4 + eu*((EULER_METRICS?1:2)+(EULER_CHARTING?1:0))
   };
 }
 // toont wat er lokaal bewaard staat - handig om te zien of opslag werkt
@@ -1919,6 +1945,30 @@ function renderStorageDetail(){
     var s=r[0],e=r[1];
     var lines=[];
     lines.push('Laatste aandelen-screening: '+(s&&s.data?('<b>'+s.data.length+'</b> waarden \u00b7 '+new Date(s.ts).toLocaleString()):'<span style="opacity:.6">niets bewaard</span>'));
+    // per universum tonen wat er bewaard is
+    var ex=$('exchange');
+    if(ex&&ex.options){
+      var universa=[];
+      for(var i=0;i<ex.options.length;i++){
+        var o=ex.options[i];
+        if(o.value)universa.push({id:o.value,label:o.text.replace(/\s*\(.*?\)\s*/,"")});
+      }
+      Promise.all(universa.map(function(u){
+        return loadLastRun('stocks_'+u.id).then(function(r){
+          return r&&r.data&&r.data.length?{label:u.label,n:r.data.length,ts:r.ts}:null;
+        }).catch(function(){return null;});
+      })).then(function(res){
+        var gevonden=res.filter(Boolean).sort(function(a,b){return b.ts-a.ts;});
+        if(gevonden.length){
+          var extra=['<div style="margin-top:6px;opacity:.85">Bewaard per universum:</div>'];
+          gevonden.forEach(function(g){
+            extra.push('&nbsp;&nbsp;\u2022 '+g.label+': <b>'+g.n+'</b> waarden \u00b7 '+
+              new Date(g.ts).toLocaleDateString());
+          });
+          el.innerHTML=el.innerHTML+'<br>'+extra.join('<br>');
+        }
+      });
+    }
     lines.push('Laatste ETF-vergelijking: '+(e&&e.data?('<b>'+e.data.length+'</b> fondsen \u00b7 '+new Date(e.ts).toLocaleString()):'<span style="opacity:.6">niets bewaard</span>'));
     var used=0;
     try{ for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(k.indexOf('kompas_')===0)used+=(localStorage.getItem(k)||"").length;} }catch(ex){}
@@ -2424,7 +2474,11 @@ function run(){
     if(typeof renderDailyDiff==="function")renderDailyDiff();
     // resultaat bewaren zodat je het bij het opstarten terugziet zonder nieuwe calls
     if(CURRENT.length&&typeof saveLastRun==="function"){
-      saveLastRun('stocks',SCORESET&&SCORESET.length?SCORESET:CURRENT,currentRunParams());
+      var params=currentRunParams();
+      saveLastRun('stocks_'+(params.exchange||'onbekend'),SCORESET&&SCORESET.length?SCORESET:CURRENT,params);
+      var data=SCORESET&&SCORESET.length?SCORESET:CURRENT;
+      saveLastRun('stocks',data,params);                          // meest recente, ongeacht universum
+      if(params&&params.exchange) saveLastRun('stocks_'+params.exchange,data,params); // en per universum
     }
   });
 }
@@ -2621,11 +2675,14 @@ if($('eulerCharting'))$('eulerCharting').onchange=function(){
 LS.get('eulerChart').then(function(r){
   if(r&&r.value==="0"){EULER_CHARTING=false;var e=$('eulerCharting');if(e)e.checked=false;}
 }).catch(function(){});
-if($('eulerFundamentals'))$('eulerFundamentals').onchange=function(){
-  EULER_FUNDAMENTALS=this.checked;
-  LS.set('eulerFund',this.checked?"1":"0");
+if($('eulerMetrics'))$('eulerMetrics').onchange=function(){
+  EULER_METRICS=this.checked;
+  LS.set('eulerMetrics',this.checked?"1":"0");
   if(typeof showCostEstimate==="function")showCostEstimate();
 };
+LS.get('eulerMetrics').then(function(r){
+  if(r&&r.value==="0"){EULER_METRICS=false;var e=$('eulerMetrics');if(e)e.checked=false;}
+}).catch(function(){});
 LS.get('eulerFund').then(function(r){
   if(r&&r.value==="0"){EULER_FUNDAMENTALS=false;var e=$('eulerFundamentals');if(e)e.checked=false;}
 }).catch(function(){});
@@ -2863,11 +2920,11 @@ function fetchEtfEulerpool(identifier,token){
 
 // ---- Eulerpool: Europese fundamentals (werkt op ISIN, dekt Euronext/Xetra/etc.) ----
 var EULER_BASE="https://api.eulerpool.com/api/1";
+// Opties die extra API-calls kosten. Alle drie uit te zetten bij een krap maandbudget.
+var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs+financials)
+var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
+var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 // Jaarrekeningcijfers ophalen om P/E, P/B en marge te berekenen. Kost één extra call per
-// aandeel, dus uit te zetten wanneer je maandbudget krap wordt.
-var EULER_FUNDAMENTALS=true;
-// Koershistorie ophalen voor echte momentumcijfers. Kost één extra call per aandeel.
-var EULER_CHARTING=true;
 // ISIN-tabel voor het ingebouwde EU-universum (Eulerpool werkt op ISIN, niet op ticker).
 // Uit een Saxo-import worden ISIN's automatisch aangevuld.
 // ISIN's voor Amerikaanse aandelen (SecuritiesDB levert die niet mee)
@@ -2920,6 +2977,48 @@ function momentumFromHistory(symbol,huidigeKoers){
   // normaliseren naar een maand, zodat een meting van 60 dagen niet dubbel telt
   var perMaand=pct*(30/Math.max(5,beste.dagen));
   return {mom1m:+perMaand.toFixed(1), overDagen:Math.round(beste.dagen), ruw:+pct.toFixed(1)};
+}
+
+// ---- Eulerpool metrics: 40+ ratio's in ��én call (vervangt profile + aaqs + financials) ----
+// Uit de OpenAPI-specificatie: /api/1/equity/metrics/{isin} geeft waardering, winstgevendheid,
+// per-aandeel-gegevens, hefboom én groei in één keer. Dat scheelt drie calls per aandeel.
+function enrichEulerMetrics(isin,token){
+  return getJson(EULER_BASE+"/equity/metrics/"+encodeURIComponent(isin)+
+                 "?token="+encodeURIComponent(token))
+    .then(function(res){
+      var m=(res&&res.data)?res.data:res;
+      if(!m||m.error)throw {kind:"api",msg:m&&m.error?m.error:"geen metrics"};
+      var pct=function(v){return v!=null&&!isNaN(v)?+(+v*100).toFixed(1):null;};
+      var num=function(v,d){return v!=null&&!isNaN(v)?+(+v).toFixed(d==null?2:d):null;};
+      return {
+        isin: m.isin||isin,
+        ticker: m.ticker||null,
+        currency: m.currency||null,
+        // waardering
+        pe: num(m.pe,1), pb: num(m.pb,1), ps: num(m.ps,1),
+        evEbitda: num(m.evEbitda,1), pebit: num(m.pebit,1),
+        _mcap: m.marketCap!=null?+m.marketCap:null,
+        // winstgevendheid - ROIC is zuiverder dan ROE, dus die krijgt voorrang
+        roe: pct(m.roic)!=null?pct(m.roic):pct(m.roe),
+        roeRaw: pct(m.roe), roa: pct(m.roa), roce: pct(m.roce),
+        margin: pct(m.netMargin),
+        grossMargin: pct(m.grossMargin), operatingMargin: pct(m.operatingMargin),
+        // per aandeel
+        eps: num(m.eps), bps: num(m.bps), dps: num(m.dps),
+        dividendYield: pct(m.dividendYield),
+        shares: m.shares!=null?+m.shares:null,
+        // hefboom
+        de: num(m.debtToEquity), currentRatio: num(m.currentRatio),
+        netDebt: m.netDebt!=null?+m.netDebt:null,
+        // groei: 3-jaars is representatiever dan één jaar
+        revG: pct(m.revenueGrowth3Y), epsG: pct(m.earningsGrowth3Y),
+        revG5Y: pct(m.revenueGrowth5Y), epsG5Y: pct(m.earningsGrowth5Y),
+        // kwaliteitsscore
+        aaqs: m.aaqs!=null?+m.aaqs:null,
+        employees: m.employees!=null?+m.employees:null,
+        _src:"eulerpool"
+      };
+    });
 }
 
 // ---- Eulerpool charting: dagelijkse koersen, waarmee momentum echt berekend wordt ----
@@ -3037,89 +3136,76 @@ function ratiosUitFinancials(mcap,fin){
 }
 
 function enrichEulerpool(symbol,token){
-  var isin=isinFor(symbol);
+  // een ISIN kan direct gebruikt worden; een ticker moet eerst omgezet worden
+  var isin = ISIN_RE.test(symbol) ? symbol : isinFor(symbol);
   if(!isin) return Promise.reject({kind:"config",msg:"geen ISIN bekend voor "+symbol+" (voeg toe via Saxo-import of Instellingen)"});
-  return Promise.all([
-    getJson(EULER_BASE+"/equity/profile/"+isin+"?token="+encodeURIComponent(token)),
-    getJson(EULER_BASE+"/equity-extended/aaqs/"+isin+"?token="+encodeURIComponent(token)).catch(function(){return null;})
-  ]).then(function(res){
-    var p=res[0]||{}, a=res[1]||{};
-    // AAQS geeft groei en rendement; profiel geeft marktwaarde en sector
-    var roePct = a.returnOnEquity!=null ? +(a.returnOnEquity*100).toFixed(1) : null;
-    var rocePct = a.roce!=null ? +(a.roce*100).toFixed(1) : null;
-    return {
-      // bij een ISIN-opvraging tonen we een leesbare afkorting i.p.v. de ISIN zelf
-      symbol: (ISIN_RE.test(symbol) && p.name) ? shortName(p.name) : symbol,
-      queriedAs: symbol,
-      name:p.name||symbol, market:"EU",
-      sector: p.sector || sectorOf(symbol),
-      _mcap: p.mcap!=null ? +p.mcap*1e6 : null,   // Eulerpool geeft mcap in miljoenen
-      // Koers afgeleid uit marktwaarde / aantal aandelen. Eulerpool levert geen koersfeed,
-      // maar wel beide bouwstenen - en dat geeft een bruikbare koers (getest: ASML komt
-      // uit op ~1434 EUR, wat klopt). Let op: dit is de slotkoers van de laatste update,
-      // niet realtime, en staat in de valuta van de notering.
-      price: (p.mcap!=null&&p.shares!=null&&p.shares>0) ? +(p.mcap/p.shares).toFixed(2) : null,
-      currency: p.currency||null,
-      priceDerived: (p.mcap!=null&&p.shares!=null&&p.shares>0),
-      chg:null,
-      // momentum uit eerdere metingen halen (kost geen API-call)
-      _histMom: null,
-      pe:null, pb:null, peg:null,
-      revG: a.revenueGrowth3Y!=null ? +(a.revenueGrowth3Y*100).toFixed(1) : null,
-      epsG: a.ebitGrowth3Y!=null ? +(a.ebitGrowth3Y*100).toFixed(1) : null,
-      roe: roePct, margin:null,
-      de: a.netDebtToEBIT!=null ? +(+a.netDebtToEBIT).toFixed(2) : null,
-      // Eulerpool-specifiek
-      aaqs: a.score!=null ? +a.score : null,
-      expectedReturn: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
-      upside: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
-      roce: rocePct,
-      profitContinuity: a.profitContinuity10Y!=null ? +a.profitContinuity10Y : null,
-      revG10Y: a.revenueGrowth10Y!=null ? +(a.revenueGrowth10Y*100).toFixed(1) : null,
-      ebitDrawdown: a.ebitMaxDrawdown10Y!=null ? +(a.ebitMaxDrawdown10Y*100).toFixed(1) : null,
-      isin:isin,
-      _src:"eulerpool"
-    };
+
+  // Hoofdroute: /equity/metrics geeft waardering, winstgevendheid, groei, hefboom én AAQS
+  // in één call. Uit de OpenAPI-spec; scheelt drie calls per aandeel t.o.v. de oude keten.
+  var basis = EULER_METRICS
+    ? enrichEulerMetrics(isin,token).then(function(d){
+        d.symbol = ISIN_RE.test(symbol) ? (d.ticker||symbol) : symbol;
+        d.queriedAs=symbol;
+        d.market="EU";
+        d.sector=sectorOf(d.symbol)||sectorOf(symbol)||"Overig";
+        if(d._mcap!=null&&d.shares!=null&&d.shares>0){
+          d.price=+(d._mcap/d.shares).toFixed(2);
+          d.priceDerived=true;
+        }
+        if(d.pe!=null&&d.epsG!=null&&d.epsG>0)d.peg=+(d.pe/d.epsG).toFixed(2);
+        return d;
+      })
+    : Promise.reject({kind:"config",msg:"metrics uitgeschakeld"});
+
+  return basis.catch(function(){
+    // terugval: de oorspronkelijke route via profiel + AAQS
+    return Promise.all([
+      getJson(EULER_BASE+"/equity/profile/"+isin+"?token="+encodeURIComponent(token)),
+      getJson(EULER_BASE+"/equity-extended/aaqs/"+isin+"?token="+encodeURIComponent(token)).catch(function(){return null;})
+    ]).then(function(res){
+      var p=res[0]||{}, a=res[1]||{};
+      return {
+        symbol: (ISIN_RE.test(symbol)&&p.name) ? shortName(p.name) : symbol,
+        queriedAs:symbol, name:p.name||symbol, market:"EU",
+        sector: p.sector || sectorOf(symbol),
+        _mcap: p.mcap!=null ? +p.mcap*1e6 : null,
+        price: (p.mcap!=null&&p.shares!=null&&p.shares>0) ? +(p.mcap/p.shares).toFixed(2) : null,
+        currency: p.currency||null,
+        priceDerived: (p.mcap!=null&&p.shares!=null&&p.shares>0),
+        chg:null, pe:null, pb:null, peg:null,
+        revG: a.revenueGrowth3Y!=null ? +(a.revenueGrowth3Y*100).toFixed(1) : null,
+        epsG: a.ebitGrowth3Y!=null ? +(a.ebitGrowth3Y*100).toFixed(1) : null,
+        roe: a.returnOnEquity!=null ? +(a.returnOnEquity*100).toFixed(1) : null,
+        margin:null,
+        de: a.netDebtToEBIT!=null ? +(+a.netDebtToEBIT).toFixed(2) : null,
+        aaqs: a.score!=null ? +a.score : null,
+        expectedReturn: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
+        upside: a.expectedReturn!=null ? +(a.expectedReturn*100).toFixed(1) : null,
+        roce: a.roce!=null ? +(a.roce*100).toFixed(1) : null,
+        profitContinuity: a.profitContinuity10Y!=null ? +a.profitContinuity10Y : null,
+        isin:isin, _src:"eulerpool"
+      };
+    });
   }).then(function(d){
-    // Echte koershistorie ophalen indien ingeschakeld: geeft koers, dagverandering,
-    // momentum en de daling vanaf de top - allemaal uit één call.
+    // koershistorie voor echt momentum en de 52-weeks daling
     if(d && d.isin && EULER_CHARTING){
       return fetchOhlcvEuler(d.isin,token).then(function(k){
-        if(k){
-          d.price=k.price; d.chg=k.chg; d.mom1m=k.mom1m; d.dd=k.dd;
-          d.priceDerived=false;
-          d._momSource="koershistorie ("+k.punten+" dagen)";
-        }
+        if(k){ d.price=k.price; d.chg=k.chg; d.mom1m=k.mom1m; d.dd=k.dd;
+               d.priceDerived=false; d._momSource="koershistorie ("+k.punten+" dagen)"; }
         return d;
       }).catch(function(){return d;});
     }
     return d;
   }).then(function(d){
-    // terugval: momentum uit je eigen tracking-geschiedenis (geen extra API-call)
+    // terugval voor momentum: uit je eigen tracking (kost geen call)
     if(d && d.price!=null && d.mom1m==null && typeof momentumFromHistory==="function"){
-      var h=momentumFromHistory(d.symbol,d.price) || momentumFromHistory(d.queriedAs,d.price);
+      var h=momentumFromHistory(d.symbol,d.price)||momentumFromHistory(d.queriedAs,d.price);
       if(h){ d.mom1m=h.mom1m; d._momSource="eigen tracking ("+h.overDagen+" dagen)"; }
-    }
-    // waarderingsratio's afleiden uit de jaarrekening (kost 1 extra call per aandeel)
-    if(d && d.isin && d._mcap!=null && EULER_FUNDAMENTALS){
-      return fetchFinancialsEuler(d.isin,token).then(function(fin){
-        if(fin){
-          var r=ratiosUitFinancials(d._mcap,fin);
-          if(r.pe!=null){d.pe=r.pe;}
-          if(r.pb!=null){d.pb=r.pb;}
-          if(r.margin!=null){d.margin=r.margin;}
-          if(d.pe!=null&&d.epsG!=null&&d.epsG>0)d.peg=+(d.pe/d.epsG).toFixed(2);
-          d._finJaar=fin.jaar;
-        }
-        return d;
-      }).catch(function(){return d;});
     }
     return d;
   });
 }
 
-// ---- SecuritiesDB aandelen: quant-health (Piotroski, Altman Z, ROIC-WACC, waardering) ----
-// Gratis, geen sleutel, data uit SEC-filings. Dekking: VS-genoteerde aandelen.
 function enrichSDBStock(symbol){
   return getJson(SDB_BASE+"/stocks/"+encodeURIComponent(symbol)+"/quant-health").then(function(res){
     var d=(res&&res.data)||{};
@@ -3263,7 +3349,10 @@ function runEtf(){
     ETF_CURRENT=all;
     if(typeof saveLastRun==="function"){
       var catEl=$('etfCategory');
-      saveLastRun('etfs',all,{categorie: catEl?(catEl.options[catEl.selectedIndex]||{}).text:null});
+      var etfParams={categorie: catEl?(catEl.options[catEl.selectedIndex]||{}).text:null,
+                     categorieId: catEl?catEl.value:null};
+      saveLastRun('etfs',all,etfParams);
+      if(etfParams.categorieId) saveLastRun('etfs_'+etfParams.categorieId,all,etfParams);
     }
     st.className=failed.length?"status err":"status";
     st.innerHTML="Klaar \u2014 <b>"+all.length+"</b> fondsen vergeleken"+
@@ -3595,7 +3684,7 @@ function renderPortfolio(){
           (p._fresh.etf.vol!=null?'<span>Volat. <b>'+p._fresh.etf.vol+'%</b></span>':'')+
           '</div>'
         : '')+
-      (p._fresh&&!p._fresh.isEtf? (isHolding(p.symbol)
+      (p._fresh&&!p._fresh.isEtf? (isHolding({symbol:p.symbol,isin:p.isin,sector:p._fresh.sector})
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
         : '<div class="pf-scores"><span>Momentum <b>'+p._fresh.m+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span>'+
           (p._fresh.upside!=null?'<span title="Modelmatig geschat opwaarts potentieel \u2014 geen voorspelling">Potentieel <b class="'+(p._fresh.upside>=15?"pos":(p._fresh.upside<=-10?"neg":""))+'">'+(p._fresh.upside>0?"+":"")+p._fresh.upside.toFixed(0)+'%</b></span>':'')+
@@ -3629,6 +3718,8 @@ function renderPortfolio(){
 if($('typeFilter'))$('typeFilter').onchange=function(){if(CURRENT.length)render();};
 if($('exchange'))$('exchange').addEventListener('change',function(){
   if(typeof showCostEstimate==="function")showCostEstimate();
+  // bewaarde screening van dit universum tonen als die er is
+  if(typeof showLastRunFor==="function")showLastRunFor(this.value);
   var warn=(typeof universeNeedsKey==="function")?universeNeedsKey():null;
   if(warn){ $('status').className="status err"; $('status').innerHTML='\u26a0\ufe0f '+warn; }
   else if($('status').className.indexOf("err")>-1){ $('status').className="status"; $('status').textContent=""; }
@@ -3789,7 +3880,7 @@ function checkAllPositions(){
       // We proberen SecuritiesDB voor elke ticker die géén bekend aandeel is - blijkt het geen fonds,
       // dan valt hij door naar de gewone aandelenroute. Zo hoeven we geen tickerlijst bij te houden.
       var mightBeFund = ETF_HINT.test(pos.symbol) || ETF_KNOWN[pos.symbol] ||
-                        (ETF_NOT_FUND[pos.symbol]!==true && !isHolding(pos.symbol));
+                        (ETF_NOT_FUND[pos.symbol]!==true && !isHolding({symbol:pos.symbol,isin:pos.isin}));
       if(mightBeFund){
         return fetchEtfAuto(pos.symbol).then(function(e){
           ETF_KNOWN[pos.symbol]=true;
@@ -3815,7 +3906,7 @@ function checkAllPositions(){
     return enrich(pos.symbol,key).then(function(d){
         buildPeers([d]); // enkelvoudige set -> valt terug op absolute normalisatie
         var t=valueTrap(d);
-        var holding=isHolding(pos.symbol);
+        var holding=isHolding({symbol:pos.symbol,isin:pos.isin,sector:d.sector,ticker:d.ticker});
         var sug=holding?null:suggestsHolding(d);
         var comp=dataCompleteness(d);
         var fresh=holding
@@ -4638,6 +4729,40 @@ setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate()
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
 
 // laatste screening tonen - herbruikbaar, ook via de knop
+// toont de bewaarde screening van een specifiek universum (bij het wisselen in de keuzelijst)
+function showLastRunFor(exchange){
+  if(!exchange)return Promise.resolve(false);
+  return loadLastRun('stocks_'+exchange).then(function(run){
+    if(!run||!run.data||!run.data.length){
+      // niets bewaard voor dit universum: tabel leegmaken zodat je niet naar oude data van
+      // een ánder universum kijkt en denkt dat het klopt
+      CURRENT=[];SCORESET=null;render();
+      $('status').className="status";
+      $('status').innerHTML='Nog geen screening bewaard voor deze selectie \u2014 klik <b>Screenen</b>.';
+      if(typeof showCostEstimate==="function")showCostEstimate();
+      return false;
+    }
+    SCORESET=run.data.slice();
+    buildPeers(SCORESET);
+    var lim=parseInt((run.params&&run.params.limit)||25,10);
+    CURRENT=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
+    if(run.params){
+      ['limit','mode','horizon','mcap','pemax'].forEach(function(k){
+        var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
+      });
+      if(typeof syncWeightUI==="function")syncWeightUI();
+    }
+    render();
+    $('status').className="status";
+    $('status').innerHTML='\ud83d\udcbe Bewaarde screening \u2014 '+describeRun(run)+
+      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
+    if(typeof showCostEstimate==="function")showCostEstimate();
+    return true;
+  }).catch(function(){return false;});
+}
+
+
+
 function showLastRun(silent){
   return loadLastRun('stocks').then(function(run){
     if(!run||!run.data||!run.data.length){
