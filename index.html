@@ -1748,7 +1748,12 @@ function sourceFromUrl(u){
 }
 function getJson(url){
   if(typeof recordCall==="function"){ var s=sourceFromUrl(url); if(s)recordCall(s,1); }
-  return fetch(url).then(function(r){
+  // Tijdslimiet: zonder dit kan één trage of hangende aanroep de hele check blokkeren,
+  // waardoor de statusmelding blijft staan zonder dat er nog iets gebeurt.
+  var timeout=new Promise(function(_,rej){
+    setTimeout(function(){rej({kind:"timeout",msg:"geen antwoord binnen 20 seconden"});},20000);
+  });
+  return Promise.race([timeout, fetch(url).then(function(r){
     if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText}; }
     return r.text();
   }).then(function(txt){
@@ -1764,7 +1769,7 @@ function getJson(url){
     if(e&&e.msg)throw e;
     var m=(e&&e.message)?e.message:String(e);
     throw {kind:"network",msg:/Failed to fetch|NetworkError|CORS/i.test(m)?"netwerkfout of CORS-blokkade (mogelijk verkeerde sleutel of niet-toegestaan domein)":m};
-  });
+  })]);
 }
 
 // dispatcher: kiest de juiste bron
@@ -3157,7 +3162,8 @@ function enrichEulerpool(symbol,token){
       })
     : Promise.reject({kind:"config",msg:"metrics uitgeschakeld"});
 
-  return basis.catch(function(){
+  return basis.catch(function(eMetrics){
+    var redenMetrics=(eMetrics&&eMetrics.msg)?eMetrics.msg:"metrics mislukt";
     // terugval: de oorspronkelijke route via profiel + AAQS
     return Promise.all([
       getJson(EULER_BASE+"/equity/profile/"+isin+"?token="+encodeURIComponent(token)),
@@ -3926,7 +3932,12 @@ function checkAllPositions(){
       });
   }
 
-  seq.then(function(){
+  seq.catch(function(e){
+    // vangnet: zonder dit blijft de statusmelding hangen bij een onverwachte fout
+    pfStat("De check liep vast: "+((e&&e.msg)||(e&&e.message)||e)+
+           ". De resultaten die wel binnenkwamen staan hieronder.",true);
+    renderPortfolio();
+  }).then(function(){
     // posities die onder hun eigen ingestelde grens zakten
     var onderGrens=PORTFOLIO.filter(function(p){
       return p.alertBelow!=null && p._fresh && p._fresh.score!=null && p._fresh.score<p.alertBelow;
