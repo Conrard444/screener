@@ -441,6 +441,11 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
       <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
     </details>
 
+    <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;gap:6px">
+      <span class="inline-lbl">Portefeuille</span>
+      <span id="pfKiezer" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    </div>
+
     <div class="control-panel">
       <div class="control-row">
         <div class="field"><label>Ticker of ISIN</label><input type="text" id="pfSymbol" placeholder="AAPL of NL0010273215" style="width:150px"></div>
@@ -458,6 +463,7 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
     <div class="status" id="pfStatus"></div>
 
     <div class="kpi-row" id="pfDashboard"></div>
+    <div id="spreidingWrap"></div>
     <div id="overlapWrap"></div>
 
     <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px">
@@ -470,6 +476,11 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
         <option value="plAsc">Resultaat % (laag \u2192 hoog)</option>
         <option value="symbol">Ticker (A-Z)</option>
         <option value="value">Positiewaarde (groot \u2192 klein)</option>
+      </select>
+      <span class="inline-lbl" style="margin-left:8px">Weergave</span>
+      <select id="pfWeergave">
+        <option value="kaart">Kaarten</option>
+        <option value="tabel">Tabel (zoals screener)</option>
       </select>
       <span class="inline-lbl" style="margin-left:8px">Filter</span>
       <select id="pfFilter">
@@ -3797,26 +3808,135 @@ $('etfStatus').innerHTML='Kies een selectie en klik <b>Vergelijk ETF\'s</b>. VS-
 renderEtf();
 
 // ============ PORTEFEUILLE-TABBLAD ============
-var PORTFOLIO=[]; // {symbol, qty, buyPrice, buyDate, baseline:{score,quality,trapLevel,ts}, id}
+var PORTFOLIO=[]; // actieve portefeuille; blijft de werkvariabele voor alle bestaande logica
+
+// ---- Meerdere portefeuilles ----
+// PORTFOLIO blijft de actieve lijst, zodat bestaande code ongewijzigd werkt. Deze laag
+// beheert welke lijst dat is en bewaart de andere apart.
+var PORTFOLIOS={"eigen":{naam:"Mijn portefeuille",posities:[]}};
+var ACTIEVE_PF="eigen";
+
+function pfLijst(){ return (PORTFOLIOS[ACTIEVE_PF]||{}).posities||[]; }
+function pfSync(){ if(PORTFOLIOS[ACTIEVE_PF])PORTFOLIOS[ACTIEVE_PF].posities=PORTFOLIO; }
+function pfWissel(id){
+  pfSync();                       // huidige wijzigingen bewaren
+  if(!PORTFOLIOS[id])return false;
+  ACTIEVE_PF=id;
+  PORTFOLIO=PORTFOLIOS[id].posities||[];
+  savePortfoliosLocal(); savePortfoliosCloud();
+  renderPfKiezer(); renderPortfolio();
+  return true;
+}
+function pfNieuw(naam){
+  var id="pf_"+Date.now();
+  PORTFOLIOS[id]={naam:naam||"Nieuwe portefeuille",posities:[]};
+  pfWissel(id);
+  return id;
+}
+function pfVerwijder(id){
+  if(id==="eigen"){pfStat("Je eigen portefeuille kan niet verwijderd worden.",true);return;}
+  if(!PORTFOLIOS[id])return;
+  var naam=PORTFOLIOS[id].naam;
+  delete PORTFOLIOS[id];
+  if(ACTIEVE_PF===id){ACTIEVE_PF="eigen";PORTFOLIO=PORTFOLIOS.eigen.posities||[];}
+  savePortfoliosLocal(); savePortfoliosCloud();
+  renderPfKiezer(); renderPortfolio();
+  pfStat("Portefeuille \u201c"+naam+"\u201d verwijderd.");
+}
+function pfHernoem(id,naam){
+  if(!PORTFOLIOS[id]||!naam)return;
+  PORTFOLIOS[id].naam=naam.slice(0,40);
+  savePortfoliosLocal(); savePortfoliosCloud();
+  renderPfKiezer();
+}
+function savePortfoliosLocal(){
+  pfSync();
+  try{ LS.set('portfolios',JSON.stringify({actief:ACTIEVE_PF,lijsten:PORTFOLIOS})); }catch(e){}
+}
+function savePortfoliosCloud(){
+  pfSync();
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid)
+      .set({portfolios:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS}},{merge:true}).catch(function(){});
+  }
+}
+function loadPortfoliosLocal(){
+  return LS.get('portfolios').then(function(r){
+    if(r&&r.value){
+      try{
+        var d=JSON.parse(r.value);
+        if(d&&d.lijsten){
+          PORTFOLIOS=d.lijsten;
+          if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
+          ACTIEVE_PF=(d.actief&&PORTFOLIOS[d.actief])?d.actief:"eigen";
+          PORTFOLIO=PORTFOLIOS[ACTIEVE_PF].posities||[];
+          renderPfKiezer(); renderPortfolio();
+          return true;
+        }
+      }catch(e){}
+    }
+    return false;
+  }).catch(function(){return false;});
+}
+function renderPfKiezer(){
+  var el=document.getElementById('pfKiezer'); if(!el)return;
+  var ids=Object.keys(PORTFOLIOS);
+  el.innerHTML=ids.map(function(id){
+    var p=PORTFOLIOS[id], actief=(id===ACTIEVE_PF);
+    var n=(p.posities||[]).length;
+    return '<button class="'+(actief?"btn-go":"btn-ghost")+'" onclick="pfWissel(\''+id+'\')" '+
+      'style="font-size:11.5px;padding:0 12px;height:30px">'+
+      p.naam.replace(/</g,"&lt;")+' <span style="opacity:.7">('+n+')</span></button>';
+  }).join("")+
+  '<button class="btn-ghost" onclick="pfNieuwPrompt()" title="Nieuwe portefeuille aanmaken" '+
+  'style="font-size:11.5px;padding:0 10px;height:30px">+</button>'+
+  (ACTIEVE_PF!=="eigen"?
+    '<button class="btn-ghost" onclick="pfHernoemPrompt()" style="font-size:11px;padding:0 10px;height:30px">hernoem</button>'+
+    '<button class="btn-ghost" onclick="pfVerwijderPrompt()" style="font-size:11px;padding:0 10px;height:30px;color:var(--red)">verwijder</button>':'');
+}
+function pfNieuwPrompt(){
+  var n=prompt("Naam van de nieuwe portefeuille:\n(bijvoorbeeld de naam van de persoon voor wie je hem bijhoudt)","");
+  if(n&&n.trim())pfNieuw(n.trim());
+}
+function pfHernoemPrompt(){
+  var n=prompt("Nieuwe naam:",PORTFOLIOS[ACTIEVE_PF].naam);
+  if(n&&n.trim())pfHernoem(ACTIEVE_PF,n.trim());
+}
+function pfVerwijderPrompt(){
+  var p=PORTFOLIOS[ACTIEVE_PF];
+  if(confirm("Portefeuille \u201c"+p.naam+"\u201d met "+(p.posities||[]).length+" posities verwijderen?\nDit kan niet ongedaan gemaakt worden."))
+    pfVerwijder(ACTIEVE_PF);
+}
+window.pfWissel=pfWissel; window.pfNieuwPrompt=pfNieuwPrompt;
+window.pfHernoemPrompt=pfHernoemPrompt; window.pfVerwijderPrompt=pfVerwijderPrompt;
 
 function pfStat(msg,err){var s=$('pfStatus');s.className=err?"status err":"status";s.textContent=msg;}
 
 function savePortfolioLocal(){
   try{ LS.set('portfolio',JSON.stringify(PORTFOLIO)); }catch(e){}
+  savePortfoliosLocal();   // ook de meervoudige structuur bijwerken
 }
 function loadPortfolioLocal(){
-  try{
-    if(true){
-      LS.get('portfolio').then(function(r){
-        if(r&&r.value){ try{PORTFOLIO=JSON.parse(r.value)||[];renderPortfolio();}catch(e){} }
-      }).catch(function(){});
-    }
-  }catch(e){}
+  // eerst de meervoudige structuur; is die er niet, dan de oude enkele lijst overnemen
+  loadPortfoliosLocal().then(function(gelukt){
+    if(gelukt)return;
+    LS.get('portfolio').then(function(r){
+      if(r&&r.value){
+        try{
+          PORTFOLIO=JSON.parse(r.value)||[];
+          PORTFOLIOS.eigen.posities=PORTFOLIO;   // migreren naar de nieuwe structuur
+          savePortfoliosLocal();
+        }catch(e){}
+      }
+      renderPfKiezer(); renderPortfolio();
+    }).catch(function(){renderPfKiezer();renderPortfolio();});
+  });
 }
 function savePortfolioCloud(){
   if(typeof FB!=="undefined"&&FB.user&&FB.ready){
     FB.db.collection("users").doc(FB.user.uid).set({portfolio:PORTFOLIO},{merge:true}).catch(function(){});
   }
+  savePortfoliosCloud();
 }
 
 $('pfAdd').onclick=function(){
@@ -4073,6 +4193,14 @@ function renderPortfolio(){
     return;
   }
 
+  // tabelweergave gekozen? dan die renderen in plaats van kaarten
+  var weergave=$('pfWeergave')?$('pfWeergave').value:"kaart";
+  if(weergave==="tabel"){
+    el.innerHTML=renderPortfolioTabel(list);
+    renderOverlap();
+    if(typeof renderSpreiding==="function")renderSpreiding();
+    return;
+  }
   el.innerHTML=list.map(function(p){
     var pl = plOf(p);
     var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
@@ -4162,6 +4290,7 @@ if($('exchange'))$('exchange').addEventListener('change',function(){
 });
 if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
+if($('pfWeergave'))$('pfWeergave').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
 
 // sectoroverlap binnen de portefeuille (Dalio-punt: verborgen concentratie)
@@ -4268,6 +4397,141 @@ function analyseOverlap(){
   return findings;
 }
 
+// ---- Spreidingsanalyse ----
+// Beoordeelt hoe goed de portefeuille gespreid is over posities, sectoren en regio's.
+// Gebaseerd op de Herfindahl-index: de som van de gekwadrateerde gewichten. Die maat
+// straft concentratie zwaarder dan een simpele telling, wat klopt met hoe risico werkt -
+// één positie van 40% is riskanter dan vier van 10%.
+function spreidingsAnalyse(){
+  var met=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.price!=null&&p.qty;});
+  if(met.length<2)return null;
+
+  var totaal=met.reduce(function(s,p){return s+p._fresh.price*p.qty;},0);
+  if(!totaal)return null;
+  var gewichten=met.map(function(p){
+    return {symbol:p.symbol, naam:(typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[p.isin])||p.symbol,
+            w:(p._fresh.price*p.qty)/totaal, sector:p._fresh.sector||"Onbekend",
+            isEtf:!!p._fresh.isEtf, markt:(p.isin?p.isin.slice(0,2):null)};
+  }).sort(function(a,b){return b.w-a.w;});
+
+  // Herfindahl per dimensie: 1/HHI geeft het "effectief aantal" onafhankelijke posities
+  function hhi(groepen){
+    var som=0; Object.keys(groepen).forEach(function(k){som+=groepen[k]*groepen[k];});
+    return som;
+  }
+  var perPositie={}; gewichten.forEach(function(g){perPositie[g.symbol]=(perPositie[g.symbol]||0)+g.w;});
+  var perSector={};  gewichten.forEach(function(g){perSector[g.sector]=(perSector[g.sector]||0)+g.w;});
+  var perLand={};    gewichten.forEach(function(g){var l=g.markt||"?";perLand[l]=(perLand[l]||0)+g.w;});
+
+  var hPos=hhi(perPositie), hSec=hhi(perSector), hLand=hhi(perLand);
+  var effPos=hPos>0?1/hPos:0, effSec=hSec>0?1/hSec:0, effLand=hLand>0?1/hLand:0;
+
+  // scores: 0-100, gebaseerd op het effectief aantal. Onderzoek wijst uit dat het meeste
+  // spreidingsvoordeel bereikt is rond 15-25 posities; daarboven neemt het nut sterk af.
+  var scorePos=Math.round(Math.min(100,(effPos/18)*100));
+  var scoreSec=Math.round(Math.min(100,(effSec/6)*100));
+  var scoreLand=Math.round(Math.min(100,(effLand/4)*100));
+  var totaalScore=Math.round(scorePos*0.45+scoreSec*0.40+scoreLand*0.15);
+
+  // concrete aandachtspunten
+  var punten=[];
+  var top=gewichten[0];
+  if(top.w>0.25)punten.push({ernst:"hoog",tekst:top.naam+" is "+(top.w*100).toFixed(0)+"% van je portefeuille \u2014 \u00e9\u00e9n tegenvaller raakt je hard"});
+  var top3=gewichten.slice(0,3).reduce(function(s,g){return s+g.w;},0);
+  if(top3>0.6)punten.push({ernst:"hoog",tekst:"je drie grootste posities zijn samen "+(top3*100).toFixed(0)+"% van het totaal"});
+  var grootsteSector=Object.keys(perSector).sort(function(a,b){return perSector[b]-perSector[a];})[0];
+  if(perSector[grootsteSector]>0.45)punten.push({ernst:"midden",tekst:(perSector[grootsteSector]*100).toFixed(0)+"% zit in de sector "+grootsteSector});
+  if(effPos<8)punten.push({ernst:"midden",tekst:"effectief maar "+effPos.toFixed(1)+" onafhankelijke posities \u2014 minder spreiding dan het aantal aandelen suggereert"});
+  var etfDeel=gewichten.filter(function(g){return g.isEtf;}).reduce(function(s,g){return s+g.w;},0);
+
+  return {
+    score:totaalScore, scorePos:scorePos, scoreSec:scoreSec, scoreLand:scoreLand,
+    effPos:effPos, effSec:effSec, effLand:effLand,
+    gewichten:gewichten, perSector:perSector, punten:punten,
+    etfDeel:etfDeel, totaalWaarde:totaal, aantal:met.length
+  };
+}
+// Portefeuille als tabel, met dezelfde kolommen en dezelfde weegregelaars als de screener.
+// Hergebruikt totalScore() en de losse factorscores, dus een wijziging aan de weging werkt
+// hier meteen door - geen aparte berekening die uit de pas kan lopen.
+function renderPortfolioTabel(lijst){
+  var rijen=lijst.filter(function(p){return p._fresh;});
+  if(!rijen.length)return '<div class="empty">Nog geen gecheckte posities. Klik op \u201cAlles checken\u201d.</div>';
+
+  // de opgeslagen ruwe data terughalen zodat de scorefuncties hun werk kunnen doen
+  var data=rijen.map(function(p){
+    var d=p._raw||{};
+    return Object.assign({},d,{
+      symbol:p.symbol, isin:p.isin, name:p._fresh.name||null, sector:p._fresh.sector,
+      price:p._fresh.price, _pos:p
+    });
+  });
+  buildPeers(data);
+
+  var kop='<tr><th class="l">Positie</th><th class="l">Sector</th><th>Koers</th><th>Waarde</th>'+
+    '<th>Rendement</th><th>Mom.</th><th>Waard.</th><th>Groei</th><th>Kwal.</th><th>Score</th></tr>';
+  var body=data.map(function(d){
+    var p=d._pos, f=p._fresh;
+    var waarde=(f.price!=null&&p.qty)?f.price*p.qty:null;
+    var pl=(p.buyPrice&&f.price)?((f.price-p.buyPrice)/p.buyPrice*100):null;
+    var naam=(typeof naamVoor==="function")?naamVoor(d):null;
+    var sc=f.isEtf?f.score:totalScore(d);
+    var m=f.isEtf?null:momentumScore(d), v=f.isEtf?null:valuationScore(d),
+        g=f.isEtf?null:growthScore(d), q=f.isEtf?null:qualityScore(d);
+    var cel=function(x){return '<td class="num">'+(x==null?"\u2014":x)+'</td>';};
+    return '<tr'+(p._alarm&&p._alarm.level==="red"?' style="background:rgba(224,99,95,.06)"':'')+'>'+
+      '<td class="l"><span class="tk">'+(naam||p.symbol)+'</span>'+
+        (f.isEtf?'<span class="trap" style="margin-left:6px">fonds</span>':'')+
+        '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span></td>'+
+      '<td class="l" style="font-size:11px;color:var(--muted)">'+(f.sector||"\u2014")+'</td>'+
+      cel(f.price!=null?f.price.toFixed(2):null)+
+      cel(waarde!=null?Math.round(waarde):null)+
+      '<td class="num '+(pl>=0?"pos":"neg")+'">'+(pl!=null?(pl>=0?"+":"")+pl.toFixed(1)+"%":"\u2014")+'</td>'+
+      cel(m)+cel(v)+cel(g)+cel(q)+
+      '<td class="num"><div class="scorecell">'+(sc!=null?sc:"\u2014")+'</div>'+
+        '<div class="bar"><i style="width:'+(sc||0)+'%"></i></div></td>'+
+    '</tr>';
+  }).join("");
+
+  return '<div class="scrollhint">\u2194 veeg horizontaal voor alle kolommen</div>'+
+    '<div class="panel-card"><table><thead>'+kop+'</thead><tbody>'+body+'</tbody></table></div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px">'+
+    'De vier factorscores volgen de weegregelaars van het Screener-tabblad; pas die daar aan om de totaalscore te herwegen.</div>';
+}
+
+function renderSpreiding(){
+  var el=document.getElementById('spreidingWrap'); if(!el)return;
+  var a=spreidingsAnalyse();
+  if(!a){el.innerHTML="";return;}
+  var kleur=a.score>=70?"var(--green)":(a.score>=45?"var(--accent)":"var(--red)");
+  var oordeel=a.score>=70?"goed gespreid":(a.score>=45?"redelijk gespreid":"geconcentreerd");
+
+  var balk=function(lbl,sc,detail){
+    return '<div style="margin:5px 0"><div style="display:flex;justify-content:space-between;font-size:11.5px">'+
+      '<span>'+lbl+'</span><span style="color:var(--muted)">'+detail+'</span></div>'+
+      '<div class="bar" style="margin-top:2px"><i style="width:'+sc+'%"></i></div></div>';
+  };
+  var sectorLijst=Object.keys(a.perSector).sort(function(x,y){return a.perSector[y]-a.perSector[x];})
+    .slice(0,6).map(function(s){return s+" "+(a.perSector[s]*100).toFixed(0)+"%";}).join(" \u00b7 ");
+
+  el.innerHTML='<div class="snap" style="border-left:3px solid '+kleur+'">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">'+
+      '<b>Spreiding: <span style="color:'+kleur+'">'+oordeel+'</span></b>'+
+      '<span style="font-size:20px;font-family:\'IBM Plex Mono\';color:'+kleur+'">'+a.score+'</span>'+
+    '</div>'+
+    balk("Over posities",a.scorePos,a.effPos.toFixed(1)+" effectief van "+a.aantal)+
+    balk("Over sectoren",a.scoreSec,a.effSec.toFixed(1)+" effectief")+
+    balk("Over landen",a.scoreLand,a.effLand.toFixed(1)+" effectief")+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">'+sectorLijst+'</div>'+
+    (a.punten.length?'<ul style="margin:8px 0 0 16px;padding:0;font-size:12px">'+
+      a.punten.map(function(p){return '<li style="margin:3px 0;color:'+(p.ernst==="hoog"?"var(--red)":"var(--accent)")+'">'+p.tekst+'</li>';}).join("")+
+      '</ul>':'<div style="font-size:12px;color:var(--green);margin-top:8px">Geen concentratierisico\'s gevonden.</div>')+
+    '<div style="font-size:10.5px;color:var(--muted);margin-top:8px;opacity:.8">'+
+      '\u201cEffectief aantal\u201d corrigeert voor ongelijke gewichten: tien posities waarvan \u00e9\u00e9n de helft is, '+
+      'tellen als ongeveer drie. Berekend over posities waarvan een koers bekend is.</div>'+
+    '</div>';
+}
+
 function renderOverlap(){
   var wrap=$('overlapWrap'); if(!wrap)return;
   var html="";
@@ -4351,6 +4615,7 @@ function checkAllPositions(){
              upside:(d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),fairValue:d.fairValue||null,
              impliedGrowth:d.impliedGrowth||null,epsG5Y:d.epsG5Y||null,expectedReturn:d.expectedReturn||null};
         pos._fresh=fresh;
+        pos._raw=d;            // ruwe cijfers bewaren voor de tabelweergave
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
       }).catch(function(e){
