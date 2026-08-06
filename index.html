@@ -1692,41 +1692,10 @@ function render(){
          d.piotroski!=null?'<span style="display:block;font-size:9px;color:var(--muted)">F'+d.piotroski+(d.altmanZ!=null?' Z'+d.altmanZ:'')+'</span>':'')+
         '</td>'+
       (function(){
-        // Toon liever de impliciete groeiverwachting dan de kale DCF-uitkomst. Reden: een
-        // standaard-DCF rekent met ~3% eeuwige groei, waardoor vrijwel elk kwaliteitsbedrijf
-        // 40-90% "overgewaardeerd" lijkt. Dat onderscheidt niets. De impliciete groei zegt
-        // wél iets: het is de groei die de markt inprijst, en die kun je afzetten tegen
-        // wat het bedrijf werkelijk realiseert.
-        if(d.impliedGrowth!=null){
-          var werkelijk = (d.epsG5Y!=null?d.epsG5Y:(d.epsG!=null?d.epsG:null));
-          var haalbaar = (werkelijk!=null) ? (werkelijk>=d.impliedGrowth) : null;
-          var kleur = haalbaar===true ? "pos" : (haalbaar===false ? "neg" : "");
-          var tip = "De markt prijst "+d.impliedGrowth+"% winstgroei per jaar in"+
-                    (werkelijk!=null?"; het bedrijf realiseerde de afgelopen jaren "+werkelijk+"%":"")+
-                    (d.fairValue!=null?" \u00b7 DCF-waarde "+d.fairValue+" bij koers "+(d.price!=null?d.price:"?"):"")+
-                    " \u00b7 modeluitkomst, sterk afhankelijk van aannames";
-          return '<td class="num '+kleur+'" title="'+tip+'" style="cursor:help">'+
-                 d.impliedGrowth.toFixed(0)+'%<span style="font-size:9px;opacity:.6"> impl.</span></td>';
-        }
-        var up = d.upside!=null ? d.upside : (d.expectedReturn!=null ? d.expectedReturn : null);
-        if(up==null) return '<td class="num">\u2014</td>';
-        var cls = up>=15 ? "pos" : (up<=-10 ? "neg" : "");
-        var tip;
-        if(d.upsideSource==="dcf"&&d.fairValue!=null){
-          tip = "DCF: faire waarde "+d.fairValue+(d.price!=null?" vs koers "+d.price:"");
-          if(d.fairLow!=null&&d.fairHigh!=null) tip += " \u00b7 bandbreedte "+d.fairLow+"\u2013"+d.fairHigh+" afhankelijk van aannames";
-          if(d.impliedGrowth!=null) tip += " \u00b7 markt prijst "+d.impliedGrowth+"% groei in";
-          tip += " \u00b7 modeluitkomst, geen voorspelling";
-        } else if(d.upsideSource==="pe-historie"){
-          tip = "Afgeleid: P/E ligt "+(d.peVsHist>0?"+":"")+d.peVsHist+"% t.o.v. eigen 5-jaarsgemiddelde";
-        } else if(d.expectedReturn!=null){
-          tip = "Verwacht jaarrendement volgens Eulerpool";
-        } else tip="";
-        // brede DCF-bandbreedte -> de uitkomst is erg gevoelig voor aannames, dat markeren we
-        var onzeker = (d.fairLow!=null&&d.fairHigh!=null&&d.fairValue>0&&(d.fairHigh-d.fairLow)/d.fairValue>0.5);
-        var txt=(up>0?"+":"")+up.toFixed(0)+"%";
-        if(onzeker) txt+='<span style="opacity:.6;font-size:9px"> \u00b1</span>';
-        return '<td class="num '+cls+'"'+(tip?' title="'+tip+'" style="cursor:help"':'')+'>'+txt+'</td>';
+        var tip=VELD.ingeprijsd.uitleg(d);
+        var cls=VELD.ingeprijsd.kleur(d);
+        var txt=VELD.ingeprijsd.tekst(d);
+        return '<td class="num '+cls+'"'+(tip?' title="'+tip.replace(/"/g,"&quot;")+'" style="cursor:help"':'')+'>'+txt+'</td>';
       })()+
       '<td>'+trap+'</td>'+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
@@ -2403,8 +2372,97 @@ function fillPriceFrom(d,symbol,order,skipIndex){
   return Promise.resolve(tryNext(0));
 }
 
+// ---- Centrale veldweergave ----
+// Eén definitie per gegeven: hoe het heet, hoe het getoond wordt en wat de uitleg is.
+// Voorheen stond dit los in de screenertabel, de portefeuillekaart en de CSV-export,
+// waardoor een wijziging op één plek de andere twee niet bereikte.
+var VELD={
+  ingeprijsd:{
+    label:"Ingeprijsd",
+    waarde:function(d){
+      if(!d)return null;
+      if(d.impliedGrowth!=null)return {v:d.impliedGrowth,soort:"groei"};
+      var up=(d.upside!=null)?d.upside:(d.expectedReturn!=null?d.expectedReturn:null);
+      return up!=null?{v:up,soort:"rendement"}:null;
+    },
+    tekst:function(d){
+      var w=this.waarde(d);
+      if(!w)return "\u2014";
+      return (w.v>0?"+":"")+w.v.toFixed(0)+"%"+(w.soort==="groei"?" impl.":"");
+    },
+    kleur:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      if(w.soort==="groei"){
+        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
+        if(werkelijk==null)return "";
+        return werkelijk>=w.v?"pos":"neg";
+      }
+      return w.v>=15?"pos":(w.v<=-10?"neg":"");
+    },
+    uitleg:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      if(w.soort==="groei"){
+        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
+        return "De markt prijst "+w.v+"% winstgroei per jaar in"+
+               (werkelijk!=null?"; het bedrijf realiseerde "+werkelijk+"%":"")+
+               " \u00b7 modeluitkomst, sterk afhankelijk van aannames";
+      }
+      return "Verwacht rendement volgens de databron \u00b7 modeluitkomst, geen voorspelling";
+    }
+  }
+};
+
+// ---- Centrale bronbepaling ----
+// Eén plek die bepaalt hoe een symbool wordt opgehaald, welke bron dat is en wat het kost.
+// Voorheen was dit verspreid over currentSource(), sourceOrderFor() en losse checks in de
+// screener, waardoor een wijziging op de ene plek de andere niet bereikte.
+var BRON={
+  // welke bron gaat dit symbool ophalen?
+  voor: function(symbol){
+    // Een ISIN kan alleen door Eulerpool opgehaald worden - ongeacht welke bron er
+    // ingesteld staat. Zonder deze regel belandden ISIN-universa bij Finnhub zodra
+    // de automatische bronkeuze uitstond, met 49 mislukte aanroepen tot gevolg.
+    if(ISIN_RE.test(symbol)) return MULTI_KEYS.eulerpool?"eulerpool":null;
+    if(typeof multiEnabled==="function" && multiEnabled()){
+      var order=sourceOrderFor(symbol).filter(function(s){return MULTI_KEYS[s];});
+      if(!/\./.test(symbol) && MULTI_KEYS.finnhub) return "securitiesdb+finnhub";
+      return order[0]||null;
+    }
+    return currentSource();
+  },
+  // hoeveel API-calls kost dit symbool?
+  kosten: function(symbol){
+    var b=this.voor(symbol);
+    if(b==="securitiesdb+finnhub")return 4;   // quant-health + dcf + quote + metric
+    if(b==="eulerpool")return (EULER_METRICS?1:2)+(EULER_CHARTING?1:0);
+    if(b==="fmp")return 3;
+    return 2;
+  },
+  // moet er getemporiseerd worden? (Finnhub heeft een minuutlimiet)
+  throttle: function(symbols){
+    var self=this;
+    return (symbols||[]).some(function(s){
+      var b=self.voor(s);
+      return b==="finnhub"||b==="securitiesdb+finnhub";
+    });
+  },
+  // leesbare naam voor meldingen
+  naam: function(b){
+    return {finnhub:"Finnhub",eulerpool:"Eulerpool",eodhd:"EODHD",fmp:"FMP",
+            securitiesdb:"SecuritiesDB","securitiesdb+finnhub":"SecuritiesDB + Finnhub"}[b]||b||"onbekend";
+  },
+  // is er überhaupt een werkende route voor dit symbool?
+  bereikbaar: function(symbol){ return this.voor(symbol)!=null; }
+};
+
 function enrich(symbol,key){
-  // multi-bron heeft voorrang wanneer ingeschakeld en er minstens één sleutel is
+  // ISIN's gaan altijd naar Eulerpool, ook als de automatische bronkeuze uitstaat
+  if(ISIN_RE.test(symbol)){
+    if(!MULTI_KEYS.eulerpool)return Promise.reject({kind:"config",msg:"ISIN vereist een Eulerpool-sleutel (Instellingen)"});
+    return enrichEulerpool(symbol,MULTI_KEYS.eulerpool);
+  }
   if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp||MULTI_KEYS.eulerpool)){
     return enrichMulti(symbol);
   }
@@ -2608,11 +2666,22 @@ function run(){
   }
   var universe=chosenUniverse();
   var limit=+$('limit').value;
-  var src=currentSource();
-  var throttle=(src==="finnhub");
-  var CALLS_FULL=(src==="finnhub")?2:(src==="fmp"?3:2);
+  // bron en kosten bepalen via de centrale BRON-module, niet via het verborgen source-veld
+  var throttle=BRON.throttle(universe);
+  var CALLS_FULL=Math.max.apply(null,universe.slice(0,20).map(function(s){return BRON.kosten(s);}).concat([2]));
   var MAX_CALLS_PER_MIN=55;
-  var state={callsInWindow:0,dayLimit:null,skipped:[]};
+  var state={callsInWindow:0,dayLimit:null,skipped:[],redenen:{}};
+  // vooraf melden welke bron gebruikt wordt, zodat verrassingen uitblijven
+  var bronnenInGebruik={};
+  universe.forEach(function(s){var b=BRON.voor(s); if(b)bronnenInGebruik[b]=(bronnenInGebruik[b]||0)+1;});
+  var onbereikbaar=universe.filter(function(s){return !BRON.bereikbaar(s);});
+  if(onbereikbaar.length===universe.length){
+    st.className="status err";
+    st.innerHTML='\u26a0\ufe0f Geen bruikbare bron voor dit universum. '+
+      (ISIN_RE.test(universe[0])?'Deze aandelen worden op ISIN opgehaald en vereisen een <b>Eulerpool</b>-sleutel.'
+                                :'Controleer je sleutels bij <b>Instellingen</b>.');
+    return;
+  }
 
   function countdown(seconds,reason){
     return new Promise(function(resolve){
@@ -4048,7 +4117,13 @@ function renderPortfolio(){
       (p._fresh&&!p._fresh.isEtf? (isHolding({symbol:p.symbol,isin:p.isin,sector:p._fresh.sector})
         ? '<div class="pf-scores"><span style="color:var(--accent)">\ud83c\udfe6 Holding-modus</span><span>Koers/boekwaarde-score <b>'+p._fresh.v+'</b></span><span>Momentum <b>'+p._fresh.m+'</b></span></div>'
         : '<div class="pf-scores"><span>Momentum <b>'+(p._fresh.m==null?'\u2014':p._fresh.m)+'</b></span><span>Waardering <b>'+p._fresh.v+'</b></span><span>Groei <b>'+p._fresh.g+'</b></span><span>Kwaliteit <b>'+p._fresh.q+'</b></span>'+
-          (p._fresh.upside!=null?'<span title="Modelmatig geschat opwaarts potentieel \u2014 geen voorspelling">Potentieel <b class="'+(p._fresh.upside>=15?"pos":(p._fresh.upside<=-10?"neg":""))+'">'+(p._fresh.upside>0?"+":"")+p._fresh.upside.toFixed(0)+'%</b></span>':'')+
+          (function(){
+            var w=VELD.ingeprijsd.waarde(p._fresh);
+            if(!w)return '';
+            return '<span title="'+VELD.ingeprijsd.uitleg(p._fresh).replace(/"/g,"&quot;")+'">'+
+                   VELD.ingeprijsd.label+' <b class="'+VELD.ingeprijsd.kleur(p._fresh)+'">'+
+                   VELD.ingeprijsd.tekst(p._fresh)+'</b></span>';
+          })()+
           '</div>'
       ) : '')+
       (!p._fresh && !p.isin && !isinFor(p.symbol)
@@ -4273,7 +4348,8 @@ function checkAllPositions(){
         var fresh=holding
           ? {score:totalScore(d),m:momentumScore(d),v:holdingScore(d),g:null,q:null,trapLevel:0,price:d.price,sector:d.sector,isHolding:true,src:d._src||null,completeness:comp}
           : {score:totalScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),trapLevel:t.level,price:d.price,sector:d.sector,isHolding:false,holdingSuggestion:sug,src:d._src||null,completeness:comp,
-             upside:(d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),fairValue:d.fairValue||null};
+             upside:(d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),fairValue:d.fairValue||null,
+             impliedGrowth:d.impliedGrowth||null,epsG5Y:d.epsG5Y||null,expectedReturn:d.expectedReturn||null};
         pos._fresh=fresh;
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
