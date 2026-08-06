@@ -2588,6 +2588,24 @@ function run(){
   }
   var needKey=(typeof universeNeedsKey==="function")?universeNeedsKey():null;
   if(needKey){ st.className="status err"; st.innerHTML='\u26a0\ufe0f '+needKey; return; }
+
+  // Vooraf controleren of de multi-bron keten daadwerkelijk actief is. Zonder deze check
+  // start de screening en falen alle aandelen één voor één, met een misleidende melding
+  // over "tier-beperking" terwijl het probleem een ontbrekende sleutel of uitgeschakelde
+  // automatische bronkeuze is.
+  var multiAan=(typeof multiEnabled==="function")&&multiEnabled();
+  var heeftSleutel=MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.eulerpool;
+  if(!multiAan&&!$('apikey').value.trim()){
+    st.className="status err";
+    st.innerHTML='\u26a0\ufe0f Automatische bronkeuze staat uit en er is geen losse sleutel ingevuld. '+
+      'Zet <b>\u201cAutomatisch de beste bron per aandeel kiezen\u201d</b> aan bij Instellingen.';
+    return;
+  }
+  if(multiAan&&!heeftSleutel){
+    st.className="status err";
+    st.innerHTML='\u26a0\ufe0f Geen enkele sleutel ingesteld. Vul er minstens \u00e9\u00e9n in bij <b>Instellingen</b> en klik daar op <b>Sleutels bewaren</b>.';
+    return;
+  }
   var universe=chosenUniverse();
   var limit=+$('limit').value;
   var src=currentSource();
@@ -2633,13 +2651,24 @@ function run(){
                   .catch(function(err2){
                     var m2=(err2&&err2.msg)||"";
                     if(/limit|exceed|monthly|reached/i.test(m2))state.dayLimit=m2;
-                    else state.skipped.push(sym);
+                    else {
+                      state.skipped.push(sym);
+                      if(!state.redenen)state.redenen={};
+                      var k2=m2?String(m2).slice(0,70):"onbekende fout";
+                      state.redenen[k2]=(state.redenen[k2]||0)+1;
+                    }
                     return acc;
                   });
               });
             }
             if(/limit reached|daily|monthly|exceed|429/i.test(msg))state.dayLimit=msg;
-            else state.skipped.push(sym);
+            else {
+              state.skipped.push(sym);
+              // de échte reden bewaren: "tier-beperking" is vaak niet wat er speelt
+              if(!state.redenen)state.redenen={};
+              var kort=msg?String(msg).slice(0,70):"onbekende fout";
+              state.redenen[kort]=(state.redenen[kort]||0)+1;
+            }
             return acc;
           });
         });
@@ -2692,8 +2721,21 @@ function run(){
         String(state.dayLimit).replace(/</g,"&lt;")+"\"."+tip+" Hieronder zie je wat al binnenkwam.";
     }else if(CURRENT.length===0){
       st.className="status";
-      var ex=skipped.length?" ("+skipped.length+" aandeel(en) overgeslagen wegens tier-beperking)":"";
-      st.textContent="Geen aandelen voldoen aan deze filters"+ex+". Versoepel P/E of marktwaarde.";
+      if(skipped.length){
+        st.className="status err";
+        var redenLijst="";
+        if(state.redenen){
+          redenLijst=Object.keys(state.redenen).sort(function(a,b){return state.redenen[b]-state.redenen[a];})
+            .slice(0,3).map(function(r){return state.redenen[r]+"x \u201c"+r.replace(/</g,"&lt;")+"\u201d";}).join("<br>&nbsp;&nbsp;\u2022 ");
+        }
+        st.innerHTML="\u26a0\ufe0f Geen enkel aandeel kon opgehaald worden ("+skipped.length+" van "+
+          (skipped.length)+" mislukt).<br>Reden"+(Object.keys(state.redenen||{}).length>1?"en":"")+":<br>&nbsp;&nbsp;\u2022 "+
+          (redenLijst||"onbekend")+
+          "<br><span style=\"opacity:.8\">Controleer je sleutels bij Instellingen. Europese universa vereisen een Eulerpool-sleutel.</span>";
+      }else{
+        st.className="status";
+        st.textContent="Geen aandelen voldoen aan deze filters. Versoepel P/E of marktwaarde.";
+      }
     }else{
       st.className="status";
       var fun=useFunnel?" (via vooranalyse-trechter)":"";
