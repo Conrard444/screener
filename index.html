@@ -443,7 +443,7 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 
     <div class="control-panel">
       <div class="control-row">
-        <div class="field"><label>Ticker</label><input type="text" id="pfSymbol" placeholder="AAPL" style="width:95px"></div>
+        <div class="field"><label>Ticker of ISIN</label><input type="text" id="pfSymbol" placeholder="AAPL of NL0010273215" style="width:150px"></div>
         <div class="field"><label>Aantal</label><input type="number" id="pfQty" placeholder="10" style="width:75px"></div>
         <div class="field"><label>Aankoopprijs</label><input type="number" id="pfPrice" placeholder="150.00" step="0.01" style="width:95px"></div>
         <div class="field"><label>Datum</label><input type="date" id="pfDate"></div>
@@ -1157,9 +1157,39 @@ function sectorVoor(d){
          sectorOf(d.symbol)||sectorOf(d.queriedAs)||d.sector||"Overig";
 }
 
+// ---- ISIN opzoeken via Finnhub /search: geeft ticker én bedrijfsnaam ----
+// Getest: /search?q=NL0012866412 -> BESI.AS + "BE Semiconductor Industries NV".
+// Werkt op de gratis tier. Resultaten worden permanent bewaard, dus dit kost één call
+// per nieuw aandeel - daarna nooit meer.
+var ISIN_CACHE={};
+function loadIsinCache(){
+  LS.get('isinCache').then(function(r){
+    if(r&&r.value){ try{ ISIN_CACHE=JSON.parse(r.value)||{}; }catch(e){} }
+  }).catch(function(){});
+}
+function saveIsinCache(){
+  try{ LS.set('isinCache',JSON.stringify(ISIN_CACHE)); }catch(e){}
+}
+function lookupIsin(isin,token){
+  if(!isin||!token)return Promise.resolve(null);
+  if(ISIN_CACHE[isin])return Promise.resolve(ISIN_CACHE[isin]);
+  return getJson(FINNHUB_BASE+"/search?q="+encodeURIComponent(isin)+"&token="+encodeURIComponent(token))
+    .then(function(res){
+      var lijst=(res&&res.result)||[];
+      if(!lijst.length)return null;
+      // voorkeur voor een notering op de thuisbeurs van de ISIN, anders de eerste treffer
+      var beste=lijst[0];
+      var uit={ticker:beste.symbol,naam:beste.description,type:beste.type||null};
+      ISIN_CACHE[isin]=uit; saveIsinCache();
+      return uit;
+    }).catch(function(){return null;});
+}
+
 function naamVoor(d){
   if(!d)return null;
-  return NAAM_BIJ_ISIN[d.isin]||NAAM_BIJ_ISIN[d.queriedAs]||d.name||null;
+  // eerst de opgezochte naam (werkt voor elk aandeel), dan de vaste tabel, dan wat de bron gaf
+  var uitCache=(d.isin&&ISIN_CACHE[d.isin])?ISIN_CACHE[d.isin].naam:null;
+  return uitCache||NAAM_BIJ_ISIN[d.isin]||NAAM_BIJ_ISIN[d.queriedAs]||d.name||null;
 }
 
 function sectorOf(sym){return SECTOR[sym]||"Overig";}
@@ -1388,6 +1418,11 @@ function isinFor(symbol){
     for(var i=0;i<PORTFOLIO.length;i++){
       if(PORTFOLIO[i].symbol===symbol&&PORTFOLIO[i].isin)return PORTFOLIO[i].isin;
     }
+  }
+  // ook omgekeerd zoeken in de opgezochte gegevens: als we ooit ISIN X hebben opgezocht
+  // en die gaf ticker Y, dan kennen we bij ticker Y ook de ISIN
+  for(var k in ISIN_CACHE){
+    if(ISIN_CACHE[k]&&ISIN_CACHE[k].ticker===symbol)return k;
   }
   return ISIN_MAP[symbol]||ISIN_US[symbol]||null;
 }
@@ -2418,8 +2453,20 @@ function enrichFinnhub(symbol,key){
     getJson(FINNHUB_BASE+"/stock/metric?symbol="+encodeURIComponent(fsym)+"&metric=all&token="+key)
   ]).then(function(res){
     var q=res[0]||{}, mWrap=res[1]||{}, m=(mWrap&&mWrap.metric)||{};
+    // /stock/metric levert óók een historische reeks mee die we tot nu toe weggooiden.
+    // Daaruit halen we een genormaliseerde P/E: waardering op de gemiddelde winst over
+    // meerdere jaren in plaats van één, wat cyclische uitschieters dempt.
+    var reeks=(mWrap&&mWrap.series&&mWrap.series.annual)||{};
+    var epsGem=null, peNorm=null;
+    if(reeks.eps&&reeks.eps.length>=3){
+      var w=reeks.eps.slice(0,5).map(function(p){return p&&p.v;}).filter(function(v){return v!=null&&!isNaN(v);});
+      if(w.length>=3){
+        epsGem=w.reduce(function(a,b){return a+b;},0)/w.length;
+      }
+    }
     // Finnhub quote: c=current, dp=dagverandering%. 52w high/low voor momentum-benadering.
     var price=(q.c!=null&&q.c!==0)?+(+q.c).toFixed(2):null;
+    if(price!=null&&epsGem!=null&&epsGem>0)peNorm=+(price/epsGem).toFixed(1);
     var chg=q.dp!=null?+(+q.dp).toFixed(2):null;
     var hi=m["52WeekHigh"],lo=m["52WeekLow"];
     // momentum: positie in de 52-weeks range, omgezet naar een -/+ schaal rond het midden
@@ -2443,6 +2490,7 @@ function enrichFinnhub(symbol,key){
       _mcap:mcap,
       price:price,chg:chg,mom1m:mom,
       pe:pe!=null?+(+pe).toFixed(1):null,
+      peNorm:peNorm, epsGem:epsGem!=null?+epsGem.toFixed(2):null,  // uit de meegeleverde jaarreeks
       peg:peg,
       pb:pb!=null?+(+pb).toFixed(1):null,
       revG:revG!=null?+(+revG).toFixed(1):null,  // Finnhub geeft groei al in procent
@@ -3409,6 +3457,27 @@ function enrichEulerpool(symbol,token){
     }
     return d;
   }).then(function(d){
+    // naam en ticker opzoeken als we die nog niet kennen (één call per nieuw aandeel,
+    // daarna permanent bewaard). Werkt voor elk aandeel, ook buiten mijn vaste tabellen.
+    if(d && d.isin && !ISIN_CACHE[d.isin] && MULTI_KEYS.finnhub &&
+       (!d.name || ISIN_RE.test(d.symbol))){
+      return lookupIsin(d.isin,MULTI_KEYS.finnhub).then(function(info){
+        if(info){
+          if(!d.name)d.name=info.naam;
+          if(ISIN_RE.test(d.symbol))d.symbol=info.ticker||d.symbol;
+          d.ticker=info.ticker||d.ticker;
+        }
+        return d;
+      }).catch(function(){return d;});
+    }
+    // al bekend uit de cache: meteen toepassen, kost geen call
+    if(d && d.isin && ISIN_CACHE[d.isin]){
+      var c=ISIN_CACHE[d.isin];
+      if(!d.name)d.name=c.naam;
+      if(ISIN_RE.test(d.symbol))d.symbol=c.ticker||d.symbol;
+    }
+    return d;
+  }).then(function(d){
     // terugval voor momentum: uit je eigen tracking (kost geen call)
     if(d && d.price!=null && d.mom1m==null && typeof momentumFromHistory==="function"){
       var h=momentumFromHistory(d.symbol,d.price)||momentumFromHistory(d.queriedAs,d.price);
@@ -3640,15 +3709,49 @@ function savePortfolioCloud(){
 }
 
 $('pfAdd').onclick=function(){
-  var sym=$('pfSymbol').value.trim().toUpperCase();
+  var invoer=$('pfSymbol').value.trim().toUpperCase();
   var qty=+$('pfQty').value, price=+$('pfPrice').value, date=$('pfDate').value;
-  if(!sym){pfStat("Vul een ticker in.",true);return;}
+  if(!invoer){pfStat("Vul een ticker of ISIN in.",true);return;}
   if(!qty||qty<=0){pfStat("Vul een geldig aantal in.",true);return;}
-  PORTFOLIO.push({id:Date.now()+"_"+sym,symbol:sym,qty:qty,buyPrice:price||null,buyDate:date||null,baseline:null});
-  $('pfSymbol').value="";$('pfQty').value="";$('pfPrice').value="";$('pfDate').value="";
-  savePortfolioLocal();savePortfolioCloud();
-  pfStat("Toegevoegd: "+sym+". Klik 'Alle posities checken' om de actuele score op te halen.");
-  renderPortfolio();
+
+  function voegToe(sym,isin,naam){
+    if(PORTFOLIO.some(function(p){return p.symbol===sym||(isin&&p.isin===isin);})){
+      pfStat(sym+" staat al in je portefeuille.",true);
+      return;
+    }
+    PORTFOLIO.push({id:Date.now()+"_"+sym,symbol:sym,isin:isin||null,qty:qty,
+      buyPrice:price||null,buyDate:date||null,baseline:null});
+    $('pfSymbol').value="";$('pfQty').value="";$('pfPrice').value="";$('pfDate').value="";
+    savePortfolioLocal();savePortfolioCloud();
+    pfStat("Toegevoegd: "+(naam?naam+" ("+sym+")":sym)+
+           (isin?" \u00b7 ISIN "+isin:"")+". Klik 'Alles checken' voor de actuele cijfers.");
+    renderPortfolio();
+  }
+
+  // ISIN ingevoerd? Dan de bijbehorende ticker en naam opzoeken.
+  if(ISIN_RE.test(invoer)){
+    if(ISIN_CACHE[invoer]){
+      var c=ISIN_CACHE[invoer];
+      voegToe(c.ticker||invoer,invoer,c.naam);
+      return;
+    }
+    if(!MULTI_KEYS.finnhub){
+      // zonder Finnhub-sleutel kunnen we niet opzoeken, maar de ISIN zelf volstaat
+      // voor Eulerpool - dus toevoegen kan gewoon
+      voegToe(invoer,invoer,NAAM_BIJ_ISIN[invoer]||null);
+      return;
+    }
+    pfStat("ISIN opzoeken\u2026");
+    lookupIsin(invoer,MULTI_KEYS.finnhub).then(function(info){
+      if(info&&info.ticker) voegToe(info.ticker,invoer,info.naam);
+      else voegToe(invoer,invoer,NAAM_BIJ_ISIN[invoer]||null);
+    }).catch(function(){
+      voegToe(invoer,invoer,NAAM_BIJ_ISIN[invoer]||null);
+    });
+    return;
+  }
+  // gewone ticker: ISIN erbij zoeken uit wat we al weten
+  voegToe(invoer, isinFor(invoer), (typeof NAAM_BIJ_ISIN!=="undefined"?NAAM_BIJ_ISIN[isinFor(invoer)]:null));
 };
 
 function removePosition(id){
@@ -4946,6 +5049,7 @@ function saveKeysCloud(){
 CURRENT=[];DEMO_ACTIVE=false;
 if(typeof loadCallLog==="function")loadCallLog();
 if(typeof loadAliases==="function")loadAliases();
+if(typeof loadIsinCache==="function")loadIsinCache();
 setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate();},300);
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
 
