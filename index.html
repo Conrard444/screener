@@ -22,6 +22,7 @@
 var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
+var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 
   // Firebase-config (mag openbaar zijn; beveiliging zit in de Firestore-regels)
   var FIREBASE_CONFIG = {
@@ -318,7 +319,7 @@ var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig me
           <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
           <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
-          <th data-k="upside" title="Geschat opwaarts potentieel. VS-aandelen: DCF-model (SecuritiesDB). Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Potentieel<span class="q">?</span></th>
+          <th data-k="upside" title="Wat de markt aan winstgroei inprijst (impl.), afgezet tegen wat het bedrijf werkelijk realiseert. Groen = het bedrijf haalt die groei; rood = de markt verwacht meer dan er tot nu toe gerealiseerd werd. Bij Europese aandelen staat hier het verwachte rendement van Eulerpool. LET OP: dit komt uit een DCF-model. Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Ingeprijsd<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
           <th data-k="score" title="Gecombineerde score 0-100, samengesteld uit momentum, waardering en groei volgens de weegregelaars hierboven. Hoger = stijgt én relatief goedkoop én groeiend. Een startpunt voor onderzoek, geen koopsignaal.">Score<span class="q">?</span></th>
         </tr>
@@ -1061,6 +1062,106 @@ var BROKER_MARKETS={
   }
 };
 
+// Bedrijfsnamen bij ISIN. Het metrics-endpoint geeft alleen een ticker, geen naam, dus
+// zonder deze tabel zie je "NL0012866412" of "BESI.AS" in plaats van iets herkenbaars.
+var NAAM_BIJ_ISIN={
+  // Nederland
+  "NL0010273215":"ASML","NL0012866412":"BE Semiconductor","NL0011821202":"ING Groep",
+  "NL0012969182":"Adyen","NL0000009538":"Philips","NL0000009165":"Heineken",
+  "NL0000395903":"Wolters Kluwer","NL0013654783":"Prosus","NL0010773842":"NN Group",
+  "NL0000289533":"HAL Trust","NL0000235190":"Airbus","NL0012059018":"Exor",
+  // België
+  "BE0003717312":"Sofina","BE0974293251":"AB InBev","BE0003565737":"KBC",
+  "BE0003739530":"UCB","BE0003764785":"Ackermans & van Haaren","BE0003604155":"Lotus Bakeries",
+  "BE0003797140":"Groupe Bruxelles Lambert",
+  // Frankrijk
+  "FR0000121014":"LVMH","FR0000120321":"L'Oréal","FR0000120578":"Sanofi",
+  "FR0000131104":"BNP Paribas","FR0000120271":"TotalEnergies","FR0000121972":"Schneider Electric",
+  "FR0000120073":"Air Liquide","FR0000052292":"Hermès","FR0000121667":"EssilorLuxottica",
+  "FR0000120628":"AXA","FR0000125486":"Vinci","FR0000120644":"Danone",
+  "FR0000121485":"Kering","FR0000121204":"Wendel","FR0011871128":"Tikehau Capital",
+  // Duitsland
+  "DE0007164600":"SAP","DE0007236101":"Siemens","DE0008404005":"Allianz",
+  "DE000BASF111":"BASF","DE000BAY0017":"Bayer","DE0005190003":"BMW",
+  "DE0007664039":"Volkswagen","DE0007100000":"Mercedes-Benz","DE000A1EWWW0":"Adidas",
+  "DE0008430026":"Munich Re","DE0006231004":"Infineon","DE0005557508":"Deutsche Telekom",
+  "DE0007037129":"RWE","DE0005552004":"DHL Group",
+  // Zwitserland
+  "CH0038863350":"Nestlé","CH0012005267":"Novartis","CH0012032048":"Roche",
+  "CH0244767585":"UBS","CH0011075394":"Zurich Insurance","CH0012221716":"ABB",
+  // Scandinavië
+  "DK0062498333":"Novo Nordisk","DK0010244508":"A.P. Møller-Mærsk","DK0060079531":"DSV",
+  "DK0010181759":"Carlsberg","DK0060448595":"Coloplast","DK0061539921":"Vestas",
+  "DK0060094928":"Ørsted","DK0060336014":"Novonesis","DK0060252690":"Genmab",
+  "SE0000115446":"Volvo","SE0000108656":"Ericsson","SE0017486889":"Atlas Copco",
+  "SE0015811963":"Investor AB","SE0000148884":"SEB","SE0000242455":"Swedbank",
+  "SE0000106270":"H&M","SE0000667891":"Sandvik","SE0009922164":"Essity",
+  "SE0012673267":"Evolution","SE0000163594":"Industrivärden","SE0000108847":"Lundbergs",
+  "NO0010096985":"Equinor","NO0010161896":"DNB Bank","NO0010063308":"Telenor",
+  "NO0005052605":"Norsk Hydro","NO0003054108":"Mowi",
+  "FI0009000681":"Nokia","FI0009013403":"Kone","FI4000552500":"Sampo",
+  "FI0009007132":"Fortum","FI0009013296":"Neste","FI0009005987":"UPM-Kymmene",
+  // Azië
+  "KYG875721634":"Tencent","KYG017191142":"Alibaba (HK)","KYG8208B1014":"Meituan",
+  "KYG596691041":"Xiaomi","KYG8586D1097":"JD.com (HK)","CNE1000003X6":"Ping An",
+  "CNE1000002H1":"China Construction Bank","CNE1000003G1":"ICBC","CNE1000001Z5":"Bank of China",
+  "HK0005000090":"HSBC","HK0388045442":"HKEX","KYG2103F1019":"BYD",
+  "CNE100000296":"CNOOC","CNE1000002Q2":"PetroChina","CNE1000003W8":"China Mobile",
+  "HK0016000132":"Sun Hung Kai","KYG3777B1032":"Geely","KYG210961051":"Country Garden Services",
+  "KYG9431P1037":"WuXi Biologics","KYG970081173":"Li Auto"
+};
+// Sector bij ISIN. sectorOf() werkt op tickers; bij een ISIN-universum is die er niet,
+// waardoor alles "Overig" werd - en dan is de sector-relatieve waardering betekenisloos.
+var SECTOR_BIJ_ISIN={
+  "NL0010273215":"Technologie","NL0012866412":"Technologie","NL0011821202":"Financieel",
+  "NL0012969182":"Technologie","NL0000009538":"Gezondheidszorg","NL0000009165":"Consument",
+  "NL0000395903":"Technologie","NL0013654783":"Holding","NL0010773842":"Financieel",
+  "NL0000289533":"Holding","NL0000235190":"Industrie","NL0012059018":"Holding",
+  "BE0003717312":"Holding","BE0974293251":"Consument","BE0003565737":"Financieel",
+  "BE0003739530":"Gezondheidszorg","BE0003764785":"Holding","BE0003604155":"Consument",
+  "BE0003797140":"Holding",
+  "FR0000121014":"Consument","FR0000120321":"Consument","FR0000120578":"Gezondheidszorg",
+  "FR0000131104":"Financieel","FR0000120271":"Energie","FR0000121972":"Industrie",
+  "FR0000120073":"Materialen","FR0000052292":"Consument","FR0000121667":"Gezondheidszorg",
+  "FR0000120628":"Financieel","FR0000125486":"Industrie","FR0000120644":"Consument",
+  "FR0000121485":"Consument","FR0000121204":"Holding","FR0011871128":"Financieel",
+  "DE0007164600":"Technologie","DE0007236101":"Industrie","DE0008404005":"Financieel",
+  "DE000BASF111":"Materialen","DE000BAY0017":"Gezondheidszorg","DE0005190003":"Consument",
+  "DE0007664039":"Consument","DE0007100000":"Consument","DE000A1EWWW0":"Consument",
+  "DE0008430026":"Financieel","DE0006231004":"Technologie","DE0005557508":"Communicatie",
+  "DE0007037129":"Nutsbedrijf","DE0005552004":"Industrie",
+  "CH0038863350":"Consument","CH0012005267":"Gezondheidszorg","CH0012032048":"Gezondheidszorg",
+  "CH0244767585":"Financieel","CH0011075394":"Financieel","CH0012221716":"Industrie",
+  "DK0062498333":"Gezondheidszorg","DK0010244508":"Industrie","DK0060079531":"Industrie",
+  "DK0010181759":"Consument","DK0060448595":"Gezondheidszorg","DK0061539921":"Industrie",
+  "DK0060094928":"Nutsbedrijf","DK0060336014":"Materialen","DK0060252690":"Gezondheidszorg",
+  "SE0000115446":"Industrie","SE0000108656":"Technologie","SE0017486889":"Industrie",
+  "SE0015811963":"Holding","SE0000148884":"Financieel","SE0000242455":"Financieel",
+  "SE0000106270":"Consument","SE0000667891":"Industrie","SE0009922164":"Consument",
+  "SE0012673267":"Consument","SE0000163594":"Holding","SE0000108847":"Holding",
+  "NO0010096985":"Energie","NO0010161896":"Financieel","NO0010063308":"Communicatie",
+  "NO0005052605":"Materialen","NO0003054108":"Consument",
+  "FI0009000681":"Technologie","FI0009013403":"Industrie","FI4000552500":"Financieel",
+  "FI0009007132":"Nutsbedrijf","FI0009013296":"Energie","FI0009005987":"Materialen",
+  "KYG875721634":"Communicatie","KYG017191142":"Consument","KYG8208B1014":"Consument",
+  "KYG596691041":"Technologie","KYG8586D1097":"Consument","CNE1000003X6":"Financieel",
+  "CNE1000002H1":"Financieel","CNE1000003G1":"Financieel","CNE1000001Z5":"Financieel",
+  "HK0005000090":"Financieel","HK0388045442":"Financieel","KYG2103F1019":"Consument",
+  "CNE100000296":"Energie","CNE1000002Q2":"Energie","CNE1000003W8":"Communicatie",
+  "HK0016000132":"Holding","KYG3777B1032":"Consument","KYG210961051":"Vastgoed",
+  "KYG9431P1037":"Gezondheidszorg","KYG970081173":"Consument"
+};
+function sectorVoor(d){
+  if(!d)return "Overig";
+  return SECTOR_BIJ_ISIN[d.isin]||SECTOR_BIJ_ISIN[d.queriedAs]||
+         sectorOf(d.symbol)||sectorOf(d.queriedAs)||d.sector||"Overig";
+}
+
+function naamVoor(d){
+  if(!d)return null;
+  return NAAM_BIJ_ISIN[d.isin]||NAAM_BIJ_ISIN[d.queriedAs]||d.name||null;
+}
+
 function sectorOf(sym){return SECTOR[sym]||"Overig";}
 
 var UNIVERSE_HOLDINGS=[
@@ -1496,14 +1597,24 @@ function render(){
     var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
     var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
     return '<tr>'+
-      '<td class="l"><span class="tk">'+d.symbol+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
+      (function(){
+        var naam=(typeof naamVoor==="function")?naamVoor(d):d.name;
+        var toon=naam||d.symbol;
+        // subregel: de ticker, maar niet als die gelijk is aan de naam of een ISIN is
+        // (de ISIN staat al in een eigen kolom, dus dubbel tonen voegt niets toe)
+        var sub="";
+        if(naam&&d.symbol&&d.symbol!==naam&&!ISIN_RE.test(d.symbol))sub=d.symbol;
+        else if(naam&&d.ticker&&d.ticker!==naam)sub=d.ticker;
+        return '<td class="l"><span class="tk">'+toon+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
+               (sub?'<span style="display:block;font-size:9.5px;color:var(--muted);font-family:\'IBM Plex Mono\'">'+sub+'</span>':'');
+      })()+
       (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
       linkMenu(d)+
       brokerBadge(d)+
       overlapBadge(d)+
       (isHolding(d)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
-      '<span class="nm">'+(d.name||"")+'</span></td>'+
+      '</td>'+
       (function(){
         var code=isinOf(d);
         return '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
@@ -1546,6 +1657,22 @@ function render(){
          d.piotroski!=null?'<span style="display:block;font-size:9px;color:var(--muted)">F'+d.piotroski+(d.altmanZ!=null?' Z'+d.altmanZ:'')+'</span>':'')+
         '</td>'+
       (function(){
+        // Toon liever de impliciete groeiverwachting dan de kale DCF-uitkomst. Reden: een
+        // standaard-DCF rekent met ~3% eeuwige groei, waardoor vrijwel elk kwaliteitsbedrijf
+        // 40-90% "overgewaardeerd" lijkt. Dat onderscheidt niets. De impliciete groei zegt
+        // wél iets: het is de groei die de markt inprijst, en die kun je afzetten tegen
+        // wat het bedrijf werkelijk realiseert.
+        if(d.impliedGrowth!=null){
+          var werkelijk = (d.epsG5Y!=null?d.epsG5Y:(d.epsG!=null?d.epsG:null));
+          var haalbaar = (werkelijk!=null) ? (werkelijk>=d.impliedGrowth) : null;
+          var kleur = haalbaar===true ? "pos" : (haalbaar===false ? "neg" : "");
+          var tip = "De markt prijst "+d.impliedGrowth+"% winstgroei per jaar in"+
+                    (werkelijk!=null?"; het bedrijf realiseerde de afgelopen jaren "+werkelijk+"%":"")+
+                    (d.fairValue!=null?" \u00b7 DCF-waarde "+d.fairValue+" bij koers "+(d.price!=null?d.price:"?"):"")+
+                    " \u00b7 modeluitkomst, sterk afhankelijk van aannames";
+          return '<td class="num '+kleur+'" title="'+tip+'" style="cursor:help">'+
+                 d.impliedGrowth.toFixed(0)+'%<span style="font-size:9px;opacity:.6"> impl.</span></td>';
+        }
         var up = d.upside!=null ? d.upside : (d.expectedReturn!=null ? d.expectedReturn : null);
         if(up==null) return '<td class="num">\u2014</td>';
         var cls = up>=15 ? "pos" : (up<=-10 ? "neg" : "");
@@ -2078,7 +2205,6 @@ var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
 // ISIN-formaat: 2 letters (land) + 9 tekens + 1 controlecijfer, bv. NL0010273215
 // Werkt, mits de geneste responsstructuur correct gelezen wordt (valuation.pe, perShare.eps, etc).
 // Geeft in één call waardering, winstgevendheid, groei, per-aandeel-gegevens en 12 jaar historie.
-var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
 var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
 
@@ -2163,8 +2289,11 @@ function enrichCombinedUS(symbol){
 }
 
 function enrichMulti(symbol){
-  // VS-aandelen: probeer eerst de rijkere SecuritiesDB-combinatie
-  if(!/\./.test(symbol)){
+  // VS-aandelen: probeer eerst de rijkere SecuritiesDB-combinatie.
+  // LET OP: een ISIN heeft géén punt, dus zonder de ISIN-check belandt elk Europees
+  // aandeel uit een ISIN-universum hier — met een Amerikaans marktlabel, zonder koers
+  // en zonder sector tot gevolg.
+  if(!/\./.test(symbol) && !ISIN_RE.test(symbol)){
     return enrichCombinedUS(symbol).catch(function(){
       return enrichMultiFallback(symbol); // geen SDB-dekking -> normale keten
     });
@@ -3071,6 +3200,7 @@ function enrichEulerMetrics(isin,token){
       return {
         isin: m.isin||isin,
         ticker: m.ticker||null,
+        name: NAAM_BIJ_ISIN[m.isin||isin]||m.ticker||null,
         currency: m.currency||null,
         price: koers, priceDerived: true,
         _mcap: mcap, shares: shares,
@@ -3225,7 +3355,7 @@ function enrichEulerpool(symbol,token){
         d.symbol = ISIN_RE.test(symbol) ? (d.ticker||symbol) : symbol;
         d.queriedAs=symbol;
         d.market="EU";
-        d.sector=sectorOf(d.symbol)||sectorOf(symbol)||"Overig";
+        d.sector=sectorVoor({isin:d.isin,queriedAs:symbol,symbol:d.symbol})||"Overig";
         if(d._mcap!=null&&d.shares!=null&&d.shares>0){
           d.price=+(d._mcap/d.shares).toFixed(2);
           d.priceDerived=true;
@@ -3733,7 +3863,11 @@ function renderPortfolio(){
     var pl = plOf(p);
     var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
-      '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+linkMenu(p._fresh?Object.assign({symbol:p.symbol,isin:p.isin},p._fresh.etf||{}):{symbol:p.symbol,isin:p.isin})+
+      '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
+      (function(){
+        var n=(typeof NAAM_BIJ_ISIN!=="undefined")?(NAAM_BIJ_ISIN[p.isin]||null):null;
+        return (n&&n!==p.symbol)?'<span style="color:var(--muted);font-size:12px;margin-left:8px">'+n+'</span>':'';
+      })()+linkMenu(p._fresh?Object.assign({symbol:p.symbol,isin:p.isin},p._fresh.etf||{}):{symbol:p.symbol,isin:p.isin})+
       (p._fresh
         ? (p._fresh.completeness && p._fresh.completeness.level==="price-only"
             ? '<span style="color:var(--muted);font-size:12px" title="Alleen koersdata beschikbaar via deze bron \u2014 geen betrouwbare score mogelijk">score n.v.t.</span>'
