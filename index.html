@@ -4130,7 +4130,12 @@ function updateSourceBar(){
 function renderPortfolio(){
   updateSourceBar();
   var el=$('pfList');
-  if(!PORTFOLIO.length){el.innerHTML='<div class="empty">Nog geen posities toegevoegd.</div>';$('pfDashboard').innerHTML="";renderOverlap();return;}
+  if(!PORTFOLIO.length){
+    el.innerHTML='<div class="empty">Nog geen posities toegevoegd.</div>';
+    $('pfDashboard').innerHTML="";
+    var sw=document.getElementById('spreidingWrap'); if(sw)sw.innerHTML="";
+    renderOverlap(); return;
+  }
 
   // ---- dashboard: totalen over de hele portefeuille ----
   var checked=PORTFOLIO.filter(function(p){return p._fresh;});
@@ -4201,7 +4206,6 @@ function renderPortfolio(){
   if(weergave==="tabel"){
     el.innerHTML=renderPortfolioTabel(list);
     renderOverlap();
-    if(typeof renderSpreiding==="function")renderSpreiding();
     return;
   }
   el.innerHTML=list.map(function(p){
@@ -4469,34 +4473,62 @@ function leesXlsx(buffer){
 // Zet een ingelezen Bolero-export om in posities.
 // Structuur: kopregel met "ISIN", data eronder; cash- en voettekstregels overslaan.
 function parseBolero(rijen){
-  var kopIndex=-1, kol={};
+  // Bolero's export gebruikt samengevoegde cellen: de kopregel staat één kolom naar links
+  // ten opzichte van de data eronder. We zoeken daarom niet op kolomnummer, maar bepalen
+  // per datarij welke waarde waar staat aan de hand van herkenbare patronen.
+  var kopIndex=-1, kopKol={};
   for(var i=0;i<rijen.length&&i<30;i++){
-    var waarden=Object.keys(rijen[i]).map(function(k){return String(rijen[i][k]).trim();});
-    if(waarden.indexOf("ISIN")>-1&&waarden.indexOf("Naam")>-1){
+    var w=Object.keys(rijen[i]).map(function(k){return String(rijen[i][k]).trim();});
+    if(w.indexOf("ISIN")>-1&&w.indexOf("Naam")>-1){
       kopIndex=i;
-      Object.keys(rijen[i]).forEach(function(k){ kol[String(rijen[i][k]).trim()]=+k; });
+      Object.keys(rijen[i]).forEach(function(k){
+        var naam=String(rijen[i][k]).trim();
+        if(naam)kopKol[naam]=+k;
+      });
       break;
     }
   }
   if(kopIndex<0)return {fout:"Dit lijkt geen Bolero-export: kolommen 'ISIN' en 'Naam' niet gevonden."};
 
-  var posities=[], overgeslagen=0;
-  for(var r=kopIndex+1;r<rijen.length;r++){
+  // Bepaal de verschuiving tussen kop en data door de ISIN-kolom te ijken op een datarij:
+  // een ISIN is eenduidig herkenbaar (2 letters + 9 tekens + controlecijfer).
+  var isinRe=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
+  var verschuiving=0, geijkt=false;
+  for(var r=kopIndex+1;r<rijen.length&&!geijkt;r++){
     var rij=rijen[r];
-    var isin=rij[kol["ISIN"]]?String(rij[kol["ISIN"]]).trim():null;
-    var naam=rij[kol["Naam"]]?String(rij[kol["Naam"]]).trim():null;
-    var aantal=rij[kol["Aantal"]]!=null?parseFloat(rij[kol["Aantal"]]):null;
-    // alleen regels met een geldige ISIN én een aantal zijn echte posities;
-    // dat filtert de cash-regel en de voetteksten er vanzelf uit
-    if(!isin||!/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(isin)||!aantal||aantal<=0){ overgeslagen++; continue; }
-    var aankoop=rij[kol["Gem. aankoopkoers"]]!=null?parseFloat(rij[kol["Gem. aankoopkoers"]]):null;
+    for(var k in rij){
+      if(isinRe.test(String(rij[k]).trim())){
+        verschuiving=(+k)-(kopKol["ISIN"]!=null?kopKol["ISIN"]:+k);
+        geijkt=true; break;
+      }
+    }
+  }
+  function haal(rij,kopnaam){
+    var k=kopKol[kopnaam];
+    if(k==null)return null;
+    var v=rij[k+verschuiving];
+    if(v==null)v=rij[k];             // terugval als de verschuiving niet klopt
+    return (v==null||String(v).trim()==="")?null:String(v).trim();
+  }
+
+  var posities=[], overgeslagen=0;
+  for(var r2=kopIndex+1;r2<rijen.length;r2++){
+    var rij2=rijen[r2];
+    var isin=haal(rij2,"ISIN");
+    // alleen regels met een geldige ISIN zijn echte posities; dat filtert de cash-regel
+    // en de voetteksten er vanzelf uit
+    if(!isin||!isinRe.test(isin)){overgeslagen++;continue;}
+    var aantal=parseFloat(haal(rij2,"Aantal")||haal(rij2,"Aantal ")||"");
+    if(!aantal||isNaN(aantal)||aantal<=0){overgeslagen++;continue;}
+    var aankoop=parseFloat(haal(rij2,"Gem. aankoopkoers")||"");
     posities.push({
-      isin:isin, naam:naam,
+      isin:isin,
+      naam:haal(rij2,"Naam"),
       qty:aantal,
       buyPrice:(aankoop&&!isNaN(aankoop))?+aankoop.toFixed(4):null,
-      type:rij[kol["Type"]]?String(rij[kol["Type"]]).trim():null,
-      munt:rij[kol["Munt"]]?String(rij[kol["Munt"]]).trim():null,
-      markt:rij[kol["Markt"]]?String(rij[kol["Markt"]]).trim():null
+      type:haal(rij2,"Type"),
+      munt:haal(rij2,"Munt"),
+      markt:haal(rij2,"Markt")
     });
   }
   return {posities:posities, overgeslagen:overgeslagen};
@@ -4638,6 +4670,10 @@ function renderSpreiding(){
 }
 
 function renderOverlap(){
+  // spreidingsanalyse hier meenemen: renderPortfolio heeft meerdere vroege returns
+  // (lege portefeuille, leeg filter, tabelweergave) en anders blijft de analyse van
+  // de vórige portefeuille staan bij het wisselen.
+  if(typeof renderSpreiding==="function")renderSpreiding();
   var wrap=$('overlapWrap'); if(!wrap)return;
   var html="";
 
