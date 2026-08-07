@@ -455,6 +455,8 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
         <button class="btn-go" id="pfAdd">+ Toevoegen</button>
         <button class="btn-ghost" id="pfCheck" style="margin-left:auto">Alles checken</button>
         <button class="btn-ghost" id="pfImportBtn">Saxo CSV</button>
+        <button class="btn-ghost" id="pfBoleroBtn">Bolero XLSX</button>
+        <input type="file" id="pfBoleroFile" accept=".xlsx" style="display:none">
         <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">Overlap meten</button>
         <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
       </div>
@@ -479,8 +481,8 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
       </select>
       <span class="inline-lbl" style="margin-left:8px">Weergave</span>
       <select id="pfWeergave">
+        <option value="tabel" selected>Tabel (zoals screener)</option>
         <option value="kaart">Kaarten</option>
-        <option value="tabel">Tabel (zoals screener)</option>
       </select>
       <span class="inline-lbl" style="margin-left:8px">Filter</span>
       <select id="pfFilter">
@@ -3844,7 +3846,7 @@ function pfVerwijder(id){
   pfStat("Portefeuille \u201c"+naam+"\u201d verwijderd.");
 }
 function pfHernoem(id,naam){
-  if(!PORTFOLIOS[id]||!naam)return;
+  if(!PORTFOLIOS[id]||!naam)return;   // ook de eigen portefeuille mag hernoemd worden
   PORTFOLIOS[id].naam=naam.slice(0,40);
   savePortfoliosLocal(); savePortfoliosCloud();
   renderPfKiezer();
@@ -3889,9 +3891,10 @@ function renderPfKiezer(){
       p.naam.replace(/</g,"&lt;")+' <span style="opacity:.7">('+n+')</span></button>';
   }).join("")+
   '<button class="btn-ghost" onclick="pfNieuwPrompt()" title="Nieuwe portefeuille aanmaken" '+
-  'style="font-size:11.5px;padding:0 10px;height:30px">+</button>'+
+  'style="font-size:11.5px;padding:0 10px;height:30px">+ nieuw</button>'+
+  '<button class="btn-ghost" onclick="pfHernoemPrompt()" title="Naam van de actieve portefeuille wijzigen" '+
+  'style="font-size:11px;padding:0 10px;height:30px">hernoem</button>'+
   (ACTIEVE_PF!=="eigen"?
-    '<button class="btn-ghost" onclick="pfHernoemPrompt()" style="font-size:11px;padding:0 10px;height:30px">hernoem</button>'+
     '<button class="btn-ghost" onclick="pfVerwijderPrompt()" style="font-size:11px;padding:0 10px;height:30px;color:var(--red)">verwijder</button>':'');
 }
 function pfNieuwPrompt(){
@@ -4397,6 +4400,108 @@ function analyseOverlap(){
   return findings;
 }
 
+// ---- Bolero-import (.xlsx) ----
+// Een xlsx is een zip met XML erin. In plaats van een externe bibliotheek (die de tool
+// afhankelijk zou maken van een CDN) pakken we het bestand zelf uit met DecompressionStream,
+// dat in alle moderne browsers zit.
+function leesXlsx(buffer){
+  var dv=new DataView(buffer), bytes=new Uint8Array(buffer);
+  // centrale directory zoeken vanaf het einde
+  var eocd=-1;
+  for(var i=bytes.length-22;i>=0&&i>bytes.length-66000;i--){
+    if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+  }
+  if(eocd<0)return Promise.reject({msg:"geen geldig xlsx-bestand"});
+  var aantal=dv.getUint16(eocd+10,true), start=dv.getUint32(eocd+16,true);
+  var bestanden={}, p=start;
+  for(var n=0;n<aantal;n++){
+    if(dv.getUint32(p,true)!==0x02014b50)break;
+    var methode=dv.getUint16(p+10,true);
+    var compLen=dv.getUint32(p+20,true);
+    var naamLen=dv.getUint16(p+28,true);
+    var extraLen=dv.getUint16(p+30,true);
+    var commLen=dv.getUint16(p+32,true);
+    var lokaalOffset=dv.getUint32(p+42,true);
+    var naam=new TextDecoder().decode(bytes.subarray(p+46,p+46+naamLen));
+    bestanden[naam]={methode:methode,compLen:compLen,offset:lokaalOffset};
+    p+=46+naamLen+extraLen+commLen;
+  }
+  function pakUit(info){
+    var lo=info.offset;
+    if(dv.getUint32(lo,true)!==0x04034b50)return Promise.reject({msg:"beschadigd archief"});
+    var nl=dv.getUint16(lo+26,true), el=dv.getUint16(lo+28,true);
+    var data=bytes.subarray(lo+30+nl+el, lo+30+nl+el+info.compLen);
+    if(info.methode===0)return Promise.resolve(new TextDecoder().decode(data));
+    var ds=new DecompressionStream("deflate-raw");
+    return new Response(new Blob([data]).stream().pipeThrough(ds)).text();
+  }
+  var nodig=["xl/sharedStrings.xml","xl/worksheets/sheet1.xml"];
+  return Promise.all(nodig.map(function(n){
+    return bestanden[n]?pakUit(bestanden[n]):Promise.resolve("");
+  })).then(function(res){
+    // gedeelde teksten inlezen
+    var strings=[];
+    (res[0].match(/<si>[\s\S]*?<\/si>/g)||[]).forEach(function(si){
+      var t=(si.match(/<t[^>]*>([\s\S]*?)<\/t>/g)||[])
+        .map(function(x){return x.replace(/<[^>]+>/g,"");}).join("");
+      strings.push(t.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"'));
+    });
+    // cellen inlezen
+    var rijen=[];
+    (res[1].match(/<row[^>]*>[\s\S]*?<\/row>/g)||[]).forEach(function(rowXml){
+      var rij={};
+      (rowXml.match(/<c[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)||[]).forEach(function(c){
+        var ref=(c.match(/r="([A-Z]+)\d+"/)||[])[1];
+        if(!ref)return;
+        var kol=0; for(var k=0;k<ref.length;k++)kol=kol*26+(ref.charCodeAt(k)-64);
+        var isStr=/t="s"/.test(c);
+        var v=(c.match(/<v>([\s\S]*?)<\/v>/)||[])[1];
+        var inline=(c.match(/<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/)||[])[1];
+        var waarde= inline!=null ? inline : (v==null?null:(isStr?strings[+v]:v));
+        if(waarde!=null)rij[kol-1]=waarde;
+      });
+      rijen.push(rij);
+    });
+    return rijen;
+  });
+}
+
+// Zet een ingelezen Bolero-export om in posities.
+// Structuur: kopregel met "ISIN", data eronder; cash- en voettekstregels overslaan.
+function parseBolero(rijen){
+  var kopIndex=-1, kol={};
+  for(var i=0;i<rijen.length&&i<30;i++){
+    var waarden=Object.keys(rijen[i]).map(function(k){return String(rijen[i][k]).trim();});
+    if(waarden.indexOf("ISIN")>-1&&waarden.indexOf("Naam")>-1){
+      kopIndex=i;
+      Object.keys(rijen[i]).forEach(function(k){ kol[String(rijen[i][k]).trim()]=+k; });
+      break;
+    }
+  }
+  if(kopIndex<0)return {fout:"Dit lijkt geen Bolero-export: kolommen 'ISIN' en 'Naam' niet gevonden."};
+
+  var posities=[], overgeslagen=0;
+  for(var r=kopIndex+1;r<rijen.length;r++){
+    var rij=rijen[r];
+    var isin=rij[kol["ISIN"]]?String(rij[kol["ISIN"]]).trim():null;
+    var naam=rij[kol["Naam"]]?String(rij[kol["Naam"]]).trim():null;
+    var aantal=rij[kol["Aantal"]]!=null?parseFloat(rij[kol["Aantal"]]):null;
+    // alleen regels met een geldige ISIN én een aantal zijn echte posities;
+    // dat filtert de cash-regel en de voetteksten er vanzelf uit
+    if(!isin||!/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(isin)||!aantal||aantal<=0){ overgeslagen++; continue; }
+    var aankoop=rij[kol["Gem. aankoopkoers"]]!=null?parseFloat(rij[kol["Gem. aankoopkoers"]]):null;
+    posities.push({
+      isin:isin, naam:naam,
+      qty:aantal,
+      buyPrice:(aankoop&&!isNaN(aankoop))?+aankoop.toFixed(4):null,
+      type:rij[kol["Type"]]?String(rij[kol["Type"]]).trim():null,
+      munt:rij[kol["Munt"]]?String(rij[kol["Munt"]]).trim():null,
+      markt:rij[kol["Markt"]]?String(rij[kol["Markt"]]).trim():null
+    });
+  }
+  return {posities:posities, overgeslagen:overgeslagen};
+}
+
 // ---- Spreidingsanalyse ----
 // Beoordeelt hoe goed de portefeuille gespreid is over posities, sectoren en regio's.
 // Gebaseerd op de Herfindahl-index: de som van de gekwadrateerde gewichten. Die maat
@@ -4815,6 +4920,47 @@ function importSaxoCsv(file){
   reader.readAsText(file,'UTF-8');
 }
 $('pfImportBtn').onclick=function(){$('pfImportFile').click();};
+
+if($('pfBoleroBtn'))$('pfBoleroBtn').onclick=function(){$('pfBoleroFile').click();};
+if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
+  var f=e.target.files&&e.target.files[0];
+  if(!f)return;
+  pfStat("Bolero-bestand inlezen\u2026");
+  var lezer=new FileReader();
+  lezer.onload=function(ev){
+    leesXlsx(ev.target.result).then(function(rijen){
+      var res=parseBolero(rijen);
+      if(res.fout){pfStat(res.fout,true);return;}
+      if(!res.posities.length){pfStat("Geen posities gevonden in dit bestand.",true);return;}
+      var toegevoegd=0, bijgewerkt=0;
+      res.posities.forEach(function(b){
+        var al=PORTFOLIO.filter(function(p){return p.isin===b.isin;})[0];
+        if(al){
+          al.qty=b.qty;
+          if(b.buyPrice)al.buyPrice=b.buyPrice;
+          bijgewerkt++;
+        }else{
+          PORTFOLIO.push({id:Date.now()+"_"+b.isin+"_"+toegevoegd,
+            symbol:b.isin, isin:b.isin, naam:b.naam,
+            qty:b.qty, buyPrice:b.buyPrice, buyDate:null, baseline:null});
+          toegevoegd++;
+        }
+      });
+      savePortfolioLocal(); savePortfolioCloud(); renderPortfolio();
+      var pfNaam=(typeof PORTFOLIOS!=="undefined"&&PORTFOLIOS[ACTIEVE_PF])?PORTFOLIOS[ACTIEVE_PF].naam:"je portefeuille";
+      pfStat("Bolero-import in \u201c"+pfNaam+"\u201d: "+toegevoegd+" nieuw"+
+        (bijgewerkt?", "+bijgewerkt+" bijgewerkt":"")+
+        (res.overgeslagen?", "+res.overgeslagen+" regel(s) overgeslagen (cash/voettekst)":"")+
+        ". Klik \u201cAlles checken\u201d voor de actuele cijfers.");
+    }).catch(function(err){
+      pfStat("Kon het bestand niet lezen: "+((err&&err.msg)||(err&&err.message)||"onbekende fout")+
+             ". Is dit de xlsx-export uit Bolero?",true);
+    });
+    e.target.value="";
+  };
+  lezer.onerror=function(){pfStat("Bestand kon niet geopend worden.",true);};
+  lezer.readAsArrayBuffer(f);
+};
 if($('pfOverlapBtn'))$('pfOverlapBtn').onclick=verifyOverlapReal;
 $('pfImportFile').onchange=function(e){if(e.target.files[0])importSaxoCsv(e.target.files[0]);};
 
