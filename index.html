@@ -18,6 +18,37 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+// ---- Toegangsscherm ----
+(function(){
+  var CODE="screeno";
+  function open(){
+    var p=document.getElementById('poort');
+    if(p)p.style.display="none";
+    try{ sessionStorage.setItem('kompas_toegang','1'); }catch(e){}
+  }
+  function controleer(){
+    var v=(document.getElementById('poortCode')||{}).value||"";
+    if(v.trim().toLowerCase()===CODE){ open(); }
+    else{
+      var f=document.getElementById('poortFout');
+      if(f)f.textContent="Onjuiste code.";
+      var i=document.getElementById('poortCode');
+      if(i){i.value="";i.focus();}
+    }
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    // binnen dezelfde sessie niet opnieuw vragen
+    try{ if(sessionStorage.getItem('kompas_toegang')==='1'){ open(); return; } }catch(e){}
+    var btn=document.getElementById('poortOk');
+    var inp=document.getElementById('poortCode');
+    if(btn)btn.onclick=controleer;
+    if(inp){
+      inp.addEventListener('keydown',function(e){ if(e.key==="Enter")controleer(); });
+      setTimeout(function(){inp.focus();},100);
+    }
+  });
+})();
+
 // ---- Bronopties (moeten vóór elk gebruik staan) ----
 var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
@@ -205,6 +236,24 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 </style>
 </head>
 <body>
+<!-- Toegangsscherm: houdt toevallige bezoekers tegen. LET OP: dit is géén beveiliging.
+     De code staat in dit bestand en is voor iedereen leesbaar via "paginabron bekijken".
+     Zet hier dus nooit iets achter wat echt vertrouwelijk is. -->
+<div id="poort" style="position:fixed;inset:0;z-index:9999;background:var(--bg);
+     display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="max-width:340px;width:100%;text-align:center">
+    <h1 style="font-family:'Fraunces',serif;font-size:30px;margin-bottom:6px">Kompas</h1>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:20px">portefeuille &amp; marktanalyse</p>
+    <input type="password" id="poortCode" placeholder="toegangscode" autocomplete="off"
+           style="width:100%;text-align:center;font-size:15px;height:40px">
+    <button class="btn-go" id="poortOk" style="width:100%;margin-top:10px;height:40px">Openen</button>
+    <div id="poortFout" style="color:var(--red);font-size:12px;margin-top:8px;min-height:16px"></div>
+    <p style="color:var(--muted);font-size:11px;margin-top:18px;opacity:.7">
+      Deze code beperkt toevallig bezoek. Het is geen beveiliging &mdash; deel er niets
+      vertrouwelijks achter.</p>
+  </div>
+</div>
+
 <div class="wrap">
   <header>
     <h1>Kompas <span class="x">/</span> <span style="font-size:15px;font-weight:400;font-family:'IBM Plex Sans';color:var(--muted);letter-spacing:0">portefeuille &amp; marktanalyse</span></h1>
@@ -3260,6 +3309,10 @@ function fetchEtfEulerpool(identifier,token){
         yield: d.dividendYield!=null ? +(+d.dividendYield).toFixed(1) : null,
         chg:null,
         nav: d.nav!=null ? +(+d.nav).toFixed(2) : null,
+        // de intrinsieke waarde is de bruikbare koers voor een fonds; onder 'price' zetten
+        // zodat portefeuille en tabel er zonder omweg mee kunnen rekenen
+        price: (d.latestQuotes!=null&&!isNaN(d.latestQuotes)) ? +(+d.latestQuotes).toFixed(2)
+             : (d.nav!=null ? +(+d.nav).toFixed(2) : null),
         trackingIndex: d.trackingIndex||null,
         domicile: d.domicile||null,
         assetClass: d.assetClass||null,
@@ -3936,9 +3989,9 @@ function loadPortfolioLocal(){
   });
 }
 function savePortfolioCloud(){
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid).set({portfolio:PORTFOLIO},{merge:true}).catch(function(){});
-  }
+  // Alleen de meervoudige structuur wegschrijven. De oude 'portfolio'-sleutel schreef
+  // de actieve lijst apart weg, wat bij het wisselen tot verwarring leidde: bij het
+  // laden werd die dan over de verkeerde portefeuille gezet.
   savePortfoliosCloud();
 }
 
@@ -5512,7 +5565,32 @@ function loadCloud(){
       if(typeof updateSourceIndicator==="function")updateSourceIndicator();
     }
     // portefeuille uit cloud overnemen (cloud-versie wint als hij bestaat en lokaal leeg is, anders lokaal behouden)
-    if(data.portfolio && (!PORTFOLIO || PORTFOLIO.length===0)){
+    // Meervoudige portefeuilles hebben voorrang: die bevatten de actieve keuze én alle
+    // lijsten. Zonder deze tak overschreef de oude enkelvoudige sleutel de actieve
+    // portefeuille, waardoor je na het wisselen de posities van de eerste terugzag.
+    if(data.portfolios && data.portfolios.lijsten){
+      var cloudLijsten=data.portfolios.lijsten;
+      var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
+        return !(PORTFOLIOS[k].posities||[]).length;
+      });
+      if(lokaalLeeg){
+        PORTFOLIOS=cloudLijsten;
+        if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
+        ACTIEVE_PF=(data.portfolios.actief&&PORTFOLIOS[data.portfolios.actief])?data.portfolios.actief:"eigen";
+        PORTFOLIO=PORTFOLIOS[ACTIEVE_PF].posities||[];
+        savePortfoliosLocal();
+        if(typeof renderPfKiezer==="function")renderPfKiezer();
+        if(typeof renderPortfolio==="function")renderPortfolio();
+      }else{
+        // lokaal is er al iets: alleen ontbrekende portefeuilles aanvullen, niets overschrijven
+        Object.keys(cloudLijsten).forEach(function(id){
+          if(!PORTFOLIOS[id])PORTFOLIOS[id]=cloudLijsten[id];
+        });
+        savePortfoliosLocal();
+        if(typeof renderPfKiezer==="function")renderPfKiezer();
+      }
+    }
+    else if(data.portfolio && (!PORTFOLIO || PORTFOLIO.length===0)){
       PORTFOLIO=data.portfolio;
       if(typeof renderPortfolio==="function")renderPortfolio();
     }
