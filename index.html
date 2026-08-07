@@ -514,6 +514,7 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
     <div class="status" id="pfStatus"></div>
 
     <div class="kpi-row" id="pfDashboard"></div>
+    <div id="importHint"></div>
     <div id="spreidingWrap"></div>
     <div id="overlapWrap"></div>
 
@@ -1249,6 +1250,7 @@ function lookupIsin(isin,token){
 
 function naamVoor(d){
   if(!d)return null;
+  if(d.naam)return d.naam;          // naam uit een broker-import heeft voorrang
   // eerst de opgezochte naam (werkt voor elk aandeel), dan de vaste tabel, dan wat de bron gaf
   var uitCache=(d.isin&&ISIN_CACHE[d.isin])?ISIN_CACHE[d.isin].naam:null;
   return uitCache||NAAM_BIJ_ISIN[d.isin]||NAAM_BIJ_ISIN[d.queriedAs]||d.name||null;
@@ -3911,8 +3913,15 @@ function savePortfoliosLocal(){
 function savePortfoliosCloud(){
   pfSync();
   if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid)
-      .set({portfolios:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS}},{merge:true}).catch(function(){});
+    // Firestore voegt bij merge:true velden samen in plaats van te vervangen. Een verwijderde
+    // portefeuille bleef daardoor in de database staan en kwam bij het laden weer terug.
+    // We schrijven het hele blok daarom expliciet leeg en daarna opnieuw.
+    var ref=FB.db.collection("users").doc(FB.user.uid);
+    ref.set({portfolios:firebase.firestore.FieldValue.delete()},{merge:true})
+      .then(function(){
+        return ref.set({portfolios:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,bijgewerkt:Date.now()}},{merge:true});
+      })
+      .catch(function(e){ console.warn('Kompas: portefeuilles opslaan mislukt',e&&e.message); });
   }
 }
 function loadPortfoliosLocal(){
@@ -3947,6 +3956,8 @@ function renderPfKiezer(){
   'style="font-size:11.5px;padding:0 10px;height:30px">+ nieuw</button>'+
   '<button class="btn-ghost" onclick="pfHernoemPrompt()" title="Naam van de actieve portefeuille wijzigen" '+
   'style="font-size:11px;padding:0 10px;height:30px">hernoem</button>'+
+  '<button class="btn-ghost" onclick="pfOpschonen()" title="Verwijder lege portefeuilles en synchroniseer opnieuw met je account" '+
+  'style="font-size:11px;padding:0 10px;height:30px">opschonen</button>'+
   (ACTIEVE_PF!=="eigen"?
     '<button class="btn-ghost" onclick="pfVerwijderPrompt()" style="font-size:11px;padding:0 10px;height:30px;color:var(--red)">verwijder</button>':'');
 }
@@ -3963,6 +3974,29 @@ function pfVerwijderPrompt(){
   if(confirm("Portefeuille \u201c"+p.naam+"\u201d met "+(p.posities||[]).length+" posities verwijderen?\nDit kan niet ongedaan gemaakt worden."))
     pfVerwijder(ACTIEVE_PF);
 }
+// Ruimt lege portefeuilles op en schrijft de opgeschoonde lijst naar je account.
+// Nodig omdat eerder verwijderde portefeuilles door een samenvoegfout in de database
+// bleven staan en bij elke start terugkwamen.
+function pfOpschonen(){
+  pfSync();
+  var leeg=Object.keys(PORTFOLIOS).filter(function(id){
+    return id!=="eigen" && !(PORTFOLIOS[id].posities||[]).length;
+  });
+  if(!leeg.length){
+    // niets leegs: alsnog forceren dat de cloud gelijkloopt met wat je hier ziet
+    savePortfoliosCloud();
+    pfStat("Geen lege portefeuilles gevonden. Je account is opnieuw gelijkgezet met deze lijst.");
+    return;
+  }
+  var namen=leeg.map(function(id){return PORTFOLIOS[id].naam;}).join(", ");
+  if(!confirm(leeg.length+" lege portefeuille(s) verwijderen?\n\n"+namen))return;
+  leeg.forEach(function(id){ delete PORTFOLIOS[id]; });
+  if(!PORTFOLIOS[ACTIEVE_PF]){ACTIEVE_PF="eigen";PORTFOLIO=PORTFOLIOS.eigen.posities||[];}
+  savePortfoliosLocal(); savePortfoliosCloud();
+  renderPfKiezer(); renderPortfolio();
+  pfStat(leeg.length+" lege portefeuille(s) verwijderd, ook uit je account.");
+}
+window.pfOpschonen=pfOpschonen;
 window.pfWissel=pfWissel; window.pfNieuwPrompt=pfNieuwPrompt;
 window.pfHernoemPrompt=pfHernoemPrompt; window.pfVerwijderPrompt=pfVerwijderPrompt;
 
@@ -4709,7 +4743,8 @@ function renderPortfolioTabel(lijst){
     var k=positieKoers(p), waarde=positieWaarde(p), r=positieRendement(p);
     var pl=r?r.v:null;
     var koersBron=(k&&k.bron)||null;
-    var naam=(typeof naamVoor==="function")?naamVoor(d):null;
+    // volgorde: naam uit de broker-import, dan de opgezochte naam, dan de vaste tabel
+    var naam=p.naam||((typeof naamVoor==="function")?naamVoor(d):null);
     var sc=f.isEtf?f.score:totalScore(d);
     var m=f.isEtf?null:momentumScore(d), v=f.isEtf?null:valuationScore(d),
         g=f.isEtf?null:growthScore(d), q=f.isEtf?null:qualityScore(d);
@@ -4733,6 +4768,23 @@ function renderPortfolioTabel(lijst){
     '<div class="panel-card"><table><thead>'+kop+'</thead><tbody>'+body+'</tbody></table></div>'+
     '<div style="font-size:11px;color:var(--muted);margin-top:6px">'+
     'De vier factorscores volgen de weegregelaars van het Screener-tabblad; pas die daar aan om de totaalscore te herwegen.</div>';
+}
+
+// Signaleert posities die vóór een uitbreiding zijn geïmporteerd en daardoor gegevens
+// missen. Zonder deze melding zie je afwijkende cijfers zonder te weten waarom.
+function renderImportHint(){
+  var el=document.getElementById('importHint'); if(!el)return;
+  var zonder=PORTFOLIO.filter(function(p){
+    return p.isin && p.brokerPrice==null && p.buyPrice!=null;
+  });
+  if(!zonder.length){el.innerHTML="";return;}
+  el.innerHTML='<div class="snap" style="border-left:3px solid var(--accent);font-size:12.5px">'+
+    '\u2139\ufe0f <b>'+zonder.length+' positie(s) zonder brokerkoers.</b> '+
+    'Voor deze posities rekent de tool met een eigen opgehaalde koers, die kan afwijken van '+
+    'wat je broker toont \u2014 bij holdings en fondsen soms aanzienlijk.<br>'+
+    '<span style="opacity:.85">Importeer je bestand opnieuw om de slotkoers en het rendement '+
+    'van je broker over te nemen. Bestaande posities worden bijgewerkt, notities en '+
+    'alarmgrenzen blijven behouden.</span></div>';
 }
 
 function renderSpreiding(){
@@ -4773,6 +4825,7 @@ function renderOverlap(){
   // (lege portefeuille, leeg filter, tabelweergave) en anders blijft de analyse van
   // de vórige portefeuille staan bij het wisselen.
   if(typeof renderSpreiding==="function")renderSpreiding();
+  if(typeof renderImportHint==="function")renderImportHint();
   var wrap=$('overlapWrap'); if(!wrap)return;
   var html="";
 
@@ -5641,11 +5694,10 @@ function loadCloud(){
         if(typeof renderPfKiezer==="function")renderPfKiezer();
         if(typeof renderPortfolio==="function")renderPortfolio();
       }else{
-        // lokaal is er al iets: alleen ontbrekende portefeuilles aanvullen, niets overschrijven
-        Object.keys(cloudLijsten).forEach(function(id){
-          if(!PORTFOLIOS[id])PORTFOLIOS[id]=cloudLijsten[id];
-        });
-        savePortfoliosLocal();
+        // Lokaal is er al iets. Niet aanvullen vanuit de cloud: dat zou een portefeuille
+        // die je zojuist verwijderde meteen terugbrengen. De lokale stand is leidend en
+        // wordt weggeschreven, zodat cloud en apparaat weer gelijklopen.
+        savePortfoliosCloud();
         if(typeof renderPfKiezer==="function")renderPfKiezer();
       }
     }
