@@ -4194,7 +4194,8 @@ function renderPortfolio(){
   var checked=PORTFOLIO.filter(function(p){return p._fresh;});
   var totalValue=0, totalCost=0, hasValue=false;
   PORTFOLIO.forEach(function(p){
-    if(p._fresh&&p._fresh.price!=null){ totalValue+=p._fresh.price*p.qty; hasValue=true; }
+    var w=positieWaarde(p);
+    if(w!=null){ totalValue+=w; hasValue=true; }
     if(p.buyPrice!=null){ totalCost+=p.buyPrice*p.qty; }
   });
   var totalPL=(hasValue&&totalCost>0)?((totalValue-totalCost)/totalCost*100):null;
@@ -4220,8 +4221,8 @@ function renderPortfolio(){
   var sortKey=$('pfSort')?$('pfSort').value:"alarm";
   var list=PORTFOLIO.slice();
   var alarmRank={red:0,orange:1,green:2,undefined:3};
-  function plOf(p){return (p.buyPrice&&p._fresh&&p._fresh.price)?((p._fresh.price-p.buyPrice)/p.buyPrice*100):null;}
-  function valueOf(p){return (p._fresh&&p._fresh.price)?p._fresh.price*p.qty:-1;}
+  function plOf(p){var r=positieRendement(p);return r?r.v:null;}
+  function valueOf(p){var w=positieWaarde(p);return w!=null?w:-1;}
   list.sort(function(a,b){
     if(sortKey==="alarm"){
       var ra=alarmRank[a._alarm&&a._alarm.level]; if(ra==null)ra=3;
@@ -4457,6 +4458,42 @@ function analyseOverlap(){
   return findings;
 }
 
+// ---- Koers en rendement: brokercijfers hebben voorrang ----
+// Een geïmporteerde slotkoers van je broker is de werkelijke waarde van jouw positie.
+// Onze eigen bronnen kunnen afwijken, zeker bij holdings en fondsen waar de koers uit
+// marktwaarde gedeeld door aandelen wordt afgeleid - bij Brederode gaf dat een verschil
+// van 9%, genoeg om een verlies als winst te tonen.
+function positieKoers(p){
+  if(!p)return null;
+  if(p.brokerPrice!=null)return {v:p.brokerPrice, bron:p.brokerNaam||"broker"};
+  if(p._fresh&&p._fresh.price!=null){
+    var k=p._fresh.price;
+    // een koers die tienduizend keer de aankoopprijs is, is geen koers maar een ander veld
+    if(p.buyPrice&&(k>p.buyPrice*50||k<p.buyPrice/50))return null;
+    return {v:k, bron:(p._fresh.src||"databron")};
+  }
+  return null;
+}
+function positieRendement(p){
+  if(!p)return null;
+  // cijfer van je broker heeft voorrang: dat is de werkelijke stand van jouw positie
+  if(p.brokerReturn!=null)return {v:p.brokerReturn, bron:p.brokerNaam||"broker"};
+  var k=positieKoers(p);
+  if(k&&p.buyPrice){
+    var r=((k.v-p.buyPrice)/p.buyPrice)*100;
+    // Beveiliging: een rendement buiten -100% tot +2000% wijst vrijwel altijd op een
+    // verkeerd veld (bijvoorbeeld fondsvermogen in plaats van koers per aandeel), niet
+    // op een echte koersbeweging. Beter niets tonen dan een onzinnig getal.
+    if(r<-100||r>2000)return null;
+    return {v:r, bron:k.bron};
+  }
+  return null;
+}
+function positieWaarde(p){
+  var k=positieKoers(p);
+  return (k&&p.qty)?k.v*p.qty:null;
+}
+
 // ---- Bolero-import (.xlsx) ----
 // Een xlsx is een zip met XML erin. In plaats van een externe bibliotheek (die de tool
 // afhankelijk zou maken van een CDN) pakken we het bestand zelf uit met DecompressionStream,
@@ -4574,11 +4611,18 @@ function parseBolero(rijen){
     var aantal=parseFloat(haal(rij2,"Aantal")||haal(rij2,"Aantal ")||"");
     if(!aantal||isNaN(aantal)||aantal<=0){overgeslagen++;continue;}
     var aankoop=parseFloat(haal(rij2,"Gem. aankoopkoers")||"");
+    // Bolero's eigen slotkoers en rendement meenemen. Die zijn leidend voor jouw
+    // werkelijke positie: onze eigen bronnen kunnen een afwijkende koers geven, zeker
+    // bij holdings en fondsen waar de koers uit marktwaarde/aandelen wordt afgeleid.
+    var slot=parseFloat(haal(rij2,"Slotkoers")||"");
+    var rend=parseFloat(String(haal(rij2,"Rendement %")||"").replace(",","."));
     posities.push({
       isin:isin,
       naam:haal(rij2,"Naam"),
       qty:aantal,
       buyPrice:(aankoop&&!isNaN(aankoop))?+aankoop.toFixed(4):null,
+      brokerPrice:(slot&&!isNaN(slot))?+slot.toFixed(4):null,
+      brokerReturn:(!isNaN(rend))?+rend.toFixed(2):null,
       type:haal(rij2,"Type"),
       munt:haal(rij2,"Munt"),
       markt:haal(rij2,"Markt")
@@ -4593,15 +4637,15 @@ function parseBolero(rijen){
 // straft concentratie zwaarder dan een simpele telling, wat klopt met hoe risico werkt -
 // één positie van 40% is riskanter dan vier van 10%.
 function spreidingsAnalyse(){
-  var met=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.price!=null&&p.qty;});
+  var met=PORTFOLIO.filter(function(p){return positieWaarde(p)!=null&&p.qty;});
   if(met.length<2)return null;
 
-  var totaal=met.reduce(function(s,p){return s+p._fresh.price*p.qty;},0);
+  var totaal=met.reduce(function(s,p){return s+positieWaarde(p);},0);
   if(!totaal)return null;
   var gewichten=met.map(function(p){
-    return {symbol:p.symbol, naam:(typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[p.isin])||p.symbol,
-            w:(p._fresh.price*p.qty)/totaal, sector:p._fresh.sector||"Onbekend",
-            isEtf:!!p._fresh.isEtf, markt:(p.isin?p.isin.slice(0,2):null)};
+    return {symbol:p.symbol, naam:(typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[p.isin])||p.naam||p.symbol,
+            w:positieWaarde(p)/totaal, sector:(p._fresh&&p._fresh.sector)||"Onbekend",
+            isEtf:!!(p._fresh&&p._fresh.isEtf), markt:(p.isin?p.isin.slice(0,2):null)};
   }).sort(function(a,b){return b.w-a.w;});
 
   // Herfindahl per dimensie: 1/HHI geeft het "effectief aantal" onafhankelijke posities
@@ -4662,8 +4706,9 @@ function renderPortfolioTabel(lijst){
     '<th>Rendement</th><th>Mom.</th><th>Waard.</th><th>Groei</th><th>Kwal.</th><th>Score</th></tr>';
   var body=data.map(function(d){
     var p=d._pos, f=p._fresh;
-    var waarde=(f.price!=null&&p.qty)?f.price*p.qty:null;
-    var pl=(p.buyPrice&&f.price)?((f.price-p.buyPrice)/p.buyPrice*100):null;
+    var k=positieKoers(p), waarde=positieWaarde(p), r=positieRendement(p);
+    var pl=r?r.v:null;
+    var koersBron=(k&&k.bron)||null;
     var naam=(typeof naamVoor==="function")?naamVoor(d):null;
     var sc=f.isEtf?f.score:totalScore(d);
     var m=f.isEtf?null:momentumScore(d), v=f.isEtf?null:valuationScore(d),
@@ -4674,7 +4719,8 @@ function renderPortfolioTabel(lijst){
         (f.isEtf?'<span class="trap" style="margin-left:6px">fonds</span>':'')+
         '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span></td>'+
       '<td class="l" style="font-size:11px;color:var(--muted)">'+(f.sector||"\u2014")+'</td>'+
-      cel(f.price!=null?f.price.toFixed(2):null)+
+      '<td class="num"'+(koersBron?' title="Koers via '+koersBron+'" style="cursor:help"':'')+'>'+
+        (k?k.v.toFixed(2):"\u2014")+(p.brokerPrice!=null?'<span style="font-size:8px;color:var(--muted)">\u00b7b</span>':'')+'</td>'+
       cel(waarde!=null?Math.round(waarde):null)+
       '<td class="num '+(pl>=0?"pos":"neg")+'">'+(pl!=null?(pl>=0?"+":"")+pl.toFixed(1)+"%":"\u2014")+'</td>'+
       cel(m)+cel(v)+cel(g)+cel(q)+
@@ -4779,9 +4825,18 @@ function checkAllPositions(){
         return fetchEtfAuto(pos.symbol).then(function(e){
           ETF_KNOWN[pos.symbol]=true;
           var sc=etfPortfolioScore(e);
+          // Koers: alleen een plausibele waarde overnemen. Sommige bronnen leveren hier
+          // het fondsvermogen (miljarden) in plaats van de koers per aandeel; dat gaf een
+          // rendement van 10.558% bij een fonds dat in werkelijkheid 26,6% steeg.
+          var etfKoers=null;
+          if(e.price!=null&&e.price>0&&e.price<100000)etfKoers=e.price;
+          else if(e.nav!=null&&e.nav>0&&e.nav<100000)etfKoers=e.nav;
+          // brokerkoers heeft altijd voorrang: dat is de werkelijke waarde van jouw positie
+          if(pos.brokerPrice!=null)etfKoers=pos.brokerPrice;
+          else if(etfKoers==null&&pos._fresh&&pos._fresh.price!=null)etfKoers=pos._fresh.price;
           pos._fresh={isEtf:true, score:(sc&&sc.score!=null)?sc.score:null, etf:e, etfScores:sc,
-            price:e.price!=null?e.price:(pos._fresh&&pos._fresh.price)||null,
-            sector:"Fonds", src:"securitiesdb",
+            price:etfKoers,
+            sector:"Fonds", src:(pos.brokerPrice!=null?(pos.brokerNaam||"broker"):"fondsdata"),
             completeness:{level:"full",missing:[]}};
           pos._alarm=classifyEtfAlarm(pos,pos._fresh);
           if(!pos.baseline) pos.baseline={score:pos._fresh.score,ts:Date.now(),isEtf:true};
@@ -5027,11 +5082,15 @@ if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
         if(al){
           al.qty=b.qty;
           if(b.buyPrice)al.buyPrice=b.buyPrice;
+          al.brokerPrice=b.brokerPrice; al.brokerReturn=b.brokerReturn;
+          al.brokerNaam="Bolero"; al.brokerDatum=Date.now();
           bijgewerkt++;
         }else{
           PORTFOLIO.push({id:Date.now()+"_"+b.isin+"_"+toegevoegd,
             symbol:b.isin, isin:b.isin, naam:b.naam,
-            qty:b.qty, buyPrice:b.buyPrice, buyDate:null, baseline:null});
+            qty:b.qty, buyPrice:b.buyPrice, buyDate:null, baseline:null,
+            brokerPrice:b.brokerPrice, brokerReturn:b.brokerReturn,
+            brokerNaam:"Bolero", brokerDatum:Date.now()});
           toegevoegd++;
         }
       });
