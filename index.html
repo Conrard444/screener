@@ -55,6 +55,135 @@ var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 
+// ---- Centrale veldweergave ----
+// Eén definitie per gegeven: hoe het heet, hoe het getoond wordt en wat de uitleg is.
+// Voorheen stond dit los in de screenertabel, de portefeuillekaart en de CSV-export,
+// waardoor een wijziging op één plek de andere twee niet bereikte.
+var VELD={
+  ingeprijsd:{
+    label:"Ingeprijsd",
+    waarde:function(d){
+      if(!d)return null;
+      if(d.impliedGrowth!=null)return {v:d.impliedGrowth,soort:"groei"};
+      var up=(d.upside!=null)?d.upside:(d.expectedReturn!=null?d.expectedReturn:null);
+      return up!=null?{v:up,soort:"rendement"}:null;
+    },
+    tekst:function(d){
+      var w=this.waarde(d);
+      if(!w)return "\u2014";
+      return (w.v>0?"+":"")+w.v.toFixed(0)+"%"+(w.soort==="groei"?" impl.":"");
+    },
+    kleur:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      if(w.soort==="groei"){
+        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
+        if(werkelijk==null)return "";
+        return werkelijk>=w.v?"pos":"neg";
+      }
+      return w.v>=15?"pos":(w.v<=-10?"neg":"");
+    },
+    uitleg:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      if(w.soort==="groei"){
+        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
+        return "De markt prijst "+w.v+"% winstgroei per jaar in"+
+               (werkelijk!=null?"; het bedrijf realiseerde "+werkelijk+"%":"")+
+               " \u00b7 modeluitkomst, sterk afhankelijk van aannames";
+      }
+      return "Verwacht rendement volgens de databron \u00b7 modeluitkomst, geen voorspelling";
+    }
+  }
+};
+
+// ---- Centrale bronbepaling ----
+// Eén plek die bepaalt hoe een symbool wordt opgehaald, welke bron dat is en wat het kost.
+// Voorheen was dit verspreid over currentSource(), sourceOrderFor() en losse checks in de
+// screener, waardoor een wijziging op de ene plek de andere niet bereikte.
+// ---- Centrale naamgeving ----
+// Eén plek die bepaalt hoe een positie of aandeel heet. Voorheen stond die logica op tien
+// plekken met elk een eigen volgorde, waardoor je in het ene tabblad een naam zag en in het
+// andere een ISIN. Werkt zowel op een portefeuillepositie als op opgehaalde marktdata.
+var NAAM={
+  // volledige naam, of null als die echt onbekend is
+  vol:function(o){
+    if(!o)return null;
+    return o.naam                                   // uit een broker-import
+      || (o.isin&&typeof ISIN_CACHE!=="undefined"&&ISIN_CACHE[o.isin]&&ISIN_CACHE[o.isin].naam)
+      || (o.isin&&typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.isin])
+      || (o.queriedAs&&typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.queriedAs])
+      || (typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.symbol])
+      || o.name
+      || null;
+  },
+  // wat je in een cel toont: naam indien bekend, anders de ticker, nooit een kale ISIN
+  toon:function(o,maxLengte){
+    if(!o)return "\u2014";
+    var n=this.vol(o);
+    if(!n){
+      // geen naam bekend: liever de ticker dan de ISIN
+      var t=o.ticker||o.symbol||o.queriedAs||"";
+      if(typeof ISIN_RE!=="undefined"&&ISIN_RE.test(t)&&o.ticker&&!ISIN_RE.test(o.ticker))t=o.ticker;
+      return t||"\u2014";
+    }
+    n=n.replace(/\s+(Holdings?|Group|Corporation|Corp\.?|Company|Inc\.?|Ltd\.?|Limited|PLC|N\.?V\.?|S\.?A\.?|A\/S|AB|ASA|Oyj|SE|AG|S\.?p\.?A\.?)\b\.?/gi,"")
+         .replace(/\s{2,}/g," ").replace(/[.,\s]+$/,"").trim();
+    var max=maxLengte||26;
+    if(n.length<=max)return n;
+    var cut=n.slice(0,max), sp=cut.lastIndexOf(" ");
+    return (sp>10?cut.slice(0,sp):cut)+"\u2026";
+  },
+  // de subregel onder de naam: ticker, maar niet als die de ISIN is of gelijk aan de naam
+  sub:function(o){
+    if(!o)return "";
+    var n=this.vol(o), t=o.ticker||o.symbol||"";
+    if(!n)return "";                                   // naam onbekend -> ticker staat al vooraan
+    if(typeof ISIN_RE!=="undefined"&&ISIN_RE.test(t))return "";  // ISIN staat in een eigen kolom
+    return (t&&t!==n)?t:"";
+  }
+};
+
+var BRON={
+  // welke bron gaat dit symbool ophalen?
+  voor: function(symbol){
+    // Een ISIN kan alleen door Eulerpool opgehaald worden - ongeacht welke bron er
+    // ingesteld staat. Zonder deze regel belandden ISIN-universa bij Finnhub zodra
+    // de automatische bronkeuze uitstond, met 49 mislukte aanroepen tot gevolg.
+    if(ISIN_RE.test(symbol)) return MULTI_KEYS.eulerpool?"eulerpool":null;
+    if(typeof multiEnabled==="function" && multiEnabled()){
+      var order=sourceOrderFor(symbol).filter(function(s){return MULTI_KEYS[s];});
+      if(!/\./.test(symbol) && MULTI_KEYS.finnhub) return "securitiesdb+finnhub";
+      return order[0]||null;
+    }
+    return currentSource();
+  },
+  // hoeveel API-calls kost dit symbool?
+  kosten: function(symbol){
+    var b=this.voor(symbol);
+    if(b==="securitiesdb+finnhub")return 4;   // quant-health + dcf + quote + metric
+    if(b==="eulerpool")return (EULER_METRICS?1:2)+(EULER_CHARTING?1:0);
+    if(b==="fmp")return 3;
+    return 2;
+  },
+  // moet er getemporiseerd worden? (Finnhub heeft een minuutlimiet)
+  throttle: function(symbols){
+    var self=this;
+    return (symbols||[]).some(function(s){
+      var b=self.voor(s);
+      return b==="finnhub"||b==="securitiesdb+finnhub";
+    });
+  },
+  // leesbare naam voor meldingen
+  naam: function(b){
+    return {finnhub:"Finnhub",eulerpool:"Eulerpool",eodhd:"EODHD",fmp:"FMP",
+            securitiesdb:"SecuritiesDB","securitiesdb+finnhub":"SecuritiesDB + Finnhub"}[b]||b||"onbekend";
+  },
+  // is er überhaupt een werkende route voor dit symbool?
+  bereikbaar: function(symbol){ return this.voor(symbol)!=null; }
+};
+
+
   // Firebase-config (mag openbaar zijn; beveiliging zit in de Firestore-regels)
   var FIREBASE_CONFIG = {
     apiKey: "AIzaSyBE5MdwAbiWwksN49LQUr_KEMo6kp19sIo",
@@ -503,8 +632,17 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
         <div class="field"><label>Datum</label><input type="date" id="pfDate"></div>
         <button class="btn-go" id="pfAdd">+ Toevoegen</button>
         <button class="btn-ghost" id="pfCheck" style="margin-left:auto">Alles checken</button>
-        <button class="btn-ghost" id="pfImportBtn">Saxo CSV</button>
-        <button class="btn-ghost" id="pfBoleroBtn">Bolero XLSX</button>
+        <details style="display:inline-block;position:relative">
+          <summary class="btn-ghost" style="list-style:none;display:inline-flex;align-items:center;
+            height:34px;padding:0 16px;border-radius:6px;font-size:12.5px;font-weight:600;
+            cursor:pointer;border:1px solid var(--line);color:var(--muted)">Importeren</summary>
+          <div style="position:absolute;top:100%;left:0;z-index:40;margin-top:4px;background:var(--panel-2);
+            border:1px solid var(--line);border-radius:8px;padding:6px;min-width:170px;
+            box-shadow:0 6px 20px rgba(0,0,0,.5)">
+            <button class="btn-ghost" id="pfImportBtn" style="width:100%;justify-content:flex-start;margin-bottom:4px">Saxo (CSV)</button>
+            <button class="btn-ghost" id="pfBoleroBtn" style="width:100%;justify-content:flex-start">Bolero (XLSX)</button>
+          </div>
+        </details>
         <input type="file" id="pfBoleroFile" accept=".xlsx" style="display:none">
         <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">Overlap meten</button>
         <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
@@ -514,6 +652,7 @@ var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
     <div class="status" id="pfStatus"></div>
 
     <div class="kpi-row" id="pfDashboard"></div>
+    <div id="aandachtWrap"></div>
     <div id="importHint"></div>
     <div id="spreidingWrap"></div>
     <div id="overlapWrap"></div>
@@ -1697,13 +1836,7 @@ function render(){
     var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
     return '<tr>'+
       (function(){
-        var naam=(typeof naamVoor==="function")?naamVoor(d):d.name;
-        var toon=naam||d.symbol;
-        // subregel: de ticker, maar niet als die gelijk is aan de naam of een ISIN is
-        // (de ISIN staat al in een eigen kolom, dus dubbel tonen voegt niets toe)
-        var sub="";
-        if(naam&&d.symbol&&d.symbol!==naam&&!ISIN_RE.test(d.symbol))sub=d.symbol;
-        else if(naam&&d.ticker&&d.ticker!==naam)sub=d.ticker;
+        var toon=NAAM.toon(d), sub=NAAM.sub(d);
         return '<td class="l"><span class="tk">'+toon+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
                (sub?'<span style="display:block;font-size:9.5px;color:var(--muted);font-family:\'IBM Plex Mono\'">'+sub+'</span>':'');
       })()+
@@ -2436,91 +2569,6 @@ function fillPriceFrom(d,symbol,order,skipIndex){
   return Promise.resolve(tryNext(0));
 }
 
-// ---- Centrale veldweergave ----
-// Eén definitie per gegeven: hoe het heet, hoe het getoond wordt en wat de uitleg is.
-// Voorheen stond dit los in de screenertabel, de portefeuillekaart en de CSV-export,
-// waardoor een wijziging op één plek de andere twee niet bereikte.
-var VELD={
-  ingeprijsd:{
-    label:"Ingeprijsd",
-    waarde:function(d){
-      if(!d)return null;
-      if(d.impliedGrowth!=null)return {v:d.impliedGrowth,soort:"groei"};
-      var up=(d.upside!=null)?d.upside:(d.expectedReturn!=null?d.expectedReturn:null);
-      return up!=null?{v:up,soort:"rendement"}:null;
-    },
-    tekst:function(d){
-      var w=this.waarde(d);
-      if(!w)return "\u2014";
-      return (w.v>0?"+":"")+w.v.toFixed(0)+"%"+(w.soort==="groei"?" impl.":"");
-    },
-    kleur:function(d){
-      var w=this.waarde(d);
-      if(!w)return "";
-      if(w.soort==="groei"){
-        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
-        if(werkelijk==null)return "";
-        return werkelijk>=w.v?"pos":"neg";
-      }
-      return w.v>=15?"pos":(w.v<=-10?"neg":"");
-    },
-    uitleg:function(d){
-      var w=this.waarde(d);
-      if(!w)return "";
-      if(w.soort==="groei"){
-        var werkelijk=(d.epsG5Y!=null?d.epsG5Y:d.epsG);
-        return "De markt prijst "+w.v+"% winstgroei per jaar in"+
-               (werkelijk!=null?"; het bedrijf realiseerde "+werkelijk+"%":"")+
-               " \u00b7 modeluitkomst, sterk afhankelijk van aannames";
-      }
-      return "Verwacht rendement volgens de databron \u00b7 modeluitkomst, geen voorspelling";
-    }
-  }
-};
-
-// ---- Centrale bronbepaling ----
-// Eén plek die bepaalt hoe een symbool wordt opgehaald, welke bron dat is en wat het kost.
-// Voorheen was dit verspreid over currentSource(), sourceOrderFor() en losse checks in de
-// screener, waardoor een wijziging op de ene plek de andere niet bereikte.
-var BRON={
-  // welke bron gaat dit symbool ophalen?
-  voor: function(symbol){
-    // Een ISIN kan alleen door Eulerpool opgehaald worden - ongeacht welke bron er
-    // ingesteld staat. Zonder deze regel belandden ISIN-universa bij Finnhub zodra
-    // de automatische bronkeuze uitstond, met 49 mislukte aanroepen tot gevolg.
-    if(ISIN_RE.test(symbol)) return MULTI_KEYS.eulerpool?"eulerpool":null;
-    if(typeof multiEnabled==="function" && multiEnabled()){
-      var order=sourceOrderFor(symbol).filter(function(s){return MULTI_KEYS[s];});
-      if(!/\./.test(symbol) && MULTI_KEYS.finnhub) return "securitiesdb+finnhub";
-      return order[0]||null;
-    }
-    return currentSource();
-  },
-  // hoeveel API-calls kost dit symbool?
-  kosten: function(symbol){
-    var b=this.voor(symbol);
-    if(b==="securitiesdb+finnhub")return 4;   // quant-health + dcf + quote + metric
-    if(b==="eulerpool")return (EULER_METRICS?1:2)+(EULER_CHARTING?1:0);
-    if(b==="fmp")return 3;
-    return 2;
-  },
-  // moet er getemporiseerd worden? (Finnhub heeft een minuutlimiet)
-  throttle: function(symbols){
-    var self=this;
-    return (symbols||[]).some(function(s){
-      var b=self.voor(s);
-      return b==="finnhub"||b==="securitiesdb+finnhub";
-    });
-  },
-  // leesbare naam voor meldingen
-  naam: function(b){
-    return {finnhub:"Finnhub",eulerpool:"Eulerpool",eodhd:"EODHD",fmp:"FMP",
-            securitiesdb:"SecuritiesDB","securitiesdb+finnhub":"SecuritiesDB + Finnhub"}[b]||b||"onbekend";
-  },
-  // is er überhaupt een werkende route voor dit symbool?
-  bereikbaar: function(symbol){ return this.voor(symbol)!=null; }
-};
-
 function enrich(symbol,key){
   // ISIN's gaan altijd naar Eulerpool, ook als de automatische bronkeuze uitstaat
   if(ISIN_RE.test(symbol)){
@@ -3194,14 +3242,6 @@ var ETF_DEMO=[
   {symbol:"AGG",  name:"iShares Core US Aggregate",aum:105, ter:0.03, holdings:12500,top10:7.8,  yield:4.0, chg:0.1},
 ];
 var ETF_PEERS=null;
-function etfNorm(v,lo,hi,invert){if(v==null||isNaN(v))return 40;var t=(v-lo)/(hi-lo);t=Math.max(0,Math.min(1,t));return Math.round((invert?1-t:t)*100);}
-function etfPctRank(v,arr,invert){
-  if(v==null||isNaN(v))return 40;
-  var vals=arr.filter(function(x){return x!=null&&!isNaN(x);});
-  if(vals.length<4)return null;
-  var below=0,equal=0;for(var i=0;i<vals.length;i++){if(vals[i]<v)below++;else if(vals[i]===v)equal++;}
-  return Math.round(invert?100-((below+equal/2)/vals.length*100):((below+equal/2)/vals.length*100));
-}
 function buildEtfPeers(set){
   ETF_PEERS={ter:set.map(function(d){return d.ter;}),holdings:set.map(function(d){return d.holdings;}),
     top10:set.map(function(d){return d.top10;}),aum:set.map(function(d){return d.aum;})};
@@ -3256,7 +3296,7 @@ function renderEtf(){
     if(d.isInverse)riskBadge+='<span class="trap danger" title="Invers fonds: beweegt tegengesteld aan de index. Door dagelijkse herbalancering ongeschikt voor lange termijn." style="margin-left:4px">invers</span>';
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span>'+linkMenu(d)+brokerBadge(d)+riskBadge+overlapBadge(d)+
-      '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+(d.name||"")+'</span></td>'+
+      '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+NAAM.toon(d,30)+'</span></td>'+
       '<td class="l" style="font-size:10.5px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis">'+
         (d.trackingIndex||"\u2014")+'</td>'+
       '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
@@ -3499,29 +3539,6 @@ function fetchOhlcvEuler(isin,token,dagen){
     }).catch(function(){return null;});
 }
 
-// ---- Eulerpool market quotes: echte koersen (queryparameter, niet in het pad) ----
-function fetchQuotesEuler(isins,token){
-  if(!isins||!isins.length)return Promise.resolve({});
-  var lijst=isins.slice(0,50).join(","); // in blokken, scheelt calls
-  return getJson(EULER_BASE+"/market/quotes/latest?stocks="+encodeURIComponent(lijst)+
-                 "&token="+encodeURIComponent(token))
-    .then(function(res){
-      var uit={};
-      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
-      rijen.forEach(function(q){
-        var key=q.isin||q.symbol||q.ticker;
-        if(!key)return;
-        var koers=q.price!=null?+q.price:(q.close!=null?+q.close:(q.last!=null?+q.last:null));
-        var verschil=q.change_percent!=null?+q.change_percent:
-                     (q.changePercent!=null?+q.changePercent:
-                     (q.change_p!=null?+q.change_p:null));
-        uit[key]={price:koers!=null?+koers.toFixed(2):null,
-                  chg:verschil!=null?+verschil.toFixed(2):null,
-                  currency:q.currency||null};
-      });
-      return uit;
-    }).catch(function(){return {};});
-}
 
 // ---- Eulerpool fundamentals: losse SEC-feiten omzetten naar bruikbare cijfers ----
 // De respons is een platte lijst van XBRL-feiten (tag + waarde + periode), geen net overzicht.
@@ -3532,43 +3549,6 @@ var FIN_TAGS={
   eigenVermogen:["StockholdersEquity","StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
   aandelen:["CommonStockSharesOutstanding","WeightedAverageNumberOfDilutedSharesOutstanding"]
 };
-function fetchFinancialsEuler(isin,token){
-  return getJson(EULER_BASE+"/fundamentals/financials/"+encodeURIComponent(isin)+
-                 "?limit=60&token="+encodeURIComponent(token))
-    .then(function(res){
-      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
-      if(!rijen.length)return null;
-      function nieuwste(tags){
-        var beste=null;
-        rijen.forEach(function(r){
-          if(tags.indexOf(r.tag)===-1)return;
-          if(r.fiscal_period&&r.fiscal_period!=="FY")return;   // alleen jaarcijfers
-          if(r.val==null)return;
-          var d=r.period_end?new Date(r.period_end).getTime():0;
-          if(!beste||d>beste.d)beste={val:+r.val,d:d,jaar:r.fiscal_year};
-        });
-        return beste;
-      }
-      var omzet=nieuwste(FIN_TAGS.omzet),
-          winst=nieuwste(FIN_TAGS.nettowinst),
-          ev=nieuwste(FIN_TAGS.eigenVermogen);
-      return {
-        omzet: omzet?omzet.val:null,
-        nettowinst: winst?winst.val:null,
-        eigenVermogen: ev?ev.val:null,
-        jaar: winst?winst.jaar:(omzet?omzet.jaar:null)
-      };
-    }).catch(function(){return null;});
-}
-// leidt P/E, P/B en marge af uit de absolute cijfers plus de marktwaarde
-function ratiosUitFinancials(mcap,fin){
-  if(!fin||mcap==null)return {};
-  var uit={};
-  if(fin.nettowinst!=null&&fin.nettowinst>0) uit.pe=+(mcap/fin.nettowinst).toFixed(1);
-  if(fin.eigenVermogen!=null&&fin.eigenVermogen>0) uit.pb=+(mcap/fin.eigenVermogen).toFixed(1);
-  if(fin.nettowinst!=null&&fin.omzet!=null&&fin.omzet>0) uit.margin=+((fin.nettowinst/fin.omzet)*100).toFixed(1);
-  return uit;
-}
 
 function enrichEulerpool(symbol,token){
   // een ISIN kan direct gebruikt worden; een ticker moet eerst omgezet worden
@@ -3873,7 +3853,6 @@ var PORTFOLIO=[]; // actieve portefeuille; blijft de werkvariabele voor alle bes
 var PORTFOLIOS={"eigen":{naam:"Mijn portefeuille",posities:[]}};
 var ACTIEVE_PF="eigen";
 
-function pfLijst(){ return (PORTFOLIOS[ACTIEVE_PF]||{}).posities||[]; }
 function pfSync(){ if(PORTFOLIOS[ACTIEVE_PF])PORTFOLIOS[ACTIEVE_PF].posities=PORTFOLIO; }
 function pfWissel(id){
   pfSync();                       // huidige wijzigingen bewaren
@@ -4002,6 +3981,16 @@ window.pfHernoemPrompt=pfHernoemPrompt; window.pfVerwijderPrompt=pfVerwijderProm
 
 function pfStat(msg,err){var s=$('pfStatus');s.className=err?"status err":"status";s.textContent=msg;}
 
+// Eén aanroep na elke wijziging aan de portefeuille: lokaal bewaren, naar de cloud
+// schrijven en de weergave verversen. Voorheen stonden die drie los verspreid over
+// negen plekken, waardoor er telkens één vergeten werd bij een aanpassing.
+function pfGewijzigd(melding){
+  savePortfolioLocal();
+  savePortfolioCloud();
+  renderPortfolio();
+  if(melding)pfStat(melding);
+}
+
 function savePortfolioLocal(){
   try{ LS.set('portfolio',JSON.stringify(PORTFOLIO)); }catch(e){}
   savePortfoliosLocal();   // ook de meervoudige structuur bijwerken
@@ -4077,8 +4066,7 @@ $('pfAdd').onclick=function(){
 
 function removePosition(id){
   PORTFOLIO=PORTFOLIO.filter(function(p){return p.id!==id;});
-  savePortfolioLocal();savePortfolioCloud();
-  renderPortfolio();
+  pfGewijzigd();
 }
 window.removePosition=removePosition;
 
@@ -4091,13 +4079,6 @@ window.removePosition=removePosition;
 var ETF_KNOWN={};    // tickers waarvan SecuritiesDB bevestigt dat het een fonds is
 var ETF_NOT_FUND={}; // tickers waarvan we weten dat het géén fonds is (voorkomt herhaalde pogingen)
 var ETF_HINT=/^(SPY|VOO|IVV|VTI|QQQ|QQQM|VXUS|VEA|VWO|IWM|SCHD|VYM|ARKK|XL[KFEVYIPBU]|BND|AGG|VNQ|GLD|SLV|IEFA|IEMG|EEM|ITOT|SCHB|SCHF|SCHZ|VB|IJR|DVY|SPLG|IXUS)$/i;
-function looksLikeEtf(symbol,d){
-  if(ETF_KNOWN[symbol])return true;
-  if(ETF_HINT.test(symbol))return true;
-  // heuristiek: fondsen hebben geen winstgevendheidscijfers maar wel een koers
-  if(d && d.price!=null && d.roe==null && d.margin==null && d.epsG==null && d.pe==null) return true;
-  return false;
-}
 // beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
 function etfPortfolioScore(e){
   if(!e)return null;
@@ -4184,28 +4165,80 @@ function researchLinkFor(symbol){
 }
 
 function classifyAlarm(pos,fresh){
-  // eigen drempel heeft voorrang: die heb jij bewust ingesteld
+  // Elk signaal krijgt drie onderdelen: wát er veranderde, waaróm dat telt, en wat je
+  // kunt doen. Zonder die duiding is een alarm alleen een kleur zonder betekenis.
+  function sig(niveau,kort,wat,waarom,actie){
+    return {level:niveau, text:kort, wat:wat, waarom:waarom, actie:actie};
+  }
+
   if(pos.alertBelow!=null && fresh && fresh.score!=null && fresh.score<pos.alertBelow){
-    return {level:"red",
-      text:"Score "+fresh.score+" is onder jouw ingestelde grens van "+pos.alertBelow+
-           " \u2014 tijd om deze positie opnieuw te bekijken."};
+    return sig("red",
+      "Score "+fresh.score+" onder jouw grens van "+pos.alertBelow,
+      "Je stelde zelf in dat je gewaarschuwd wilde worden onder "+pos.alertBelow+
+        "; de score staat nu op "+fresh.score+".",
+      "Deze grens komt van jou, niet van het model \u2014 hij weerspiegelt jouw eigen oordeel over wanneer heroverweging nodig is.",
+      "Bekijk waarom je die grens koos en of de reden voor je aankoop nog geldt.");
   }
-  // bij alleen-koersdata is een score-vergelijking betekenisloos -> geen vals alarm
   if(fresh&&fresh.completeness&&fresh.completeness.level==="price-only"){
-    return {level:"green",text:"Alleen koersdata beschikbaar \u2014 geen fundamentele vergelijking mogelijk via je huidige bronnen."};
+    return sig("green",
+      "Alleen koersdata beschikbaar",
+      "Van dit aandeel komen wel koersen binnen, maar geen fundamentele cijfers.",
+      "Zonder winst-, groei- en kwaliteitsgegevens valt er niets zinvols te vergelijken; een score zou schijnzekerheid geven.",
+      "Controleer je sleutels bij Instellingen, of zoek de cijfers handmatig op via de info-link.");
   }
-  if(!pos.baseline) return {level:"green",text:"Eerste keer gecheckt \u2014 dit wordt de basislijn voor toekomstige vergelijkingen."};
-  var b=pos.baseline;
-  var scoreDrop=b.score-fresh.score;
-  var reasons=[];
-  var level="green";
-  if(fresh.trapLevel===2 && b.trapLevel!==2){level="red";reasons.push("nieuwe val-trap waarschuwing (goedkoop ogend maar fundamenteel verzwakt)");}
-  if(fresh.quality!=null && b.quality!=null && (b.quality-fresh.quality)>=20){level="red";reasons.push("kwaliteitsscore fors gedaald ("+b.quality+" \u2192 "+fresh.quality+")");}
-  if(scoreDrop>=25){level="red";reasons.push("totaalscore sterk gedaald ("+b.score+" \u2192 "+fresh.score+")");}
-  else if(scoreDrop>=12 && level!=="red"){level="orange";reasons.push("totaalscore merkbaar gedaald ("+b.score+" \u2192 "+fresh.score+")");}
-  if(fresh.trapLevel===1 && b.trapLevel===0 && level==="green"){level="orange";reasons.push("nieuw 'let op'-signaal opgedoken");}
-  if(level==="green")reasons.push("geen wezenlijke verandering sinds de laatste check ("+b.score+" \u2192 "+fresh.score+")");
-  return {level:level, text:reasons.join(" \u00b7 ")};
+  if(!pos.baseline){
+    return sig("green",
+      "Eerste meting vastgelegd",
+      "Dit is de eerste keer dat deze positie gecheckt is; score "+(fresh.score!=null?fresh.score:"onbekend")+" wordt de basislijn.",
+      "Alarmen ontstaan door vergelijking met een eerder moment \u2014 dat moment is er nu.",
+      "Kom over enkele weken terug; dan kan de tool veranderingen signaleren.");
+  }
+
+  var b=pos.baseline, scoreDrop=b.score-fresh.score;
+  var kort=[], wat=[], waarom=[], actie=[], level="green";
+
+  if(fresh.trapLevel===2 && b.trapLevel!==2){
+    level="red";
+    kort.push("nieuwe val-trap");
+    wat.push("De val-trap-indicator sprong naar rood.");
+    waarom.push("Het aandeel oogt goedkoop terwijl de onderliggende cijfers verzwakken \u2014 klassiek patroon van een waardeval: de prijs daalt omdat het bedrijf daadwerkelijk minder waard wordt, niet omdat de markt zich vergist.");
+    actie.push("Kijk naar de winst- en omzetontwikkeling: is de daling tijdelijk of structureel?");
+  }
+  if(fresh.quality!=null && b.quality!=null && (b.quality-fresh.quality)>=20){
+    level="red";
+    kort.push("kwaliteit fors gedaald ("+b.quality+"\u2192"+fresh.quality+")");
+    wat.push("De kwaliteitsscore zakte van "+b.quality+" naar "+fresh.quality+".");
+    waarom.push("Kwaliteit is de best onderbouwde factor voor langetermijnrendement: winstgevendheid, marges en schuldgraad samen. Een scherpe daling wijst op iets fundamenteels, niet op marktsentiment.");
+    actie.push("Zoek op wat er veranderde: een tegenvallend kwartaal, een overname, of oplopende schulden?");
+  }
+  if(scoreDrop>=25){
+    level="red";
+    kort.push("totaalscore sterk gedaald ("+b.score+"\u2192"+fresh.score+")");
+    wat.push("De totaalscore daalde "+scoreDrop.toFixed(0)+" punten sinds de vorige meting.");
+    waarom.push("Een daling van deze omvang komt zelden door \u00e9\u00e9n factor; meestal verslechteren waardering en fundamenten tegelijk.");
+    actie.push("Vergelijk de vier deelscores met de vorige meting om te zien welke pijler wegviel.");
+  } else if(scoreDrop>=12 && level!=="red"){
+    level="orange";
+    kort.push("score merkbaar gedaald ("+b.score+"\u2192"+fresh.score+")");
+    wat.push("De totaalscore zakte "+scoreDrop.toFixed(0)+" punten.");
+    waarom.push("Dat kan een normale koersbeweging zijn \u2014 een stijgende koers maakt een aandeel duurder en verlaagt de waarderingsscore \u2014 of het begin van iets fundamentelers.");
+    actie.push("Geen directe actie nodig; let erop of de daling doorzet bij de volgende check.");
+  }
+  if(fresh.trapLevel===1 && b.trapLevel===0 && level==="green"){
+    level="orange";
+    kort.push("nieuw 'let op'-signaal");
+    wat.push("Er dook \u00e9\u00e9n tegenstrijdig signaal op tussen prijs en fundamenten.");
+    waarom.push("Nog geen val-trap, maar de cijfers wijzen niet meer dezelfde kant op.");
+    actie.push("Houd de volgende meting in de gaten.");
+  }
+  if(level==="green"){
+    return sig("green",
+      "stabiel ("+b.score+"\u2192"+fresh.score+")",
+      "Geen wezenlijke verandering sinds de laatste meting.",
+      "De score beweegt binnen normale marges; dat is wat je wilt zien bij een positie die je aanhoudt.",
+      "Geen actie nodig.");
+  }
+  return sig(level, kort.join(" \u00b7 "), wat.join(" "), waarom.join(" "), actie.join(" "));
 }
 
 function updateSourceBar(){
@@ -4241,6 +4274,35 @@ function renderPortfolio(){
   var incomplete=checked.filter(function(p){return p._fresh.completeness&&p._fresh.completeness.level!=="full";}).length;
 
   function kpi(lbl,val,sub,cls){return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';}
+  // Wat vraagt vandaag je aandacht? Dat is nuttiger bovenaan dan een reeks losse cijfers.
+  var aandacht=[];
+  PORTFOLIO.forEach(function(p){
+    if(p.alertBelow!=null&&p._fresh&&p._fresh.score!=null&&p._fresh.score<p.alertBelow)
+      aandacht.push({s:NAAM.toon(p,22),r:"onder je grens van "+p.alertBelow,ernst:2});
+    else if(p._alarm&&p._alarm.level==="red")
+      aandacht.push({s:NAAM.toon(p,22),r:p._alarm.text.slice(0,60),ernst:2});
+    else if(p._alarm&&p._alarm.level==="orange")
+      aandacht.push({s:NAAM.toon(p,22),r:p._alarm.text.slice(0,60),ernst:1});
+  });
+  aandacht.sort(function(a,b){return b.ernst-a.ernst;});
+  // aandachtsregel boven de cijfers
+  var aw=document.getElementById('aandachtWrap');
+  if(aw){
+    if(aandacht.length){
+      var top=aandacht.slice(0,3);
+      aw.innerHTML='<div class="snap" style="border-left:3px solid '+
+        (aandacht[0].ernst===2?"var(--red)":"var(--accent)")+';font-size:12.5px">'+
+        '<b>Vraagt aandacht ('+aandacht.length+')</b>'+
+        '<ul style="margin:6px 0 0 16px;padding:0">'+
+        top.map(function(a){return '<li style="margin:2px 0"><b>'+a.s+'</b> \u2014 '+a.r+'</li>';}).join("")+
+        '</ul>'+(aandacht.length>3?'<div style="opacity:.7;margin-top:4px">\u2026 en '+(aandacht.length-3)+' meer</div>':'')+
+        '</div>';
+    } else if(PORTFOLIO.some(function(p){return p._fresh;})){
+      aw.innerHTML='<div class="snap" style="border-left:3px solid var(--green);font-size:12.5px">'+
+        '\u2713 Geen signalen \u2014 alle gecheckte posities zitten binnen hun grenzen.</div>';
+    } else aw.innerHTML="";
+  }
+
   $('pfDashboard').innerHTML=
     (function(){
       var etfCount=PORTFOLIO.filter(function(p){return p._fresh&&p._fresh.isEtf;}).length;
@@ -4302,8 +4364,9 @@ function renderPortfolio(){
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
       '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
       (function(){
-        var n=(typeof NAAM_BIJ_ISIN!=="undefined")?(NAAM_BIJ_ISIN[p.isin]||null):null;
-        return (n&&n!==p.symbol)?'<span style="color:var(--muted);font-size:12px;margin-left:8px">'+n+'</span>':'';
+        var n=NAAM.vol(p);
+        return (n&&n!==p.symbol)?'<span style="color:var(--muted);font-size:12px;margin-left:8px">'+
+               NAAM.toon(p)+'</span>':'';
       })()+linkMenu(p._fresh?Object.assign({symbol:p.symbol,isin:p.isin},p._fresh.etf||{}):{symbol:p.symbol,isin:p.isin})+
       (p._fresh
         ? (p._fresh.completeness && p._fresh.completeness.level==="price-only"
@@ -4329,7 +4392,8 @@ function renderPortfolio(){
             (p.alertBelow!=null?('\ud83d\udd14 alarm &lt; '+p.alertBelow):'+ alarmgrens')+'</span></div>';
       })()+
       (p._fresh&&p._fresh.isEtf
-        ? '<div class="pf-scores"><span style="color:var(--blue)">\ud83d\udcca Fonds</span>'+
+        ? '<div class="pf-scores" style="border-left:2px solid var(--blue);padding-left:8px">'+
+          '<span style="color:var(--blue);font-weight:600">FONDS</span>'+
           '<span>Kosten <b>'+(p._fresh.etf.ter!=null?p._fresh.etf.ter+'%':'\u2014')+'</b></span>'+
           '<span>Posities <b>'+(p._fresh.etf.holdings!=null?p._fresh.etf.holdings.toLocaleString():'\u2014')+'</b></span>'+
           '<span>Top 10 <b>'+(p._fresh.etf.top10!=null?p._fresh.etf.top10+'%':'\u2014')+'</b></span>'+
@@ -4369,7 +4433,16 @@ function renderPortfolio(){
       (p._fresh&&p._fresh.holdingSuggestion?'<div class="pf-alarm-text orange">\ud83c\udfe6 Dit cijferpatroon lijkt op een holding ('+p._fresh.holdingSuggestion.reasons.join(", ")+
         '). <span style="text-decoration:underline;cursor:pointer" onclick="confirmHoldingSuggestion(\''+p.symbol+'\')">Als holding scoren?</span></div>':'')+
       (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
-        (p._alarm.level==="red"?"\ud83d\udd34 ":p._alarm.level==="orange"?"\ud83d\udfe0 ":"\ud83d\udfe2 ")+p._alarm.text+'</div>':'')+
+        (p._alarm.level==="red"?"\ud83d\udd34 ":p._alarm.level==="orange"?"\ud83d\udfe0 ":"\ud83d\udfe2 ")+p._alarm.text+
+        ((p._alarm.wat||p._alarm.waarom)?
+          '<details style="margin-top:5px;background:none;border:none;padding:0">'+
+          '<summary style="font-size:11px;opacity:.75;padding:0;font-weight:400;cursor:pointer">waarom dit signaal?</summary>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.6">'+
+            (p._alarm.wat?'<b style="color:var(--ink)">Wat er veranderde:</b> '+p._alarm.wat+'<br>':'')+
+            (p._alarm.waarom?'<b style="color:var(--ink)">Waarom dat telt:</b> '+p._alarm.waarom+'<br>':'')+
+            (p._alarm.actie?'<b style="color:var(--ink)">Wat je kunt doen:</b> '+p._alarm.actie:'')+
+          '</div></details>':'')+
+        '</div>':'')+
     '</div>';
   }).join("");
   renderOverlap();
@@ -4677,7 +4750,7 @@ function spreidingsAnalyse(){
   var totaal=met.reduce(function(s,p){return s+positieWaarde(p);},0);
   if(!totaal)return null;
   var gewichten=met.map(function(p){
-    return {symbol:p.symbol, naam:(typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[p.isin])||p.naam||p.symbol,
+    return {symbol:p.symbol, naam:NAAM.toon(p,20),
             w:positieWaarde(p)/totaal, sector:(p._fresh&&p._fresh.sector)||"Onbekend",
             isEtf:!!(p._fresh&&p._fresh.isEtf), markt:(p.isin?p.isin.slice(0,2):null)};
   }).sort(function(a,b){return b.w-a.w;});
@@ -4743,15 +4816,18 @@ function renderPortfolioTabel(lijst){
     var k=positieKoers(p), waarde=positieWaarde(p), r=positieRendement(p);
     var pl=r?r.v:null;
     var koersBron=(k&&k.bron)||null;
-    // volgorde: naam uit de broker-import, dan de opgezochte naam, dan de vaste tabel
-    var naam=p.naam||((typeof naamVoor==="function")?naamVoor(d):null);
+    var naam=NAAM.toon(Object.assign({},d,{naam:p.naam,isin:p.isin}));
     var sc=f.isEtf?f.score:totalScore(d);
     var m=f.isEtf?null:momentumScore(d), v=f.isEtf?null:valuationScore(d),
         g=f.isEtf?null:growthScore(d), q=f.isEtf?null:qualityScore(d);
     var cel=function(x){return '<td class="num">'+(x==null?"\u2014":x)+'</td>';};
-    return '<tr'+(p._alarm&&p._alarm.level==="red"?' style="background:rgba(224,99,95,.06)"':'')+'>'+
-      '<td class="l"><span class="tk">'+(naam||p.symbol)+'</span>'+
-        (f.isEtf?'<span class="trap" style="margin-left:6px">fonds</span>':'')+
+    var rijStijl=p._alarm&&p._alarm.level==="red" ? ' style="background:rgba(224,99,95,.06)"'
+               : (f.isEtf ? ' style="background:rgba(90,150,220,.05)"' : '');
+    return '<tr'+rijStijl+'>'+
+      '<td class="l">'+
+        (f.isEtf?'<span style="color:var(--blue);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">FONDS</span>'
+                :'<span style="color:var(--muted);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">AANDEEL</span>')+
+        '<span class="tk">'+(naam||p.symbol)+'</span>'+
         '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span></td>'+
       '<td class="l" style="font-size:11px;color:var(--muted)">'+(f.sector||"\u2014")+'</td>'+
       '<td class="num"'+(koersBron?' title="Koers via '+koersBron+'" style="cursor:help"':'')+'>'+
@@ -5147,7 +5223,7 @@ if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
           toegevoegd++;
         }
       });
-      savePortfolioLocal(); savePortfolioCloud(); renderPortfolio();
+      pfGewijzigd();
       var pfNaam=(typeof PORTFOLIOS!=="undefined"&&PORTFOLIOS[ACTIEVE_PF])?PORTFOLIOS[ACTIEVE_PF].naam:"je portefeuille";
       pfStat("Bolero-import in \u201c"+pfNaam+"\u201d: "+toegevoegd+" nieuw"+
         (bijgewerkt?", "+bijgewerkt+" bijgewerkt":"")+
@@ -5494,7 +5570,7 @@ function editNote(id){
   if(v===null)return; // geannuleerd
   v=v.trim();
   if(v) pos.note=v.slice(0,200); else delete pos.note;
-  savePortfolioLocal(); savePortfolioCloud(); renderPortfolio();
+  pfGewijzigd();
   pfStat(v?("Notitie bewaard bij "+pos.symbol+"."):("Notitie verwijderd bij "+pos.symbol+"."));
 }
 window.editNote=editNote;
@@ -5514,7 +5590,7 @@ function editThreshold(id){
     if(isNaN(n)||n<0||n>100){ pfStat("Geef een getal tussen 0 en 100.",true); return; }
     pos.alertBelow=n;
   }
-  savePortfolioLocal(); savePortfolioCloud(); renderPortfolio();
+  pfGewijzigd();
   pfStat(pos.alertBelow!=null?("Waarschuwing ingesteld voor "+pos.symbol+" onder score "+pos.alertBelow+"."):("Waarschuwing uitgezet voor "+pos.symbol+"."));
 }
 window.editThreshold=editThreshold;
