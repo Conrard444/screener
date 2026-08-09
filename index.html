@@ -391,7 +391,7 @@ var BRON={
 
   <div class="tabs">
     <button class="tab active" data-tab="portfolio">Portefeuille</button>
-    <button class="tab" data-tab="screener">Screener</button>
+    <button class="tab" data-tab="screener">Aandelen</button>
     <button class="tab" data-tab="etf">ETF's</button>
     <button class="tab" data-tab="tracking">Tracking</button>
     <button class="tab" data-tab="settings">Instellingen</button>
@@ -472,6 +472,8 @@ var BRON={
       <span class="wlabel inline-lbl">Waardering <b id="wv-v">25</b>%</span><input type="range" id="wv" min="0" max="100" value="25">
       <span class="wlabel inline-lbl">Groei <b id="wg-v">15</b>%</span><input type="range" id="wg" min="0" max="100" value="15">
       <span class="wlabel inline-lbl">Kwaliteit <b id="wq-v">30</b>%</span><input type="range" id="wq" min="0" max="100" value="30">
+      <button class="btn-ghost" id="wReset" title="Zet de weging terug op de standaardverdeling (30/25/15/30)"
+        style="height:26px;padding:0 10px;font-size:11px;margin-left:6px">herstel</button>
     </div>
   </div>
 
@@ -574,6 +576,8 @@ var BRON={
         <span class="wlabel inline-lbl">Spreiding <b id="ewd-v">25</b>%</span><input type="range" id="ewd" min="0" max="100" value="25">
         <span class="wlabel inline-lbl">Liquiditeit <b id="ewl-v">20</b>%</span><input type="range" id="ewl" min="0" max="100" value="20">
         <span class="wlabel inline-lbl">Track record <b id="ewt-v">15</b>%</span><input type="range" id="ewt" min="0" max="100" value="15">
+        <button class="btn-ghost" id="ewReset" title="Zet de weging terug op de standaardverdeling (40/25/20/15)"
+          style="height:26px;padding:0 10px;font-size:11px;margin-left:6px">herstel</button>
       </div>
     </div>
 
@@ -3992,8 +3996,11 @@ function pfGewijzigd(melding){
 }
 
 function savePortfolioLocal(){
+  // pfSync eerst: bij verwijderen wordt PORTFOLIO vervangen door een nieuwe array,
+  // waardoor PORTFOLIOS nog naar de oude wees en de wijziging verloren ging.
+  if(typeof pfSync==="function")pfSync();
   try{ LS.set('portfolio',JSON.stringify(PORTFOLIO)); }catch(e){}
-  savePortfoliosLocal();   // ook de meervoudige structuur bijwerken
+  savePortfoliosLocal();
 }
 function loadPortfolioLocal(){
   // eerst de meervoudige structuur; is die er niet, dan de oude enkele lijst overnemen
@@ -4065,7 +4072,9 @@ $('pfAdd').onclick=function(){
 };
 
 function removePosition(id){
-  PORTFOLIO=PORTFOLIO.filter(function(p){return p.id!==id;});
+  // ter plekke verwijderen (splice) in plaats van de array vervangen: zo blijft de
+  // verwijzing vanuit PORTFOLIOS geldig en gaat de wijziging niet verloren
+  for(var i=PORTFOLIO.length-1;i>=0;i--){ if(PORTFOLIO[i].id===id)PORTFOLIO.splice(i,1); }
   pfGewijzigd();
 }
 window.removePosition=removePosition;
@@ -4457,6 +4466,33 @@ if($('exchange'))$('exchange').addEventListener('change',function(){
   else if($('status').className.indexOf("err")>-1){ $('status').className="status"; $('status').textContent=""; }
 });
 if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
+
+// Weging terugzetten op de standaard. Op een aanraakscherm verschuift een regelaar
+// makkelijk per ongeluk; zonder herstelknop is de oorspronkelijke verdeling lastig terug
+// te vinden.
+var WEGING_STANDAARD={wm:30,wv:25,wg:15,wq:30};
+var ETF_WEGING_STANDAARD={ewc:40,ewd:25,ewl:20,ewt:15};
+if($('ewReset'))$('ewReset').onclick=function(){
+  Object.keys(ETF_WEGING_STANDAARD).forEach(function(k){
+    var el=$(k); if(el)el.value=ETF_WEGING_STANDAARD[k];
+    var lbl=$(k+'-v'); if(lbl)lbl.textContent=ETF_WEGING_STANDAARD[k];
+  });
+  if(typeof syncEtfWeightUI==="function")syncEtfWeightUI();
+  if(typeof ETF_CURRENT!=="undefined"&&ETF_CURRENT.length)renderEtf();
+  $('etfStatus').className="status";
+  $('etfStatus').textContent="Weging teruggezet op de standaard (kosten 40, spreiding 25, liquiditeit 20, track record 15).";
+};
+
+if($('wReset'))$('wReset').onclick=function(){
+  Object.keys(WEGING_STANDAARD).forEach(function(k){
+    var el=$(k); if(el)el.value=WEGING_STANDAARD[k];
+    var lbl=$(k+'-v'); if(lbl)lbl.textContent=WEGING_STANDAARD[k];
+  });
+  if(typeof syncWeightUI==="function")syncWeightUI();
+  if(CURRENT&&CURRENT.length)render();
+  $('status').className="status";
+  $('status').textContent="Weging teruggezet op de standaard (momentum 30, waardering 25, groei 15, kwaliteit 30).";
+};
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
 if($('pfWeergave'))$('pfWeergave').onchange=renderPortfolio;
 if($('pfFilter'))$('pfFilter').onchange=renderPortfolio;
