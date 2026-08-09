@@ -386,7 +386,10 @@ var BRON={
 <div class="wrap">
   <header>
     <h1>Kompas <span class="x">/</span> <span style="font-size:15px;font-weight:400;font-family:'IBM Plex Sans';color:var(--muted);letter-spacing:0">portefeuille &amp; marktanalyse</span></h1>
-    <div class="disclaimer">&#9888;&#65039; Analyse-instrument, geen financieel advies. Een hoge score is een startpunt voor eigen onderzoek, geen koopsignaal &mdash; de markt heeft diezelfde cijfers al gezien.</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">
+      Analyse-instrument, geen financieel advies &mdash;
+      <span style="cursor:pointer;text-decoration:underline" onclick="document.querySelector('[data-tab=uitleg]').click()">lees de uitleg</span>
+    </div>
   </header>
 
   <div class="tabs">
@@ -395,6 +398,7 @@ var BRON={
     <button class="tab" data-tab="etf">ETF's</button>
     <button class="tab" data-tab="tracking">Tracking</button>
     <button class="tab" data-tab="settings">Instellingen</button>
+    <button class="tab" data-tab="uitleg">Uitleg</button>
   </div>
 
   <div class="tabpane" id="tab-screener">
@@ -522,24 +526,11 @@ var BRON={
     <b>Belangrijk:</b> ook gedocumenteerde factoren zijn historische gemiddelden met lange periodes van tegenwind &mdash; geen voorspelling. De score rangschikt aandelen op publieke cijfers die de markt al kent; het blijft een onderzoeksfilter, geen koopsignaal.
   </p>
 
-  <details>
-    <summary>&#128273; Databronnen, gratis sleutels &amp; eerlijke grenzen</summary>
-    <p>Kies bovenaan je databron, plak je sleutel en klik "Bewaar sleutel" &mdash; de sleutel blijft dan in deze browser bewaard (per bron apart). Daarna "Screen het universum".</p>
-    <p><b>Finnhub</b> (aanrader voor gratis): <code>finnhub.io</code> &mdash; ruime gratis tier (60 calls/min), 2 calls per aandeel, goede dekking voor de <b>VS-markt</b>. Bij grote universa pauzeert de tool automatisch ~1 minuut zodra de snelheidslimiet nadert, en gaat dan door &mdash; zo kun je het volledige universum doorlopen (let op: laat het tabblad open; ~120 aandelen duurt zo'n 4 minuten). PEG wordt zelf berekend (P/E gedeeld door winstgroei) en momentum benaderd via de positie in de 52-weeks koersrange. Europese aandelen zijn op de gratis tier beperkt &mdash; gebruik daarvoor het VS-universum. Finnhub heeft ook een maandlimiet; een paar volledige runs per dag is prima.</p>
-    <p><b>Financial Modeling Prep</b>: <code>financialmodelingprep.com</code> &mdash; gratis tier beperkt de symbolen (veel aandelen geven "not available") en heeft een dag-limiet; de tool slaat geblokkeerde aandelen over.</p>
-    <p><b>EODHD</b>: <code>eodhd.com</code> &mdash; gratis tier geeft maar 20 calls/dag en fundamentals vereisen een betaald pakket; in de praktijk beperkt bruikbaar.</p>
-    <p><b>Grote universa &amp; vooranalyse:</b> bij universa groter dan 60 aandelen (S&amp;P 500, VS+EU alles) gebruikt de tool automatisch een twee-traps trechter: eerst een goedkope scan van het dagmomentum (1 call per aandeel), waarna alleen de top-kandidaten (3x je toonlimiet) de volledige vier-factor analyse krijgen. Zo screen je ~200 aandelen voor ~350 calls i.p.v. dat elke analyse op alles draait. Met Finnhub-throttling duurt de S&amp;P-run zo'n 6-7 minuten; laat het tabblad open. Let op: de vooranalyse selecteert op dagstijging, dus dalers vallen af v&oacute;&oacute;r de factoranalyse \u2014 het is een momentum-trechter, geen volledige rangschikking.</p>
-    <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
-    <p><b>China / Hongkong:</b> dekt grote namen via Amerikaanse ADR (bv. BABA, JD, PDD) of HK-notering (.HK) &mdash; <u>niet</u> de binnenlandse A-aandelenmarkt van Shanghai/Shenzhen, die achter gespecialiseerde databronnen zit. Namen met een <span class="trap warn" style="font-size:9px">VIE</span>-label gebruiken een Variable Interest Entity-structuur: je koopt dan een contractuele aanspraak op de winst, geen direct eigendom van het onderliggende bedrijf &mdash; een juridisch/politiek risico dat losstaat van de vier factoren en niet in de score verwerkt zit.</p>
-    <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
-  </details>
+  
   </div><!-- /tab-screener -->
 
   <div class="tabpane" id="tab-etf">
-    <details style="margin:16px 0 0">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
-      <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
-    </details>
+    
 
     <div class="control-panel">
       <div class="control-row">
@@ -609,19 +600,11 @@ var BRON={
       <b>Waarom deze factoren?</b> <b>Kosten</b> wegen het zwaarst (40%) omdat het de enige factor is die je vooraf met zekerheid kent en die rechtstreeks van je rendement afgaat &mdash; onderzoek naar fondsselectie wijst kosten consistent aan als de sterkste voorspeller van relatieve prestatie op lange termijn. <b>Spreiding</b> (aantal posities, concentratie in top-10) bepaalt hoe afhankelijk je bent van een klein aantal bedrijven. <b>Liquiditeit</b> (fondsomvang) is een risico-indicator: kleine fondsen sluiten vaker en hebben bredere spreads. <b>Track record</b> is bewust het lichtst gewogen &mdash; historisch rendement van een fonds zegt weinig over toekomstig rendement, dat volgt gewoon de onderliggende index.
     </p>
 
-    <details>
-      <summary>&#128273; Over ETF-data</summary>
-      <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
-      <p><b>Europese ETF's</b>: kies een van de &#127466;&#127482;-selecties in de lijst. Die zijn opgebouwd met ISIN's (bv. IE00B4L5Y983), het formaat waar Eulerpool het betrouwbaarst mee werkt. Ze lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
-    </details>
+    
   </div><!-- /tab-etf -->
 
   <div class="tabpane active" id="tab-portfolio">
-    <details style="margin:16px 0 0">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
-      <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
-      <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
-    </details>
+    
 
     <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;gap:6px">
       <span class="inline-lbl">Portefeuille</span>
@@ -636,18 +619,8 @@ var BRON={
         <div class="field"><label>Datum</label><input type="date" id="pfDate"></div>
         <button class="btn-go" id="pfAdd">+ Toevoegen</button>
         <button class="btn-ghost" id="pfCheck" style="margin-left:auto">Alles checken</button>
-        <details style="display:inline-block;position:relative">
-          <summary class="btn-ghost" style="list-style:none;display:inline-flex;align-items:center;
-            height:34px;padding:0 16px;border-radius:6px;font-size:12.5px;font-weight:600;
-            cursor:pointer;border:1px solid var(--line);color:var(--muted)">Importeren</summary>
-          <div style="position:absolute;top:100%;left:0;z-index:40;margin-top:4px;background:var(--panel-2);
-            border:1px solid var(--line);border-radius:8px;padding:6px;min-width:170px;
-            box-shadow:0 6px 20px rgba(0,0,0,.5)">
-            <button class="btn-ghost" id="pfImportBtn" style="width:100%;justify-content:flex-start;margin-bottom:4px">Saxo (CSV)</button>
-            <button class="btn-ghost" id="pfBoleroBtn" style="width:100%;justify-content:flex-start">Bolero (XLSX)</button>
-          </div>
-        </details>
-        <input type="file" id="pfBoleroFile" accept=".xlsx" style="display:none">
+        <button class="btn-ghost" id="pfImportBtn" title="Importeer een export van Saxo (CSV) of Bolero (XLSX) — het formaat wordt automatisch herkend">Importeren</button>
+        <input type="file" id="pfBoleroFile" accept=".csv,.xlsx" style="display:none">
         <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">Overlap meten</button>
         <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
       </div>
@@ -705,10 +678,7 @@ var BRON={
   </div><!-- /tab-portfolio -->
 
   <div class="tabpane" id="tab-tracking">
-    <details style="margin:16px 0 0">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe accuratesse gemeten wordt</summary>
-      <p class="sub" style="margin-top:8px">Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien. Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld, en zelfs dan blijft verleden geen garantie. Gebruik dit om te leren, niet om zekerheid te claimen.</p>
-    </details>
+    
 
     <div class="control-panel">
       <div class="control-row">
@@ -825,6 +795,102 @@ var BRON={
       Bij een blokkade of limiet schuift de tool automatisch door naar de volgende bron in de rij.
     </div>
   </div><!-- /tab-settings -->
+
+  <div class="tabpane" id="tab-uitleg">
+    <p class="sub" style="margin-top:18px">Achtergrond bij wat de tool doet en waar de grenzen liggen.
+    Deze uitleg stond eerder verspreid over de tabbladen.</p>
+
+    <div class="disclaimer" style="margin-bottom:16px">
+      &#9888;&#65039; <b>Analyse-instrument, geen financieel advies.</b> Een hoge score betekent dat een
+      aandeel aan je criteria voldoet &mdash; niet dat het gaat stijgen. De markt kent dezelfde cijfers.
+      Gebruik dit als startpunt voor eigen onderzoek, nooit als koopsignaal.
+    </div>
+
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">Portefeuille</summary>
+      <div style="padding:8px 0 0"><details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
+      <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
+      <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
+    </div>
+    </details>
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">Aandelen</summary>
+      <div style="padding:8px 0 0"><details>
+    <summary>&#128273; Databronnen, gratis sleutels &amp; eerlijke grenzen</summary>
+    <p>Kies bovenaan je databron, plak je sleutel en klik "Bewaar sleutel" &mdash; de sleutel blijft dan in deze browser bewaard (per bron apart). Daarna "Screen het universum".</p>
+    <p><b>Finnhub</b> (aanrader voor gratis): <code>finnhub.io</code> &mdash; ruime gratis tier (60 calls/min), 2 calls per aandeel, goede dekking voor de <b>VS-markt</b>. Bij grote universa pauzeert de tool automatisch ~1 minuut zodra de snelheidslimiet nadert, en gaat dan door &mdash; zo kun je het volledige universum doorlopen (let op: laat het tabblad open; ~120 aandelen duurt zo'n 4 minuten). PEG wordt zelf berekend (P/E gedeeld door winstgroei) en momentum benaderd via de positie in de 52-weeks koersrange. Europese aandelen zijn op de gratis tier beperkt &mdash; gebruik daarvoor het VS-universum. Finnhub heeft ook een maandlimiet; een paar volledige runs per dag is prima.</p>
+    <p><b>Financial Modeling Prep</b>: <code>financialmodelingprep.com</code> &mdash; gratis tier beperkt de symbolen (veel aandelen geven "not available") en heeft een dag-limiet; de tool slaat geblokkeerde aandelen over.</p>
+    <p><b>EODHD</b>: <code>eodhd.com</code> &mdash; gratis tier geeft maar 20 calls/dag en fundamentals vereisen een betaald pakket; in de praktijk beperkt bruikbaar.</p>
+    <p><b>Grote universa &amp; vooranalyse:</b> bij universa groter dan 60 aandelen (S&amp;P 500, VS+EU alles) gebruikt de tool automatisch een twee-traps trechter: eerst een goedkope scan van het dagmomentum (1 call per aandeel), waarna alleen de top-kandidaten (3x je toonlimiet) de volledige vier-factor analyse krijgen. Zo screen je ~200 aandelen voor ~350 calls i.p.v. dat elke analyse op alles draait. Met Finnhub-throttling duurt de S&amp;P-run zo'n 6-7 minuten; laat het tabblad open. Let op: de vooranalyse selecteert op dagstijging, dus dalers vallen af v&oacute;&oacute;r de factoranalyse \u2014 het is een momentum-trechter, geen volledige rangschikking.</p>
+    <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
+    <p><b>China / Hongkong:</b> dekt grote namen via Amerikaanse ADR (bv. BABA, JD, PDD) of HK-notering (.HK) &mdash; <u>niet</u> de binnenlandse A-aandelenmarkt van Shanghai/Shenzhen, die achter gespecialiseerde databronnen zit. Namen met een <span class="trap warn" style="font-size:9px">VIE</span>-label gebruiken een Variable Interest Entity-structuur: je koopt dan een contractuele aanspraak op de winst, geen direct eigendom van het onderliggende bedrijf &mdash; een juridisch/politiek risico dat losstaat van de vier factoren en niet in de score verwerkt zit.</p>
+    <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
+  </div>
+    </details>
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">ETF's</summary>
+      <div style="padding:8px 0 0"><details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
+      <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
+    </div>
+    </details>
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">ETF's</summary>
+      <div style="padding:8px 0 0"><details>
+      <summary>&#128273; Over ETF-data</summary>
+      <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
+      <p><b>Europese ETF's</b>: kies een van de &#127466;&#127482;-selecties in de lijst. Die zijn opgebouwd met ISIN's (bv. IE00B4L5Y983), het formaat waar Eulerpool het betrouwbaarst mee werkt. Ze lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
+    </div>
+    </details>
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">Tracking</summary>
+      <div style="padding:8px 0 0"><details style="margin:16px 0 0">
+      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe accuratesse gemeten wordt</summary>
+      <p class="sub" style="margin-top:8px">Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien. Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld, en zelfs dan blijft verleden geen garantie. Gebruik dit om te leren, niet om zekerheid te claimen.</p>
+    </div>
+    </details>
+
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">Waar de scores op rusten</summary>
+      <div style="padding:8px 0 0;font-size:13px;color:var(--muted);line-height:1.7">
+        De vier pijlers volgen de best gedocumenteerde aandelenfactoren: <b>momentum</b> (recente
+        winnaars presteren historisch vaker door), <b>waardering</b> (goedkoop t.o.v. fundamentals),
+        <b>kwaliteit</b> (winstgevendheid, marges, lage schulden) en <b>groei</b>.<br><br>
+        Groei is de zwakst onderbouwde van de vier: snelgroeiende bedrijven leveren historisch
+        g&eacute;&eacute;n premie, winstg&eacute;vende w&eacute;l. Daarom staat groei laag gewogen
+        en kwaliteit hoog.<br><br>
+        <b>Wat het model niet weet:</b> een lopend overnamebod, een rechtszaak, een bestuurswissel.
+        Sectoren met eigen logica &mdash; vastgoedfondsen, biotech zonder omzet &mdash; worden met
+        dezelfde meetlat gemeten. Holdings en banken krijgen wel een aangepaste behandeling.
+      </div>
+    </details>
+
+    <details style="margin-bottom:10px">
+      <summary style="font-weight:600">Databronnen en hun grenzen</summary>
+      <div style="padding:8px 0 0;font-size:13px;color:var(--muted);line-height:1.7">
+        <b>Amerikaanse aandelen:</b> SecuritiesDB (Piotroski F-Score, Altman Z, ROIC-WACC, DCF) uit
+        SEC-filings, plus Finnhub voor koersen.<br>
+        <b>Europese aandelen:</b> Eulerpool, op ISIN. Levert waardering, groei, ROIC en de
+        AAQS-kwaliteitsscore.<br>
+        <b>ETF's:</b> SecuritiesDB voor VS-fondsen, Eulerpool voor Europese (UCITS).<br><br>
+        Koersen van je broker hebben altijd voorrang op onze eigen bronnen: die zijn de werkelijke
+        waarde van jouw positie. Onze afgeleide koersen kunnen afwijken, zeker bij holdings.
+      </div>
+    </details>
+
+    <details>
+      <summary style="font-weight:600">Over de accuratesse-meting</summary>
+      <div style="padding:8px 0 0;font-size:13px;color:var(--muted);line-height:1.7">
+        Leg momentopnamen vast en de tool vergelijkt later de toenmalige scores met het werkelijke
+        koersverloop. Accuratesse over korte perioden zegt weinig &mdash; toeval domineert. Pas na
+        tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld.<br><br>
+        Blijkt daaruit dat de scores niet voorspellen? Dat is waardevolle informatie, geen
+        mislukking. Het behoedt je voor vertrouwen dat een net ogende score onterecht wekt.
+      </div>
+    </details>
+  </div><!-- /tab-uitleg -->
+
 </div>
 
 <footer style="max-width:1240px;margin:30px auto 0;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.7">
@@ -4853,9 +4919,19 @@ function renderPortfolioTabel(lijst){
     var pl=r?r.v:null;
     var koersBron=(k&&k.bron)||null;
     var naam=NAAM.toon(Object.assign({},d,{naam:p.naam,isin:p.isin}));
-    var sc=f.isEtf?f.score:totalScore(d);
-    var m=f.isEtf?null:momentumScore(d), v=f.isEtf?null:valuationScore(d),
-        g=f.isEtf?null:growthScore(d), q=f.isEtf?null:qualityScore(d);
+    // Gebruik de scores die bij de check zijn opgeslagen, precies zoals de kaartweergave.
+    // Alleen herrekenen wanneer er ruwe cijfers bewaard zijn én de weging is verschoven;
+    // zonder die data gaven de scorefuncties hun standaardwaarde 40 terug, waardoor de
+    // tabel afweek van de kaarten.
+    var heeftRuw=p._raw&&Object.keys(p._raw).length>3;
+    var sc,m,v,g,q;
+    if(f.isEtf){
+      sc=f.score; m=v=g=q=null;
+    }else if(heeftRuw){
+      sc=totalScore(d); m=momentumScore(d); v=valuationScore(d); g=growthScore(d); q=qualityScore(d);
+    }else{
+      sc=f.score; m=f.m; v=f.v; g=f.g; q=f.q;
+    }
     var cel=function(x){return '<td class="num">'+(x==null?"\u2014":x)+'</td>';};
     var rijStijl=p._alarm&&p._alarm.level==="red" ? ' style="background:rgba(224,99,95,.06)"'
                : (f.isEtf ? ' style="background:rgba(90,150,220,.05)"' : '');
@@ -4999,6 +5075,7 @@ function checkAllPositions(){
           // brokerkoers heeft altijd voorrang: dat is de werkelijke waarde van jouw positie
           if(pos.brokerPrice!=null)etfKoers=pos.brokerPrice;
           else if(etfKoers==null&&pos._fresh&&pos._fresh.price!=null)etfKoers=pos._fresh.price;
+          pos._raw=e;   // fondsgegevens bewaren, net als bij aandelen
           pos._fresh={isEtf:true, score:(sc&&sc.score!=null)?sc.score:null, etf:e, etfScores:sc,
             price:etfKoers,
             sector:"Fonds", src:(pos.brokerPrice!=null?(pos.brokerNaam||"broker"):"fondsdata"),
@@ -5228,12 +5305,19 @@ function importSaxoCsv(file){
   };
   reader.readAsText(file,'UTF-8');
 }
-$('pfImportBtn').onclick=function(){$('pfImportFile').click();};
+// Eén importknop voor beide formaten: het bestandstype bepaalt welke parser draait.
+// Twee losse knoppen achter een uitklapper bleken op mobiel lastig te bedienen.
+$('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
 
-if($('pfBoleroBtn'))$('pfBoleroBtn').onclick=function(){$('pfBoleroFile').click();};
 if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
   var f=e.target.files&&e.target.files[0];
   if(!f)return;
+  // CSV -> Saxo-route, XLSX -> Bolero-route
+  if(/\.csv$/i.test(f.name)){
+    importSaxoCsv(f);
+    e.target.value="";
+    return;
+  }
   pfStat("Bolero-bestand inlezen\u2026");
   var lezer=new FileReader();
   lezer.onload=function(ev){
