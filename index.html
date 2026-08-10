@@ -1966,6 +1966,122 @@ function externalLinks(d){
   return links;
 }
 // klein linkicoontje met uitklapbaar menu
+// ---- Detailpaneel per effect ----
+// Eén weergave van alle bekende gegevens plus onderzoeksmogelijkheden, gebruikt door zowel
+// de screener als de portefeuille. Voorheen stond die informatie verspreid over kolommen
+// en tooltips; hier staat alles bij elkaar, met je eigen aantekeningen erbij.
+var EFFECT_NOTITIES={};
+function notitiesLaden(){
+  LS.get('effectNotities').then(function(r){
+    if(r&&r.value){try{EFFECT_NOTITIES=JSON.parse(r.value)||{};}catch(e){}}
+  }).catch(function(){});
+}
+function notitieSleutel(d){ return (d&&(d.isin||d.symbol))||null; }
+function notitieBewaar(sleutel,tekst){
+  if(!sleutel)return;
+  if(tekst&&tekst.trim())EFFECT_NOTITIES[sleutel]={tekst:tekst.trim(),ts:Date.now()};
+  else delete EFFECT_NOTITIES[sleutel];
+  try{ LS.set('effectNotities',JSON.stringify(EFFECT_NOTITIES)); }catch(e){}
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid).set({effectNotities:EFFECT_NOTITIES},{merge:true}).catch(function(){});
+  }
+}
+
+// Zoekopdrachten voor AI-zoekmachines. Deze openen in een nieuw tabblad met een kant-en-klare
+// vraag; er is geen API-sleutel voor nodig en er gaat niets van je budget af.
+function aiZoekLinks(d){
+  var naam=NAAM.vol(d)||d.symbol;
+  var isin=d.isin?(" ISIN "+d.isin):"";
+  var vraag1="Wat doet "+naam+integer0(isin)+" precies? Beschrijf het bedrijfsmodel, de belangrijkste "+
+             "activiteiten en waar de omzet vandaan komt. Kort en feitelijk.";
+  var vraag2="Wat is het laatste nieuws over "+naam+integer0(isin)+"? Recente kwartaalcijfers, "+
+             "overnames, bestuurswissels of andere gebeurtenissen die de koers kunnen raken.";
+  var vraag3="Wat zijn de belangrijkste risico's en concurrentievoordelen van "+naam+integer0(isin)+"?";
+  function pplx(v){return "https://www.perplexity.ai/search?q="+encodeURIComponent(v);}
+  return [
+    {t:"Wat doet dit bedrijf?", u:pplx(vraag1), b:"Perplexity"},
+    {t:"Laatste nieuws", u:pplx(vraag2), b:"Perplexity"},
+    {t:"Risico's en voordelen", u:pplx(vraag3), b:"Perplexity"},
+    {t:"Zoek op Mistral", u:"https://chat.mistral.ai/chat?q="+encodeURIComponent(vraag1), b:"Mistral"}
+  ];
+}
+function integer0(s){return s||"";}   // hulpje: lege ISIN netjes weglaten
+
+function effectPaneel(d,posities){
+  if(!d)return "";
+  var sleutel=notitieSleutel(d);
+  var notitie=(sleutel&&EFFECT_NOTITIES[sleutel])||null;
+  var id="det_"+String(sleutel||d.symbol).replace(/[^A-Za-z0-9]/g,"_");
+
+  function rij(lbl,waarde,tip){
+    if(waarde==null||waarde==="")return "";
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0">'+
+      '<span style="color:var(--muted)"'+(tip?' title="'+tip+'"':'')+'>'+lbl+'</span>'+
+      '<span style="font-family:\'IBM Plex Mono\'">'+waarde+'</span></div>';
+  }
+  var pct=function(v){return v!=null?((v>0?"+":"")+v+"%"):null;};
+
+  var kolom1=
+    rij("Sector",d.sector)+
+    rij("ISIN",d.isin)+
+    rij("Koers",d.price!=null?d.price:null)+
+    rij("Marktwaarde",d._mcap!=null?("\u20ac"+(d._mcap/1e9).toFixed(1)+" mld"):null)+
+    rij("Opgehaald",d._opgehaald?archiefLeeftijd(d._opgehaald)+" geleden":null);
+  var kolom2=
+    rij("K/W",d.pe,"Koers gedeeld door winst per aandeel")+
+    rij("K/W genormaliseerd",d.peNorm,"Op basis van de gemiddelde winst over vijf jaar")+
+    rij("K/B",d.pb,"Koers gedeeld door boekwaarde")+
+    rij("Omzetgroei",pct(d.revG))+
+    rij("Winstgroei",pct(d.epsG));
+  var kolom3=
+    rij("ROIC / ROE",d.roe!=null?d.roe+"%":null,"Rendement op geïnvesteerd kapitaal")+
+    rij("Nettomarge",d.margin!=null?d.margin+"%":null)+
+    rij("Piotroski",d.piotroski!=null?d.piotroski+"/9":null,"Financiële kracht over negen criteria")+
+    rij("Altman Z",d.altmanZ,"Faillissementsrisico; onder 1,81 is de gevarenzone")+
+    rij("AAQS",d.aaqs!=null?d.aaqs+"/10":null,"Kwaliteitsscore over tien dimensies");
+
+  var links=aiZoekLinks(d).map(function(l){
+    return '<a href="'+l.u+'" target="_blank" rel="noopener" '+
+      'style="display:inline-block;margin:0 6px 6px 0;padding:5px 10px;border:1px solid var(--line);'+
+      'border-radius:6px;font-size:11.5px;color:var(--blue);text-decoration:none">'+
+      l.t+' <span style="opacity:.55">'+l.b+'</span></a>';
+  }).join("");
+
+  return '<details style="margin:0" id="'+id+'">'+
+    '<summary style="font-size:11px;color:var(--muted);padding:2px 0;cursor:pointer;font-weight:400">details</summary>'+
+    '<div style="padding:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;margin-top:6px">'+
+      '<div style="display:flex;gap:22px;flex-wrap:wrap;font-size:11.5px">'+
+        '<div style="flex:1;min-width:150px">'+kolom1+'</div>'+
+        '<div style="flex:1;min-width:150px">'+kolom2+'</div>'+
+        '<div style="flex:1;min-width:150px">'+kolom3+'</div>'+
+      '</div>'+
+      '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">Opzoeken met een AI-zoekmachine '+
+        '<span style="opacity:.7">(opent in een nieuw tabblad, kost geen API-budget)</span></div>'+
+        links+
+      '</div>'+
+      '<div style="margin-top:8px">'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Jouw beschrijving'+
+          (notitie?' <span style="opacity:.6">\u00b7 bijgewerkt '+new Date(notitie.ts).toLocaleDateString()+'</span>':'')+
+        '</div>'+
+        '<textarea id="notitie_'+id+'" placeholder="Plak hier wat het bedrijf doet, of noteer je eigen bevindingen\u2026" '+
+        'style="width:100%;min-height:56px;background:var(--panel);border:1px solid var(--line);'+
+        'color:var(--ink);border-radius:6px;padding:7px;font-size:12px;font-family:inherit;resize:vertical">'+
+        (notitie?notitie.tekst.replace(/</g,"&lt;"):"")+'</textarea>'+
+        '<button class="btn-ghost" style="margin-top:5px;height:28px;font-size:11px" '+
+        'onclick="bewaarEffectNotitie(\''+sleutel+'\',\''+id+'\')">Bewaren</button>'+
+      '</div>'+
+    '</div></details>';
+}
+function bewaarEffectNotitie(sleutel,id){
+  var ta=document.getElementById('notitie_'+id);
+  if(!ta)return;
+  notitieBewaar(sleutel,ta.value);
+  var knop=ta.nextElementSibling;
+  if(knop){knop.textContent="bewaard";setTimeout(function(){knop.textContent="Bewaren";},1400);}
+}
+window.bewaarEffectNotitie=bewaarEffectNotitie;
+
 function linkMenu(d){
   var ls=externalLinks(d);
   if(!ls.length)return "";
@@ -2019,7 +2135,8 @@ function render(){
       (function(){
         var toon=NAAM.toon(d), sub=NAAM.sub(d);
         return '<td class="l"><span class="tk">'+toon+'</span><span class="mkt '+d.market+'">'+d.market+'</span>'+
-               (sub?'<span style="display:block;font-size:9.5px;color:var(--muted);font-family:\'IBM Plex Mono\'">'+sub+'</span>':'');
+               (sub?'<span style="display:block;font-size:9.5px;color:var(--muted);font-family:\'IBM Plex Mono\'">'+sub+'</span>':'')+
+               effectPaneel(d);
       })()+
       (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
       linkMenu(d)+
@@ -5094,7 +5211,8 @@ function renderPortfolioTabel(lijst){
         (f.isEtf?'<span style="color:var(--blue);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">FONDS</span>'
                 :'<span style="color:var(--muted);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">AANDEEL</span>')+
         '<span class="tk">'+(naam||p.symbol)+'</span>'+
-        '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span></td>'+
+        '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span>'+
+        effectPaneel(Object.assign({},d,{naam:p.naam,isin:p.isin,_opgehaald:p._raw&&p._raw._opgehaald}))+'</td>'+
       '<td class="l" style="font-size:11px;color:var(--muted)">'+(f.sector||"\u2014")+'</td>'+
       '<td class="num"'+(koersBron?' title="Koers via '+koersBron+'" style="cursor:help"':'')+'>'+
         (k?k.v.toFixed(2):"\u2014")+(p.brokerPrice!=null?'<span style="font-size:8px;color:var(--muted)">\u00b7b</span>':'')+'</td>'+
@@ -6049,6 +6167,14 @@ function loadCloud(){
     // Meervoudige portefeuilles hebben voorrang: die bevatten de actieve keuze én alle
     // lijsten. Zonder deze tak overschreef de oude enkelvoudige sleutel de actieve
     // portefeuille, waardoor je na het wisselen de posities van de eerste terugzag.
+    if(data.effectNotities && typeof EFFECT_NOTITIES!=="undefined"){
+      // notities samenvoegen: de nieuwste versie per effect wint
+      Object.keys(data.effectNotities).forEach(function(k){
+        var cloud=data.effectNotities[k], lokaal=EFFECT_NOTITIES[k];
+        if(!lokaal||(cloud.ts||0)>(lokaal.ts||0))EFFECT_NOTITIES[k]=cloud;
+      });
+      try{ LS.set('effectNotities',JSON.stringify(EFFECT_NOTITIES)); }catch(e){}
+    }
     if(data.portfolios && data.portfolios.lijsten){
       var cloudLijsten=data.portfolios.lijsten;
       var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
@@ -6174,6 +6300,7 @@ if(typeof loadCallLog==="function")loadCallLog();
 if(typeof loadAliases==="function")loadAliases();
 if(typeof loadIsinCache==="function")loadIsinCache();
 if(typeof archiefLaden==="function")archiefLaden();
+if(typeof notitiesLaden==="function")notitiesLaden();
 setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate();},300);
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
 
