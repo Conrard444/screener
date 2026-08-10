@@ -18,6 +18,24 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+// ==========================================================================
+//  Kompas - portefeuille & marktanalyse
+//
+//  Opbouw van dit bestand (volgorde is bewust: elk blok gebruikt alleen wat
+//  erboven staat, zodat er geen "is not defined" kan ontstaan):
+//
+//   1. Bronopties en patronen        EULER_*, ISIN_RE
+//   2. Gegevenstabellen en toestand  SECTOR, NAAM_BIJ_ISIN, PORTFOLIO, ...
+//   3. Centrale modules              NAAM, VELD, BRON
+//   4. Scorefuncties                 momentum/waardering/groei/kwaliteit
+//   5. Databronnen                   enrichFinnhub, enrichEulerpool, ...
+//   6. Weergave                      render, renderPortfolio, renderEtf
+//   7. Koppelingen aan knoppen       onclick/onchange
+//
+//  Bij een wijziging: houd deze volgorde aan. Vier eerdere storingen kwamen
+//  doordat een variabele onder zijn gebruik terechtkwam.
+// ==========================================================================
+
 // ---- Toegangsscherm ----
 (function(){
   var CODE="screeno";
@@ -54,6 +72,85 @@ var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaq
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
+
+// ---- Gegevenstabellen en gedeelde toestand ----
+// Alles wat door meerdere modules gebruikt wordt staat hier, vóór elk gebruik. Voorheen
+// stonden deze verspreid, wat zeven defensieve typeof-checks nodig maakte en al viermaal
+// tot een lege tabel leidde.
+// ---- ISIN opzoeken via Finnhub /search: geeft ticker én bedrijfsnaam ----
+// Getest: /search?q=NL0012866412 -> BESI.AS + "BE Semiconductor Industries NV".
+// Werkt op de gratis tier. Resultaten worden permanent bewaard, dus dit kost één call
+// per nieuw aandeel - daarna nooit meer.
+var ISIN_CACHE={};
+
+// Bedrijfsnamen bij ISIN. Het metrics-endpoint geeft alleen een ticker, geen naam, dus
+// zonder deze tabel zie je "NL0012866412" of "BESI.AS" in plaats van iets herkenbaars.
+var NAAM_BIJ_ISIN={
+  // Nederland
+  "NL0010273215":"ASML","NL0012866412":"BE Semiconductor","NL0011821202":"ING Groep",
+  "NL0012969182":"Adyen","NL0000009538":"Philips","NL0000009165":"Heineken",
+  "NL0000395903":"Wolters Kluwer","NL0013654783":"Prosus","NL0010773842":"NN Group",
+  "NL0000289533":"HAL Trust","NL0000235190":"Airbus","NL0012059018":"Exor",
+  // België
+  "BE0003717312":"Sofina","BE0974293251":"AB InBev","BE0003565737":"KBC",
+  "BE0003739530":"UCB","BE0003764785":"Ackermans & van Haaren","BE0003604155":"Lotus Bakeries",
+  "BE0003797140":"Groupe Bruxelles Lambert",
+  // Frankrijk
+  "FR0000121014":"LVMH","FR0000120321":"L'Oréal","FR0000120578":"Sanofi",
+  "FR0000131104":"BNP Paribas","FR0000120271":"TotalEnergies","FR0000121972":"Schneider Electric",
+  "FR0000120073":"Air Liquide","FR0000052292":"Hermès","FR0000121667":"EssilorLuxottica",
+  "FR0000120628":"AXA","FR0000125486":"Vinci","FR0000120644":"Danone",
+  "FR0000121485":"Kering","FR0000121204":"Wendel","FR0011871128":"Tikehau Capital",
+  // Duitsland
+  "DE0007164600":"SAP","DE0007236101":"Siemens","DE0008404005":"Allianz",
+  "DE000BASF111":"BASF","DE000BAY0017":"Bayer","DE0005190003":"BMW",
+  "DE0007664039":"Volkswagen","DE0007100000":"Mercedes-Benz","DE000A1EWWW0":"Adidas",
+  "DE0008430026":"Munich Re","DE0006231004":"Infineon","DE0005557508":"Deutsche Telekom",
+  "DE0007037129":"RWE","DE0005552004":"DHL Group",
+  // Zwitserland
+  "CH0038863350":"Nestlé","CH0012005267":"Novartis","CH0012032048":"Roche",
+  "CH0244767585":"UBS","CH0011075394":"Zurich Insurance","CH0012221716":"ABB",
+  // Scandinavië
+  "DK0062498333":"Novo Nordisk","DK0010244508":"A.P. Møller-Mærsk","DK0060079531":"DSV",
+  "DK0010181759":"Carlsberg","DK0060448595":"Coloplast","DK0061539921":"Vestas",
+  "DK0060094928":"Ørsted","DK0060336014":"Novonesis","DK0060252690":"Genmab",
+  "SE0000115446":"Volvo","SE0000108656":"Ericsson","SE0017486889":"Atlas Copco",
+  "SE0015811963":"Investor AB","SE0000148884":"SEB","SE0000242455":"Swedbank",
+  "SE0000106270":"H&M","SE0000667891":"Sandvik","SE0009922164":"Essity",
+  "SE0012673267":"Evolution","SE0000163594":"Industrivärden","SE0000108847":"Lundbergs",
+  "NO0010096985":"Equinor","NO0010161896":"DNB Bank","NO0010063308":"Telenor",
+  "NO0005052605":"Norsk Hydro","NO0003054108":"Mowi",
+  "FI0009000681":"Nokia","FI0009013403":"Kone","FI4000552500":"Sampo",
+  "FI0009007132":"Fortum","FI0009013296":"Neste","FI0009005987":"UPM-Kymmene",
+  // Azië
+  "KYG875721634":"Tencent","KYG017191142":"Alibaba (HK)","KYG8208B1014":"Meituan",
+  "KYG596691041":"Xiaomi","KYG8586D1097":"JD.com (HK)","CNE1000003X6":"Ping An",
+  "CNE1000002H1":"China Construction Bank","CNE1000003G1":"ICBC","CNE1000001Z5":"Bank of China",
+  "HK0005000090":"HSBC","HK0388045442":"HKEX","KYG2103F1019":"BYD",
+  "CNE100000296":"CNOOC","CNE1000002Q2":"PetroChina","CNE1000003W8":"China Mobile",
+  "HK0016000132":"Sun Hung Kai","KYG3777B1032":"Geely","KYG210961051":"Country Garden Services",
+  "KYG9431P1037":"WuXi Biologics","KYG970081173":"Li Auto"
+};
+
+var ETF_HINT=/^(SPY|VOO|IVV|VTI|QQQ|QQQM|VXUS|VEA|VWO|IWM|SCHD|VYM|ARKK|XL[KFEVYIPBU]|BND|AGG|VNQ|GLD|SLV|IEFA|IEMG|EEM|ITOT|SCHB|SCHF|SCHZ|VB|IJR|DVY|SPLG|IXUS)$/i;
+
+// ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
+var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
+
+// FMP staat standaard uit (zie FMP_ENABLED). De code blijft bestaan als reserve:
+// zet FMP_ENABLED op true en maak #fmpRow zichtbaar om hem weer in te schakelen.
+var FMP_ENABLED=false;
+
+// ============ PORTEFEUILLE-TABBLAD ============
+var PORTFOLIO=[]; // actieve portefeuille; blijft de werkvariabele voor alle bestaande logica
+
+// ---- Meerdere portefeuilles ----
+// PORTFOLIO blijft de actieve lijst, zodat bestaande code ongewijzigd werkt. Deze laag
+// beheert welke lijst dat is en bewaart de andere apart.
+var PORTFOLIOS={"eigen":{naam:"Mijn portefeuille",posities:[]}};
+
+var ACTIEVE_PF="eigen";
+
 
 // ---- Centrale veldweergave ----
 // Eén definitie per gegeven: hoe het heet, hoe het getoond wordt en wat de uitleg is.
@@ -101,6 +198,77 @@ var VELD={
 // Eén plek die bepaalt hoe een symbool wordt opgehaald, welke bron dat is en wat het kost.
 // Voorheen was dit verspreid over currentSource(), sourceOrderFor() en losse checks in de
 // screener, waardoor een wijziging op de ene plek de andere niet bereikte.
+// ---- Archief van opgehaalde effecten ----
+// Elk effect dat ooit is opgehaald wordt hier bewaard, met de datum erbij. Zo kun je een
+// universum samenstellen uit alles wat je al kent - zonder API-calls - en scores over
+// verschillende universa heen vergelijken.
+var ARCHIEF={aandelen:{}, etfs:{}};
+
+function archiefSleutel(d){
+  return (d && (d.isin || d.queriedAs || d.symbol)) || null;
+}
+function archiefBewaar(soort,records){
+  if(!records)return;
+  var lijst=Array.isArray(records)?records:[records];
+  var nu=Date.now(), n=0;
+  lijst.forEach(function(d){
+    var k=archiefSleutel(d);
+    if(!k||d.price==null&&d.pe==null&&d.aaqs==null&&d.ter==null)return;
+    var kopie={}; 
+    Object.keys(d).forEach(function(f){ if(f.charAt(0)!=="_"||f==="_mcap"||f==="_src")kopie[f]=d[f]; });
+    kopie._opgehaald=nu;
+    ARCHIEF[soort][k]=kopie;
+    n++;
+  });
+  if(n)archiefOpslaan();
+  return n;
+}
+function archiefLijst(soort){
+  var uit=[];
+  Object.keys(ARCHIEF[soort]||{}).forEach(function(k){ uit.push(ARCHIEF[soort][k]); });
+  return uit;
+}
+function archiefOpslaan(){
+  try{
+    // ruim op bij overmaat: oudste eerst, zodat de opslaglimiet niet wordt geraakt
+    ["aandelen","etfs"].forEach(function(s){
+      var k=Object.keys(ARCHIEF[s]);
+      if(k.length>600){
+        k.sort(function(a,b){return (ARCHIEF[s][a]._opgehaald||0)-(ARCHIEF[s][b]._opgehaald||0);});
+        k.slice(0,k.length-600).forEach(function(x){ delete ARCHIEF[s][x]; });
+      }
+    });
+    LS.set('archief',JSON.stringify(ARCHIEF));
+  }catch(e){}
+}
+function archiefLaden(){
+  return LS.get('archief').then(function(r){
+    if(r&&r.value){
+      try{
+        var d=JSON.parse(r.value);
+        if(d&&d.aandelen)ARCHIEF=d;
+      }catch(e){}
+    }
+    archiefTellerBijwerken();
+  }).catch(function(){});
+}
+function archiefTellerBijwerken(){
+  var a=Object.keys(ARCHIEF.aandelen||{}).length, e=Object.keys(ARCHIEF.etfs||{}).length;
+  var o1=document.querySelector('#exchange option[value="ARCHIEF"]');
+  if(o1)o1.textContent="Alles wat ik al ophaalde ("+a+")";
+  var o2=document.querySelector('#etfCategory option[value="ARCHIEF"]');
+  if(o2)o2.textContent="Alles wat ik al ophaalde ("+e+")";
+}
+// leesbare ouderdom, voor de kolom in de tabel
+function archiefLeeftijd(ts){
+  if(!ts)return null;
+  var min=Math.round((Date.now()-ts)/60000);
+  if(min<60)return min+" min";
+  if(min<1440)return Math.round(min/60)+" u";
+  var d=Math.round(min/1440);
+  return d+(d===1?" dag":" dgn");
+}
+
 // ---- Centrale naamgeving ----
 // Eén plek die bepaalt hoe een positie of aandeel heet. Voorheen stond die logica op tien
 // plekken met elk een eigen volgorde, waardoor je in het ene tabblad een naam zag en in het
@@ -113,7 +281,7 @@ var NAAM={
       || (o.isin&&typeof ISIN_CACHE!=="undefined"&&ISIN_CACHE[o.isin]&&ISIN_CACHE[o.isin].naam)
       || (o.isin&&typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.isin])
       || (o.queriedAs&&typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.queriedAs])
-      || (typeof NAAM_BIJ_ISIN!=="undefined"&&NAAM_BIJ_ISIN[o.symbol])
+      || (NAAM_BIJ_ISIN[o.symbol])
       || o.name
       || null;
   },
@@ -124,7 +292,7 @@ var NAAM={
     if(!n){
       // geen naam bekend: liever de ticker dan de ISIN
       var t=o.ticker||o.symbol||o.queriedAs||"";
-      if(typeof ISIN_RE!=="undefined"&&ISIN_RE.test(t)&&o.ticker&&!ISIN_RE.test(o.ticker))t=o.ticker;
+      if(ISIN_RE.test(t)&&o.ticker&&!ISIN_RE.test(o.ticker))t=o.ticker;
       return t||"\u2014";
     }
     n=n.replace(/\s+(Holdings?|Group|Corporation|Corp\.?|Company|Inc\.?|Ltd\.?|Limited|PLC|N\.?V\.?|S\.?A\.?|A\/S|AB|ASA|Oyj|SE|AG|S\.?p\.?A\.?)\b\.?/gi,"")
@@ -139,7 +307,7 @@ var NAAM={
     if(!o)return "";
     var n=this.vol(o), t=o.ticker||o.symbol||"";
     if(!n)return "";                                   // naam onbekend -> ticker staat al vooraan
-    if(typeof ISIN_RE!=="undefined"&&ISIN_RE.test(t))return "";  // ISIN staat in een eigen kolom
+    if(ISIN_RE.test(t))return "";  // ISIN staat in een eigen kolom
     return (t&&t!==n)?t:"";
   }
 };
@@ -505,6 +673,7 @@ var BRON={
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
           <th data-k="upside" title="Wat de markt aan winstgroei inprijst (impl.), afgezet tegen wat het bedrijf werkelijk realiseert. Groen = het bedrijf haalt die groei; rood = de markt verwacht meer dan er tot nu toe gerealiseerd werd. Bij Europese aandelen staat hier het verwachte rendement van Eulerpool. LET OP: dit komt uit een DCF-model. Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Ingeprijsd<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
+          <th data-k="_opgehaald" title="Wanneer de cijfers van dit effect zijn opgehaald. Bij een gemengd universum zie je zo welke gegevens vers zijn en welke van een eerdere screening komen — belangrijk als je scores over universa heen vergelijkt.">Opgehaald<span class="q">?</span></th>
           <th data-k="score" title="Gecombineerde score 0-100, samengesteld uit momentum, waardering en groei volgens de weegregelaars hierboven. Hoger = stijgt én relatief goedkoop én groeiend. Een startpunt voor onderzoek, geen koopsignaal.">Score<span class="q">?</span></th>
         </tr>
       </thead>
@@ -546,6 +715,9 @@ var BRON={
               <option value="factor">Factor &amp; dividend (24)</option>
               <option value="grondstof">Grondstoffen (24)</option>
               <option value="thema">Thema &amp; groei (24)</option>
+            </optgroup>
+            <optgroup label="Uit je archief">
+              <option value="ARCHIEF">Alles wat ik al ophaalde</option>
             </optgroup>
             <optgroup label="Europa (UCITS) — via Eulerpool (sleutel nodig)">
               <option value="eu_kern">Europese kern-ETF's (15)</option>
@@ -589,6 +761,7 @@ var BRON={
             <th data-k="weightedPe" title="Gewogen gemiddelde koers/winst-verhouding van alle onderliggende posities. Zegt of het fonds als geheel duur of goedkoop geprijsd is. Alleen beschikbaar via SecuritiesDB.">Geweg. P/E<span class="q">?</span></th>
             <th data-k="vol" title="Jaarlijkse volatiliteit in procent: hoe sterk de koers gemiddeld schommelt. Hoger = beweeglijker, dus grotere uitslagen in beide richtingen. Alleen beschikbaar via SecuritiesDB.">Volat.<span class="q">?</span></th>
             <th data-k="chg" title="Koersverandering vandaag, in procent.">&Delta; Dag<span class="q">?</span></th>
+            <th data-k="_opgehaald" title="Wanneer de gegevens van dit fonds zijn opgehaald.">Opgehaald<span class="q">?</span></th>
             <th data-k="score">Score &#9662;</th>
           </tr>
         </thead>
@@ -1333,55 +1506,6 @@ var BROKER_MARKETS={
     note:"Euronext, Xetra, Milaan, Madrid, Londen, Zwitserland en de VS. G\u00e9\u00e9n Scandinavi\u00eb of Azi\u00eb. ETF-transacties zijn commissievrij."
   }
 };
-
-// Bedrijfsnamen bij ISIN. Het metrics-endpoint geeft alleen een ticker, geen naam, dus
-// zonder deze tabel zie je "NL0012866412" of "BESI.AS" in plaats van iets herkenbaars.
-var NAAM_BIJ_ISIN={
-  // Nederland
-  "NL0010273215":"ASML","NL0012866412":"BE Semiconductor","NL0011821202":"ING Groep",
-  "NL0012969182":"Adyen","NL0000009538":"Philips","NL0000009165":"Heineken",
-  "NL0000395903":"Wolters Kluwer","NL0013654783":"Prosus","NL0010773842":"NN Group",
-  "NL0000289533":"HAL Trust","NL0000235190":"Airbus","NL0012059018":"Exor",
-  // België
-  "BE0003717312":"Sofina","BE0974293251":"AB InBev","BE0003565737":"KBC",
-  "BE0003739530":"UCB","BE0003764785":"Ackermans & van Haaren","BE0003604155":"Lotus Bakeries",
-  "BE0003797140":"Groupe Bruxelles Lambert",
-  // Frankrijk
-  "FR0000121014":"LVMH","FR0000120321":"L'Oréal","FR0000120578":"Sanofi",
-  "FR0000131104":"BNP Paribas","FR0000120271":"TotalEnergies","FR0000121972":"Schneider Electric",
-  "FR0000120073":"Air Liquide","FR0000052292":"Hermès","FR0000121667":"EssilorLuxottica",
-  "FR0000120628":"AXA","FR0000125486":"Vinci","FR0000120644":"Danone",
-  "FR0000121485":"Kering","FR0000121204":"Wendel","FR0011871128":"Tikehau Capital",
-  // Duitsland
-  "DE0007164600":"SAP","DE0007236101":"Siemens","DE0008404005":"Allianz",
-  "DE000BASF111":"BASF","DE000BAY0017":"Bayer","DE0005190003":"BMW",
-  "DE0007664039":"Volkswagen","DE0007100000":"Mercedes-Benz","DE000A1EWWW0":"Adidas",
-  "DE0008430026":"Munich Re","DE0006231004":"Infineon","DE0005557508":"Deutsche Telekom",
-  "DE0007037129":"RWE","DE0005552004":"DHL Group",
-  // Zwitserland
-  "CH0038863350":"Nestlé","CH0012005267":"Novartis","CH0012032048":"Roche",
-  "CH0244767585":"UBS","CH0011075394":"Zurich Insurance","CH0012221716":"ABB",
-  // Scandinavië
-  "DK0062498333":"Novo Nordisk","DK0010244508":"A.P. Møller-Mærsk","DK0060079531":"DSV",
-  "DK0010181759":"Carlsberg","DK0060448595":"Coloplast","DK0061539921":"Vestas",
-  "DK0060094928":"Ørsted","DK0060336014":"Novonesis","DK0060252690":"Genmab",
-  "SE0000115446":"Volvo","SE0000108656":"Ericsson","SE0017486889":"Atlas Copco",
-  "SE0015811963":"Investor AB","SE0000148884":"SEB","SE0000242455":"Swedbank",
-  "SE0000106270":"H&M","SE0000667891":"Sandvik","SE0009922164":"Essity",
-  "SE0012673267":"Evolution","SE0000163594":"Industrivärden","SE0000108847":"Lundbergs",
-  "NO0010096985":"Equinor","NO0010161896":"DNB Bank","NO0010063308":"Telenor",
-  "NO0005052605":"Norsk Hydro","NO0003054108":"Mowi",
-  "FI0009000681":"Nokia","FI0009013403":"Kone","FI4000552500":"Sampo",
-  "FI0009007132":"Fortum","FI0009013296":"Neste","FI0009005987":"UPM-Kymmene",
-  // Azië
-  "KYG875721634":"Tencent","KYG017191142":"Alibaba (HK)","KYG8208B1014":"Meituan",
-  "KYG596691041":"Xiaomi","KYG8586D1097":"JD.com (HK)","CNE1000003X6":"Ping An",
-  "CNE1000002H1":"China Construction Bank","CNE1000003G1":"ICBC","CNE1000001Z5":"Bank of China",
-  "HK0005000090":"HSBC","HK0388045442":"HKEX","KYG2103F1019":"BYD",
-  "CNE100000296":"CNOOC","CNE1000002Q2":"PetroChina","CNE1000003W8":"China Mobile",
-  "HK0016000132":"Sun Hung Kai","KYG3777B1032":"Geely","KYG210961051":"Country Garden Services",
-  "KYG9431P1037":"WuXi Biologics","KYG970081173":"Li Auto"
-};
 // Sector bij ISIN. sectorOf() werkt op tickers; bij een ISIN-universum is die er niet,
 // waardoor alles "Overig" werd - en dan is de sector-relatieve waardering betekenisloos.
 var SECTOR_BIJ_ISIN={
@@ -1428,12 +1552,6 @@ function sectorVoor(d){
   return SECTOR_BIJ_ISIN[d.isin]||SECTOR_BIJ_ISIN[d.queriedAs]||
          sectorOf(d.symbol)||sectorOf(d.queriedAs)||d.sector||"Overig";
 }
-
-// ---- ISIN opzoeken via Finnhub /search: geeft ticker én bedrijfsnaam ----
-// Getest: /search?q=NL0012866412 -> BESI.AS + "BE Semiconductor Industries NV".
-// Werkt op de gratis tier. Resultaten worden permanent bewaard, dus dit kost één call
-// per nieuw aandeel - daarna nooit meer.
-var ISIN_CACHE={};
 function loadIsinCache(){
   LS.get('isinCache').then(function(r){
     if(r&&r.value){ try{ ISIN_CACHE=JSON.parse(r.value)||{}; }catch(e){} }
@@ -1457,13 +1575,6 @@ function lookupIsin(isin,token){
     }).catch(function(){return null;});
 }
 
-function naamVoor(d){
-  if(!d)return null;
-  if(d.naam)return d.naam;          // naam uit een broker-import heeft voorrang
-  // eerst de opgezochte naam (werkt voor elk aandeel), dan de vaste tabel, dan wat de bron gaf
-  var uitCache=(d.isin&&ISIN_CACHE[d.isin])?ISIN_CACHE[d.isin].naam:null;
-  return uitCache||NAAM_BIJ_ISIN[d.isin]||NAAM_BIJ_ISIN[d.queriedAs]||d.name||null;
-}
 
 function sectorOf(sym){return SECTOR[sym]||"Overig";}
 
@@ -1687,7 +1798,7 @@ function renderHoldingsNote(){
 
 function isinFor(symbol){
   // eerst uit de portefeuille (Saxo-import bewaart de ISIN), dan uit de vaste tabel
-  if(typeof PORTFOLIO!=="undefined"&&PORTFOLIO&&PORTFOLIO.length){
+  if(PORTFOLIO&&PORTFOLIO.length){
     for(var i=0;i<PORTFOLIO.length;i++){
       if(PORTFOLIO[i].symbol===symbol&&PORTFOLIO[i].isin)return PORTFOLIO[i].isin;
     }
@@ -1731,7 +1842,7 @@ function portfolioOverlapFor(d){
       }
     }
     // zelfde fonds via de aliassen die Eulerpool meegaf
-    if(typeof EULER_ETF_ALIASES!=="undefined"&&EULER_ETF_ALIASES[sym]){
+    if(EULER_ETF_ALIASES[sym]){
       for(var k=0;k<PORTFOLIO.length;k++){
         var alias=EULER_ETF_ALIASES[(PORTFOLIO[k].symbol||"").toUpperCase()];
         if(alias&&alias===EULER_ETF_ALIASES[sym]){
@@ -1898,7 +2009,7 @@ function render(){
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
   });
   var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",qual:"_q",trap:"_trap",score:"_s"};
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -1965,6 +2076,14 @@ function render(){
         return '<td class="num '+cls+'"'+(tip?' title="'+tip.replace(/"/g,"&quot;")+'" style="cursor:help"':'')+'>'+txt+'</td>';
       })()+
       '<td>'+trap+'</td>'+
+      (function(){
+        var t=d._opgehaald;
+        if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
+        var uren=(Date.now()-t)/3600000;
+        var kl=uren>168?"neg":(uren>48?"":"pos");
+        return '<td class="num '+kl+'" style="font-size:10.5px" title="'+new Date(t).toLocaleString()+'">'+
+               archiefLeeftijd(t)+'</td>';
+      })()+
       '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
     '</tr>';
   }).join("");
@@ -2447,7 +2566,7 @@ function renderQuota(){
   renderQuotaDetail();
   var el=document.getElementById('quotaBar'); if(!el)return;
   var srcs=['securitiesdb','finnhub','eulerpool'];
-  if(typeof MULTI_KEYS!=="undefined"&&MULTI_KEYS.eodhd)srcs.push('eodhd');
+  if(MULTI_KEYS.eodhd)srcs.push('eodhd');
   var parts=srcs.map(function(s){
     var r=remainingFor(s); if(!r)return "";
     var txt=r.label+": ";
@@ -2470,18 +2589,11 @@ function renderQuota(){
   el.innerHTML='<span style="opacity:.7">Verbruik:</span> '+parts+
     '<span style="opacity:.5;font-size:10.5px">eigen telling, geen officieel saldo</span>';
 }
-
-// ---- Multi-bron: sleutels per bron + automatische keuze/fallback per ticker ----
-var MULTI_KEYS={finnhub:"",eodhd:"",fmp:"",eulerpool:""};
 // ISIN-formaat: 2 letters (land) + 9 tekens + 1 controlecijfer, bv. NL0010273215
 // Werkt, mits de geneste responsstructuur correct gelezen wordt (valuation.pe, perShare.eps, etc).
 // Geeft in één call waardering, winstgevendheid, groei, per-aandeel-gegevens en 12 jaar historie.
 var EU_SUFFIX=/\.(AS|BR|PA|DE|ST|CO|OL|HE|MI|SW|L|XETRA)$/i;
 var ASIA_SUFFIX=/\.(HK|T|SS|SZ)$/i;
-
-// FMP staat standaard uit (zie FMP_ENABLED). De code blijft bestaan als reserve:
-// zet FMP_ENABLED op true en maak #fmpRow zichtbaar om hem weer in te schakelen.
-var FMP_ENABLED=false;
 function sourceOrderFor(symbol){
   var order;
   if(ASIA_SUFFIX.test(symbol))      order=["eodhd","fmp"];
@@ -2848,6 +2960,27 @@ function run(){
   }
   var universe=chosenUniverse();
   var limit=+$('limit').value;
+
+  // Archief gekozen? Dan tonen we wat we al hebben, zonder API-calls. Zo kun je effecten
+  // uit verschillende universa naast elkaar leggen en hun scores vergelijken.
+  if($('exchange').value==="ARCHIEF"){
+    var uitArchief=archiefLijst('aandelen');
+    if(!uitArchief.length){
+      st.className="status err";
+      st.innerHTML='Je archief is nog leeg. Draai eerst een screening; alles wat je ophaalt wordt hier bewaard.';
+      return;
+    }
+    SCORESET=uitArchief.slice();
+    buildPeers(SCORESET);
+    CURRENT=uitArchief.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,limit);
+    render();
+    var oudste=Math.min.apply(null,uitArchief.map(function(d){return d._opgehaald||Date.now();}));
+    st.className="status";
+    st.innerHTML='\ud83d\uddc3\ufe0f <b>'+uitArchief.length+'</b> effecten uit je archief \u2014 '+
+      'oudste meting '+archiefLeeftijd(oudste)+' geleden \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span> '+
+      'Let op: de cijfers dateren van het moment van ophalen, niet van nu.';
+    return;
+  }
   // bron en kosten bepalen via de centrale BRON-module, niet via het verborgen source-veld
   var throttle=BRON.throttle(universe);
   var CALLS_FULL=Math.max.apply(null,universe.slice(0,20).map(function(s){return BRON.kosten(s);}).concat([2]));
@@ -2994,6 +3127,8 @@ function run(){
       st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+" Sorteer via de kolomtitels.";
     }
     render();
+    archiefBewaar('aandelen', SCORESET&&SCORESET.length?SCORESET:CURRENT);
+    archiefTellerBijwerken();
     if(typeof renderDailyDiff==="function")renderDailyDiff();
     // resultaat bewaren zodat je het bij het opstarten terugziet zonder nieuwe calls
     if(CURRENT.length&&typeof saveLastRun==="function"){
@@ -3274,6 +3409,7 @@ var ETF_CATALOG={
     "ARKK","ARKW","ARKG","ARKQ","ARKF","BOTZ","ROBO","ICLN","TAN","FAN","PBW","HACK","CIBR","BUG","SKYY","CLOU","WCLD","FINX","IPO","MOON","JETS","PEJ","ESPO","HERO"]}
 };
 function etfCatalogTickers(cat){
+  if(cat==="ARCHIEF")return archiefLijst('etfs').map(function(d){return d.isin||d.symbol;});
   if(cat==="alles"){ // niet meer in de keuzelijst, maar blijft werken als hij ooit terugkomt
     var all=[],seen={};
     Object.keys(ETF_CATALOG).forEach(function(k){
@@ -3379,6 +3515,12 @@ function renderEtf(){
       '<td class="num">'+(d.weightedPe!=null?d.weightedPe.toFixed(1):"\u2014")+'</td>'+
       '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+(d.vol!=null?d.vol.toFixed(1)+"%":"\u2014")+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+(d.chg!=null?((d.chg>0?"+":"")+d.chg.toFixed(1)+"%"):"\u2014")+'</td>'+
+      (function(){
+        var t=d._opgehaald;
+        if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
+        return '<td class="num" style="font-size:10.5px;color:var(--muted)" title="'+new Date(t).toLocaleString()+'">'+
+               archiefLeeftijd(t)+'</td>';
+      })()+
       '<td class="num"><div class="scorecell">'+(d._s==null?"\u2014":d._s)+' '+badge+
         (d._dek!=null&&d._dek<100?'<span style="font-size:9px;color:var(--muted)" title="Score berekend over '+d._dek+'% van de factoren \u2014 niet alle gegevens beschikbaar"> \u00b7'+d._dek+'%</span>':'')+
         '</div><div class="bar"><i style="width:'+(d._s||0)+'%"></i></div></td>'+
@@ -3826,6 +3968,21 @@ function fetchEtfAuto(sym){
 function runEtf(){
   var st=$('etfStatus');
   var cat=$('etfCategory')?$('etfCategory').value:"custom";
+  if(cat==="ARCHIEF"){
+    var uitA=archiefLijst('etfs');
+    if(!uitA.length){
+      st.className="status err";
+      st.innerHTML='Je ETF-archief is nog leeg. Vergelijk eerst een selectie; alles wordt daarna bewaard.';
+      return;
+    }
+    ETF_CURRENT=uitA;
+    renderEtf();
+    var oud=Math.min.apply(null,uitA.map(function(d){return d._opgehaald||Date.now();}));
+    st.className="status";
+    st.innerHTML='\ud83d\uddc3\ufe0f <b>'+uitA.length+'</b> fondsen uit je archief \u2014 '+
+      'oudste meting '+archiefLeeftijd(oud)+' geleden \u00b7 <span style="opacity:.7">geen API-calls.</span>';
+    return;
+  }
   var syms = (cat==="custom")
     ? $('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean)
     : etfCatalogTickers(cat);
@@ -3857,6 +4014,8 @@ function runEtf(){
       ETF_CURRENT=[]; renderEtf(); return;
     }
     ETF_CURRENT=all;
+    archiefBewaar('etfs', all);
+    archiefTellerBijwerken();
     if(typeof saveLastRun==="function"){
       var catEl=$('etfCategory');
       var etfParams={categorie: catEl?(catEl.options[catEl.selectedIndex]||{}).text:null,
@@ -3913,16 +4072,6 @@ loadLastRun('etfs').then(function(run){
 });
 $('etfStatus').innerHTML='Kies een selectie en klik <b>Vergelijk ETF\'s</b>. VS-fondsen via SecuritiesDB (geen sleutel nodig), Europese via Eulerpool.';
 renderEtf();
-
-// ============ PORTEFEUILLE-TABBLAD ============
-var PORTFOLIO=[]; // actieve portefeuille; blijft de werkvariabele voor alle bestaande logica
-
-// ---- Meerdere portefeuilles ----
-// PORTFOLIO blijft de actieve lijst, zodat bestaande code ongewijzigd werkt. Deze laag
-// beheert welke lijst dat is en bewaart de andere apart.
-var PORTFOLIOS={"eigen":{naam:"Mijn portefeuille",posities:[]}};
-var ACTIEVE_PF="eigen";
-
 function pfSync(){ if(PORTFOLIOS[ACTIEVE_PF])PORTFOLIOS[ACTIEVE_PF].posities=PORTFOLIO; }
 function pfWissel(id){
   pfSync();                       // huidige wijzigingen bewaren
@@ -4152,9 +4301,7 @@ window.removePosition=removePosition;
 // ---- ETF/ETP-herkenning in de portefeuille ----
 // Een ETF heeft geen ROE, winstgroei of P/E in de zin van een bedrijf; die krijgt een eigen beoordeling.
 var ETF_KNOWN={};    // tickers waarvan SecuritiesDB bevestigt dat het een fonds is
-var ETF_NOT_FUND={}; // tickers waarvan we weten dat het géén fonds is (voorkomt herhaalde pogingen)
-var ETF_HINT=/^(SPY|VOO|IVV|VTI|QQQ|QQQM|VXUS|VEA|VWO|IWM|SCHD|VYM|ARKK|XL[KFEVYIPBU]|BND|AGG|VNQ|GLD|SLV|IEFA|IEMG|EEM|ITOT|SCHB|SCHF|SCHZ|VB|IJR|DVY|SPLG|IXUS)$/i;
-// beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
+var ETF_NOT_FUND={}; // tickers waarvan we weten dat het géén fonds is (voorkomt herhaalde pogingen)// beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
 function etfPortfolioScore(e){
   if(!e)return null;
   // Kosten wegen het zwaarst: het is het enige cijfer dat vooraf vaststaat en gegarandeerd
@@ -4322,6 +4469,44 @@ function updateSourceBar(){
   el.textContent=names[currentSource()]||"onbekend";
 }
 
+// Sorteren en filteren van de portefeuille. Apart gezet omdat dit de logica is die het
+// vaakst wijzigt; in renderPortfolio zat het verweven met zes andere verantwoordelijkheden.
+function pfSorteerEnFilter(bron){
+  // ---- sorteren ----
+  var sortKey=$('pfSort')?$('pfSort').value:"alarm";
+  var list=bron.slice();
+  var alarmRank={red:0,orange:1,green:2,undefined:3};
+  function plOf(p){var r=positieRendement(p);return r?r.v:null;}
+  function valueOf(p){var w=positieWaarde(p);return w!=null?w:-1;}
+  list.sort(function(a,b){
+    if(sortKey==="alarm"){
+      var ra=alarmRank[a._alarm&&a._alarm.level]; if(ra==null)ra=3;
+      var rb=alarmRank[b._alarm&&b._alarm.level]; if(rb==null)rb=3;
+      return ra-rb;
+    }
+    if(sortKey==="score")return (b._fresh?b._fresh.score:-1)-(a._fresh?a._fresh.score:-1);
+    if(sortKey==="scoreAsc")return (a._fresh?a._fresh.score:999)-(b._fresh?b._fresh.score:999);
+    if(sortKey==="pl"){var pa=plOf(a),pb=plOf(b);return (pb==null?-999:pb)-(pa==null?-999:pa);}
+    if(sortKey==="plAsc"){var pa2=plOf(a),pb2=plOf(b);return (pa2==null?999:pa2)-(pb2==null?999:pb2);}
+    if(sortKey==="symbol")return a.symbol.localeCompare(b.symbol);
+    if(sortKey==="value")return valueOf(b)-valueOf(a);
+    return 0;
+  });
+
+  // ---- filteren ----
+  var filterKey=$('pfFilter')?$('pfFilter').value:"all";
+  if(filterKey==="red")list=list.filter(function(p){return p._alarm&&p._alarm.level==="red";});
+  else if(filterKey==="orange")list=list.filter(function(p){return p._alarm&&(p._alarm.level==="red"||p._alarm.level==="orange");});
+  else if(filterKey==="unchecked")list=list.filter(function(p){return !p._fresh;});
+  else if(filterKey==="stocks")list=list.filter(function(p){return !(p._fresh&&p._fresh.isEtf);});
+  else if(filterKey==="etfs")list=list.filter(function(p){return p._fresh&&p._fresh.isEtf;});
+  else if(filterKey==="belowThreshold")list=list.filter(function(p){
+    return p.alertBelow!=null&&p._fresh&&p._fresh.score!=null&&p._fresh.score<p.alertBelow;});
+  else if(filterKey==="withNote")list=list.filter(function(p){return !!p.note;});
+
+  return list;
+}
+
 function renderPortfolio(){
   updateSourceBar();
   var el=$('pfList');
@@ -4388,38 +4573,7 @@ function renderPortfolio(){
     kpi("Gem. score",avgScore!=null?avgScore:"\u2014",scorable.length+" met volledige data"+(incomplete?" \u00b7 "+incomplete+" onvolledig":""))+
     kpi("Alarmen",redCount+orangeCount,redCount+" rood \u00b7 "+orangeCount+" oranje",redCount>0?"neg":(orangeCount>0?"":""));
 
-  // ---- sorteren ----
-  var sortKey=$('pfSort')?$('pfSort').value:"alarm";
-  var list=PORTFOLIO.slice();
-  var alarmRank={red:0,orange:1,green:2,undefined:3};
-  function plOf(p){var r=positieRendement(p);return r?r.v:null;}
-  function valueOf(p){var w=positieWaarde(p);return w!=null?w:-1;}
-  list.sort(function(a,b){
-    if(sortKey==="alarm"){
-      var ra=alarmRank[a._alarm&&a._alarm.level]; if(ra==null)ra=3;
-      var rb=alarmRank[b._alarm&&b._alarm.level]; if(rb==null)rb=3;
-      return ra-rb;
-    }
-    if(sortKey==="score")return (b._fresh?b._fresh.score:-1)-(a._fresh?a._fresh.score:-1);
-    if(sortKey==="scoreAsc")return (a._fresh?a._fresh.score:999)-(b._fresh?b._fresh.score:999);
-    if(sortKey==="pl"){var pa=plOf(a),pb=plOf(b);return (pb==null?-999:pb)-(pa==null?-999:pa);}
-    if(sortKey==="plAsc"){var pa2=plOf(a),pb2=plOf(b);return (pa2==null?999:pa2)-(pb2==null?999:pb2);}
-    if(sortKey==="symbol")return a.symbol.localeCompare(b.symbol);
-    if(sortKey==="value")return valueOf(b)-valueOf(a);
-    return 0;
-  });
-
-  // ---- filteren ----
-  var filterKey=$('pfFilter')?$('pfFilter').value:"all";
-  if(filterKey==="red")list=list.filter(function(p){return p._alarm&&p._alarm.level==="red";});
-  else if(filterKey==="orange")list=list.filter(function(p){return p._alarm&&(p._alarm.level==="red"||p._alarm.level==="orange");});
-  else if(filterKey==="unchecked")list=list.filter(function(p){return !p._fresh;});
-  else if(filterKey==="stocks")list=list.filter(function(p){return !(p._fresh&&p._fresh.isEtf);});
-  else if(filterKey==="etfs")list=list.filter(function(p){return p._fresh&&p._fresh.isEtf;});
-  else if(filterKey==="belowThreshold")list=list.filter(function(p){
-    return p.alertBelow!=null&&p._fresh&&p._fresh.score!=null&&p._fresh.score<p.alertBelow;});
-  else if(filterKey==="withNote")list=list.filter(function(p){return !!p.note;});
-
+  var list=pfSorteerEnFilter(PORTFOLIO);
   if(!list.length){
     el.innerHTML='<div class="empty">Geen posities voldoen aan dit filter.</div>';
     renderOverlap();
@@ -4544,7 +4698,7 @@ if($('ewReset'))$('ewReset').onclick=function(){
     var lbl=$(k+'-v'); if(lbl)lbl.textContent=ETF_WEGING_STANDAARD[k];
   });
   if(typeof syncEtfWeightUI==="function")syncEtfWeightUI();
-  if(typeof ETF_CURRENT!=="undefined"&&ETF_CURRENT.length)renderEtf();
+  if(ETF_CURRENT.length)renderEtf();
   $('etfStatus').className="status";
   $('etfStatus').textContent="Weging teruggezet op de standaard (kosten 40, spreiding 25, liquiditeit 20, track record 15).";
 };
@@ -5197,7 +5351,7 @@ function confirmHoldingSuggestion(sym){
   if(typeof saveHoldingsCloud==="function")saveHoldingsCloud();
   if(typeof renderHoldingList==="function")renderHoldingList();
   if(typeof pfStat==="function")pfStat(sym+" bevestigd als holding \u2014 wordt vanaf nu op koers/boekwaarde gescoord.");
-  if(typeof CURRENT!=="undefined"&&CURRENT&&CURRENT.length&&typeof render==="function")render();
+  if(CURRENT&&CURRENT.length&&typeof render==="function")render();
   if(typeof renderPortfolio==="function")renderPortfolio();
 }
 window.confirmHoldingSuggestion=confirmHoldingSuggestion;
@@ -5261,6 +5415,9 @@ function importSaxoCsv(file){
       var idxAvgPrice=headers.indexOf("AK-krs");
       var idxDate=headers.indexOf("Valutadatum");
       var idxIsinGlobal=headers.indexOf("ISIN");
+      // Saxo levert ook zijn eigen koers en rendement; die zijn leidend voor jouw positie
+      var idxKoers=headers.indexOf("Koers");
+      var idxRend=headers.indexOf("+/- koers %");
       if(idxSymb===-1||idxQty===-1){throw new Error("onbekend CSV-formaat (kolommen 'Symb.' of 'Aantal' niet gevonden)");}
       var added=0, skipped=0, updated=0;
       var existing={}; PORTFOLIO.forEach(function(p){existing[p.symbol]=true;});
@@ -5291,7 +5448,13 @@ function importSaxoCsv(file){
           skipped++; continue;
         }
         var isinVal=(idxIsinGlobal>-1&&cols[idxIsinGlobal])?cols[idxIsinGlobal].trim():null;
-        PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,isin:isinVal,baseline:null});
+        var sKoers=(idxKoers>-1&&cols[idxKoers])?parseFloat(String(cols[idxKoers]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
+        var sRend=(idxRend>-1&&cols[idxRend])?parseFloat(String(cols[idxRend]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
+        PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,
+          buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,isin:isinVal,baseline:null,
+          brokerPrice:(sKoers&&!isNaN(sKoers))?+sKoers.toFixed(4):null,
+          brokerReturn:(sRend!=null&&!isNaN(sRend))?+sRend.toFixed(2):null,
+          brokerNaam:"SaxoInvestor", brokerDatum:Date.now()});
         existing[ticker]=true; added++;
       }
       savePortfolioLocal();savePortfolioCloud();
@@ -5312,12 +5475,23 @@ $('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
 if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
   var f=e.target.files&&e.target.files[0];
   if(!f)return;
-  // CSV -> Saxo-route, XLSX -> Bolero-route
-  if(/\.csv$/i.test(f.name)){
-    importSaxoCsv(f);
+  // Formaat bepalen op inhoud in plaats van bestandsnaam: een xlsx begint altijd met de
+  // zip-handtekening "PK". Dat is betrouwbaarder dan de extensie, die kan afwijken van
+  // wat er werkelijk in het bestand zit.
+  var kop=new FileReader();
+  kop.onload=function(kev){
+    var b=new Uint8Array(kev.target.result);
+    var isZip=(b[0]===0x50&&b[1]===0x4B);   // "PK" -> xlsx
     e.target.value="";
-    return;
-  }
+    if(!isZip){ importSaxoCsv(f); return; }
+    leesBoleroBestand(f);
+  };
+  kop.onerror=function(){pfStat("Bestand kon niet geopend worden.",true);};
+  kop.readAsArrayBuffer(f.slice(0,4));
+};
+
+// Bolero-xlsx inlezen en verwerken
+function leesBoleroBestand(f){
   pfStat("Bolero-bestand inlezen\u2026");
   var lezer=new FileReader();
   lezer.onload=function(ev){
@@ -5344,7 +5518,7 @@ if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
         }
       });
       pfGewijzigd();
-      var pfNaam=(typeof PORTFOLIOS!=="undefined"&&PORTFOLIOS[ACTIEVE_PF])?PORTFOLIOS[ACTIEVE_PF].naam:"je portefeuille";
+      var pfNaam=(PORTFOLIOS[ACTIEVE_PF])?PORTFOLIOS[ACTIEVE_PF].naam:"je portefeuille";
       pfStat("Bolero-import in \u201c"+pfNaam+"\u201d: "+toegevoegd+" nieuw"+
         (bijgewerkt?", "+bijgewerkt+" bijgewerkt":"")+
         (res.overgeslagen?", "+res.overgeslagen+" regel(s) overgeslagen (cash/voettekst)":"")+
@@ -5353,11 +5527,10 @@ if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
       pfStat("Kon het bestand niet lezen: "+((err&&err.msg)||(err&&err.message)||"onbekende fout")+
              ". Is dit de xlsx-export uit Bolero?",true);
     });
-    e.target.value="";
   };
   lezer.onerror=function(){pfStat("Bestand kon niet geopend worden.",true);};
   lezer.readAsArrayBuffer(f);
-};
+}
 if($('pfOverlapBtn'))$('pfOverlapBtn').onclick=verifyOverlapReal;
 $('pfImportFile').onchange=function(e){if(e.target.files[0])importSaxoCsv(e.target.files[0]);};
 
@@ -6000,6 +6173,7 @@ CURRENT=[];DEMO_ACTIVE=false;
 if(typeof loadCallLog==="function")loadCallLog();
 if(typeof loadAliases==="function")loadAliases();
 if(typeof loadIsinCache==="function")loadIsinCache();
+if(typeof archiefLaden==="function")archiefLaden();
 setTimeout(function(){if(typeof showCostEstimate==="function")showCostEstimate();},300);
 $('status').innerHTML='Klik op <b>Screenen</b> om te beginnen. Bronnen beheer je bij <b>Instellingen</b>.';
 
