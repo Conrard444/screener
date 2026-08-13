@@ -566,6 +566,7 @@ var BRON={
     <button class="tab" data-tab="etf">ETF's</button>
     <button class="tab" data-tab="tracking">Tracking</button>
     <button class="tab" data-tab="settings">Instellingen</button>
+    <button class="tab" data-tab="nieuws">Nieuws</button>
     <button class="tab" data-tab="uitleg">Uitleg</button>
   </div>
 
@@ -968,6 +969,18 @@ var BRON={
       Bij een blokkade of limiet schuift de tool automatisch door naar de volgende bron in de rij.
     </div>
   </div><!-- /tab-settings -->
+
+  
+  <div class="tabpane" id="tab-nieuws">
+    <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);
+         border-radius:var(--radius);margin:14px 0 10px;gap:8px">
+      <span class="inline-lbl">Portefeuille</span>
+      <span id="nwKiezer" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+      <button class="btn-go" id="nwOphalen" style="margin-left:auto">Nieuws ophalen</button>
+    </div>
+    <div id="nwStatus" class="status"></div>
+    <div id="nwLijst"></div>
+  </div><!-- /tab-nieuws -->
 
   <div class="tabpane" id="tab-uitleg">
     <p class="sub" style="margin-top:18px">Achtergrond bij wat de tool doet en waar de grenzen liggen.
@@ -1966,6 +1979,161 @@ function externalLinks(d){
   return links;
 }
 // klein linkicoontje met uitklapbaar menu
+// ---- Nieuws per positie ----
+// Finnhub's /company-news werkt op de gratis tier, maar labelt ruim: bij een opvraging voor
+// NVDA komen ook artikelen over SpaceX, Micron en Disney mee. We filteren daarom op
+// artikelen die de onderneming werkelijk noemen, en tonen de rest apart als sectornieuws.
+function haalNieuws(symbol,token,dagen){
+  dagen=dagen||7;
+  var tot=new Date(), van=new Date(tot.getTime()-dagen*86400000);
+  var f=function(d){return d.toISOString().slice(0,10);};
+  return getJson(FINNHUB_BASE+"/company-news?symbol="+encodeURIComponent(symbol)+
+                 "&from="+f(van)+"&to="+f(tot)+"&token="+encodeURIComponent(token))
+    .then(function(res){ return Array.isArray(res)?res:[]; })
+    .catch(function(){ return []; });
+}
+// Hoe relevant is dit artikel voor déze onderneming?
+function nieuwsRelevantie(artikel,symbol,naam){
+  var tekst=((artikel.headline||"")+" "+(artikel.summary||"")).toLowerCase();
+  var t=String(symbol).replace(/[:.].*$/,"").toLowerCase();
+  if(tekst.indexOf(t)>-1)return 2;                       // ticker genoemd
+  if(naam){
+    var kern=String(naam).toLowerCase().split(/[\s,]+/)[0];
+    if(kern.length>3&&tekst.indexOf(kern)>-1)return 2;   // bedrijfsnaam genoemd
+  }
+  return 1;                                              // wel getagd, niet genoemd
+}
+function isUsTicker(sym){ return sym && !/\./.test(sym) && !ISIN_RE.test(sym); }
+
+function nieuwsOphalen(){
+  var st=$('nwStatus'), lijst=$('nwLijst');
+  if(!MULTI_KEYS.finnhub){
+    st.className="status err";
+    st.innerHTML='Nieuws vereist een Finnhub-sleutel. Vul die in bij <b>Instellingen</b>.';
+    return;
+  }
+  // welke portefeuilles moeten mee?
+  var ids=Object.keys(PORTFOLIOS).filter(function(id){
+    return NIEUWS_SELECTIE[id]!==false && (PORTFOLIOS[id].posities||[]).length;
+  });
+  if(!ids.length){ st.className="status"; st.textContent="Geen posities om nieuws voor op te halen."; return; }
+
+  // alleen Amerikaanse tickers: Finnhub dekt geen Europese bedrijven
+  var taken=[];
+  ids.forEach(function(id){
+    (PORTFOLIOS[id].posities||[]).forEach(function(p){
+      var sym=(p.symbol||"").replace(/:.*$/,"");
+      if(isUsTicker(sym))taken.push({pf:id,pos:p,sym:sym});
+    });
+  });
+  if(!taken.length){
+    st.className="status err";
+    st.innerHTML='Geen Amerikaanse posities gevonden. Finnhub levert alleen nieuws voor '+
+      'Noord-Amerikaanse bedrijven; voor je Europese posities staan hieronder zoeklinks.';
+    lijst.innerHTML=renderEuropeseLinks(ids);
+    return;
+  }
+
+  st.className="status";
+  st.textContent="Nieuws ophalen voor "+taken.length+" posities\u2026";
+  var resultaat={}, klaar=0;
+  var seq=Promise.resolve();
+  taken.forEach(function(t){
+    seq=seq.then(function(){
+      return haalNieuws(t.sym,MULTI_KEYS.finnhub,7).then(function(items){
+        var naam=NAAM.vol(t.pos);
+        var relevant=items.map(function(a){
+          return {a:a, rel:nieuwsRelevantie(a,t.sym,naam)};
+        }).filter(function(x){return x.rel===2;})
+          .sort(function(a,b){return b.a.datetime-a.a.datetime;})
+          .slice(0,6);
+        if(relevant.length){
+          if(!resultaat[t.pf])resultaat[t.pf]=[];
+          resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:relevant.map(function(x){return x.a;})});
+        }
+        klaar++;
+        if(klaar%3===0)st.textContent="Nieuws ophalen\u2026 "+klaar+"/"+taken.length;
+      });
+    });
+  });
+  seq.then(function(){
+    lijst.innerHTML=renderNieuws(resultaat,ids);
+    var totaal=0; Object.keys(resultaat).forEach(function(k){
+      resultaat[k].forEach(function(g){totaal+=g.items.length;});
+    });
+    st.className="status";
+    st.innerHTML=totaal?('<b>'+totaal+'</b> artikelen gevonden over '+klaar+' posities \u00b7 '+
+      '<span style="opacity:.7">alleen artikelen die het bedrijf werkelijk noemen.</span>')
+      :'Geen recent nieuws gevonden dat je posities specifiek noemt.';
+  });
+}
+
+function renderEuropeseLinks(ids){
+  var uit="";
+  ids.forEach(function(id){
+    var pos=(PORTFOLIOS[id].posities||[]).filter(function(p){return !isUsTicker((p.symbol||"").replace(/:.*$/,""));});
+    if(!pos.length)return;
+    uit+='<div class="snap"><b>'+PORTFOLIOS[id].naam+'</b> \u2014 Europese posities'+
+      '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+
+      pos.map(function(p){
+        var naam=NAAM.vol(p)||p.symbol;
+        var q="Laatste nieuws over "+naam+(p.isin?" (ISIN "+p.isin+")":"")+
+              ": kwartaalcijfers, overnames of andere gebeurtenissen.";
+        return '<a href="https://www.perplexity.ai/search?q='+encodeURIComponent(q)+'" target="_blank" '+
+          'rel="noopener" style="padding:5px 10px;border:1px solid var(--line);border-radius:6px;'+
+          'font-size:11.5px;color:var(--blue);text-decoration:none">'+NAAM.toon(p,20)+' \u2197</a>';
+      }).join("")+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:8px">Finnhub dekt geen Europese '+
+      'bedrijven; deze links openen een AI-zoekopdracht in een nieuw tabblad.</div></div>';
+  });
+  return uit;
+}
+
+function renderNieuws(resultaat,ids){
+  var uit="";
+  ids.forEach(function(id){
+    var groepen=resultaat[id];
+    var pf=PORTFOLIOS[id];
+    if(!groepen||!groepen.length)return;
+    uit+='<div style="margin:14px 0 8px;font-size:13px;font-weight:600;color:var(--muted);'+
+         'letter-spacing:.04em;text-transform:uppercase">'+pf.naam+'</div>';
+    groepen.sort(function(a,b){return b.items[0].datetime-a.items[0].datetime;});
+    groepen.forEach(function(g){
+      uit+='<div class="snap" style="margin-bottom:8px">'+
+        '<div style="font-weight:600;margin-bottom:6px">'+g.naam+
+        ' <span style="color:var(--muted);font-weight:400;font-size:11px">'+g.pos.symbol+'</span></div>'+
+        g.items.map(function(a){
+          var wanneer=archiefLeeftijd(a.datetime*1000);
+          return '<div style="padding:5px 0;border-top:1px solid var(--line)">'+
+            '<a href="'+a.url+'" target="_blank" rel="noopener" '+
+            'style="color:var(--ink);text-decoration:none;font-size:12.5px;line-height:1.5">'+
+            (a.headline||"").replace(/</g,"&lt;")+'</a>'+
+            '<div style="font-size:10.5px;color:var(--muted);margin-top:2px">'+
+            (a.source||"")+' \u00b7 '+wanneer+' geleden</div></div>';
+        }).join("")+'</div>';
+    });
+  });
+  uit+=renderEuropeseLinks(ids);
+  return uit||'<div class="empty">Geen nieuws gevonden.</div>';
+}
+
+var NIEUWS_SELECTIE={};
+function renderNwKiezer(){
+  var el=document.getElementById('nwKiezer'); if(!el)return;
+  el.innerHTML=Object.keys(PORTFOLIOS).map(function(id){
+    var aan=NIEUWS_SELECTIE[id]!==false;
+    var n=(PORTFOLIOS[id].posities||[]).length;
+    return '<button class="'+(aan?"btn-go":"btn-ghost")+'" onclick="nwWissel(\''+id+'\')" '+
+      'style="font-size:11.5px;padding:0 12px;height:30px">'+PORTFOLIOS[id].naam.replace(/</g,"&lt;")+
+      ' <span style="opacity:.7">('+n+')</span></button>';
+  }).join("");
+}
+function nwWissel(id){
+  NIEUWS_SELECTIE[id]=(NIEUWS_SELECTIE[id]===false);
+  renderNwKiezer();
+}
+window.nwWissel=nwWissel;
+
 // ---- Detailpaneel per effect ----
 // Eén weergave van alle bekende gegevens plus onderzoeksmogelijkheden, gebruikt door zowel
 // de screener als de portefeuille. Voorheen stond die informatie verspreid over kolommen
@@ -4471,6 +4639,8 @@ function etfPortfolioScore(e){
 }
 
 // alarm voor ETF's: let op kosten- en concentratieverschuivingen, niet op winstgroei
+// ETF-alarmen krijgen dezelfde vorm als aandelenalarmen (level/text/wat/waarom/actie),
+// zodat de weergave en het aandachtsblok er zonder uitzonderingen mee kunnen werken.
 function classifyEtfAlarm(pos,fresh){
   if(!fresh||!fresh.etf) return {level:"orange",text:"Geen fondsdata beschikbaar."};
   var e=fresh.etf, reasons=[], level="green";
@@ -4482,7 +4652,15 @@ function classifyEtfAlarm(pos,fresh){
     if(drop>=15){level="orange";reasons.push("fondsscore gedaald ("+pos.baseline.score+" \u2192 "+fresh.score+")");}
   }
   if(!reasons.length)reasons.push("kosten, spreiding en omvang ogen in orde"+(e.ter!=null?" ("+e.ter+"% kosten)":""));
-  return {level:level, text:reasons.join(" \u00b7 ")};
+  return {
+    level:level, text:reasons.join(" \u00b7 "),
+    wat: reasons.join("; ")+".",
+    waarom: level==="green"
+      ? "Bij een fonds tellen kosten, spreiding en omvang zwaarder dan koersbewegingen: die bepalen wat er op lange termijn van je rendement overblijft."
+      : "Hoge kosten vreten jaarlijks aan je rendement, sterke concentratie ondermijnt de spreiding waarvoor je een fonds koopt, en een klein fonds loopt kans op opheffing.",
+    actie: level==="green" ? "Geen actie nodig."
+      : "Vergelijk dit fonds met alternatieven op dezelfde index \u2014 vaak bestaat er een goedkopere of bredere variant."
+  };
 }
 
 function dataCompleteness(d){
@@ -4657,9 +4835,9 @@ function renderPortfolio(){
     if(p.alertBelow!=null&&p._fresh&&p._fresh.score!=null&&p._fresh.score<p.alertBelow)
       aandacht.push({s:NAAM.toon(p,22),r:"onder je grens van "+p.alertBelow,ernst:2});
     else if(p._alarm&&p._alarm.level==="red")
-      aandacht.push({s:NAAM.toon(p,22),r:p._alarm.text.slice(0,60),ernst:2});
+      aandacht.push({s:NAAM.toon(p,22),r:String(p._alarm.text||"signaal").slice(0,60),ernst:2});
     else if(p._alarm&&p._alarm.level==="orange")
-      aandacht.push({s:NAAM.toon(p,22),r:p._alarm.text.slice(0,60),ernst:1});
+      aandacht.push({s:NAAM.toon(p,22),r:String(p._alarm.text||"signaal").slice(0,60),ernst:1});
   });
   aandacht.sort(function(a,b){return b.ernst-a.ernst;});
   // aandachtsregel boven de cijfers
@@ -5589,6 +5767,14 @@ function importSaxoCsv(file){
 // Eén importknop voor beide formaten: het bestandstype bepaalt welke parser draait.
 // Twee losse knoppen achter een uitklapper bleken op mobiel lastig te bedienen.
 $('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
+
+// nieuwstabblad
+if($('nwOphalen'))$('nwOphalen').onclick=nieuwsOphalen;
+document.querySelectorAll('.tab').forEach(function(t){
+  if(t.dataset.tab==='nieuws')t.addEventListener('click',function(){
+    if(typeof renderNwKiezer==="function")renderNwKiezer();
+  });
+});
 
 if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
   var f=e.target.files&&e.target.files[0];
