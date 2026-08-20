@@ -865,6 +865,9 @@ var BRON={
       <div class="control-row compact">
         <button class="btn-save" id="snapshot">Vastleggen</button>
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
+        <button class="btn-ghost" id="analyseKnop" onclick="kopieerAnalyse()" style="display:none"
+          title="Kopieert de meting inclusief ruwe data en voorbehouden, klaar om in een gesprek met Claude te plakken">
+          Rapport kopi&euml;ren</button>
         <button class="btn-ghost" id="export">Exporteren</button>
         <button class="btn-ghost" id="importBtn">Importeren</button>
         <input type="file" id="importFile" accept="application/json" style="display:none">
@@ -875,6 +878,13 @@ var BRON={
 
     <div id="kpiWrap"></div>
     <div id="factorWrap"></div>
+    <div id="analyseVenster" style="display:none;margin:12px 0">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+        Selecteer en kopieer deze tekst, en plak hem in een gesprek met Claude:</div>
+      <textarea readonly style="width:100%;height:220px;background:var(--panel-2);
+        border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:10px;
+        font-family:'IBM Plex Mono',monospace;font-size:11px;resize:vertical"></textarea>
+    </div>
     <div id="scatterWrap"></div>
 
     <h3 style="font-family:'Fraunces',serif;font-size:18px;margin:20px 0 8px">Opgeslagen momentopnamen</h3>
@@ -5980,7 +5990,107 @@ function computeAndShowAccuracy(snaps,prices){
   renderKPIs(hiRet,loRet,cTot,pairs.length);
   renderFactors(cM,cV,cG,cQ);
   renderScatter(pairs);
+  LAATSTE_METING=bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet);
+  var knop=document.getElementById('analyseKnop');
+  if(knop)knop.style.display="inline-flex";
 }
+
+// ---- Rapport voor analyse ----
+// Bundelt de meting in platte tekst die je in een gesprek met een AI kunt plakken. Bevat
+// bewust ook de zwakke punten (aantal datapunten, meetperiode, sectorverdeling), want zonder
+// die context is elke conclusie over voorspellende kracht misleidend.
+var LAATSTE_METING=null;
+
+function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
+  var r=[];
+  var nu=new Date();
+  var oudste=Math.min.apply(null,snaps.map(function(s){return s.ts;}));
+  var dagen=Math.round((Date.now()-oudste)/86400000);
+  var w=weights();
+
+  r.push("ACCURATESSEMETING KOMPAS \u2014 "+nu.toLocaleDateString('nl-BE'));
+  r.push("");
+  r.push("MEETOPZET");
+  r.push("  datapunten: "+pairs.length+" (aandeel-momentopname combinaties)");
+  r.push("  momentopnamen: "+snaps.length);
+  r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
+  r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
+         ", waardering "+Math.round(w.wv*100)+
+         ", groei "+Math.round(w.wg*100)+
+         ", kwaliteit "+Math.round(w.wq*100));
+  r.push("");
+  r.push("UITKOMSTEN");
+  r.push("  correlatie totaalscore met rendement: "+cTot.toFixed(3));
+  r.push("  gemiddeld rendement hoogste helft: "+hiRet.toFixed(1)+"%");
+  r.push("  gemiddeld rendement laagste helft: "+loRet.toFixed(1)+"%");
+  r.push("  spread (hoog min laag): "+(hiRet-loRet).toFixed(1)+" procentpunt");
+  r.push("");
+  r.push("CORRELATIE PER FACTOR");
+  r.push("  momentum:   "+cM.toFixed(3));
+  r.push("  waardering: "+cV.toFixed(3));
+  r.push("  groei:      "+cG.toFixed(3));
+  r.push("  kwaliteit:  "+cQ.toFixed(3));
+  r.push("");
+
+  // spreiding van de scores: bij weinig variatie zegt de correlatie weinig
+  var scores=pairs.map(function(p){return p.score;}).sort(function(a,b){return a-b;});
+  var rends=pairs.map(function(p){return p.ret;}).sort(function(a,b){return a-b;});
+  var med=function(a){return a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2;};
+  r.push("SPREIDING");
+  r.push("  scores: laagste "+scores[0]+", mediaan "+med(scores)+", hoogste "+scores[scores.length-1]);
+  r.push("  rendementen: laagste "+rends[0].toFixed(1)+"%, mediaan "+med(rends).toFixed(1)+
+         "%, hoogste "+rends[rends.length-1].toFixed(1)+"%");
+  r.push("");
+
+  r.push("RUWE DATAPUNTEN (score; momentum; waardering; groei; kwaliteit; rendement%)");
+  pairs.slice().sort(function(a,b){return b.score-a.score;}).forEach(function(p){
+    r.push("  "+[p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1)].join("; "));
+  });
+  r.push("");
+
+  r.push("VOORBEHOUD BIJ DEZE MEETING");
+  var bezwaren=[];
+  if(pairs.length<30)bezwaren.push("Weinig datapunten ("+pairs.length+
+    "): bij deze aantallen is toeval een waarschijnlijker verklaring dan voorspellende kracht.");
+  if(dagen<90)bezwaren.push("Korte meetperiode ("+dagen+
+    " dagen): factorpremies zijn gemeten over jaren, niet weken.");
+  if(snaps.length<4)bezwaren.push("Weinig momentopnamen ("+snaps.length+
+    "): metingen uit dezelfde periode zijn onderling afhankelijk, wat de correlatie opblaast.");
+  var uniek={}; pairs.forEach(function(p){uniek[p.score]=1;});
+  if(Object.keys(uniek).length<pairs.length*0.6)
+    bezwaren.push("Veel dezelfde scores: weinig onderscheid tussen posities beperkt wat de correlatie kan aantonen.");
+  if(!bezwaren.length)bezwaren.push("Geen directe methodologische bezwaren, maar bedenk dat marktbrede bewegingen alle rendementen tegelijk beïnvloeden.");
+  bezwaren.forEach(function(b){r.push("  - "+b);});
+  r.push("");
+
+  r.push("VRAAG AAN DE ANALIST");
+  r.push("  Beoordeel of deze meting iets zinvols zegt over de voorspellende kracht van de score.");
+  r.push("  Wees expliciet als het aantal datapunten of de meetperiode te klein is om conclusies");
+  r.push("  te dragen \u2014 in dat geval is 'nog niet te zeggen' het juiste antwoord, geen aanbeveling");
+  r.push("  om de weging bij te stellen. Als er wel iets uit blijkt: welke factor draagt bij, welke");
+  r.push("  niet, en zou een andere weging verdedigbaar zijn? Houd rekening met het risico van");
+  r.push("  overfitting: een weging die het verleden mooi verklaart voorspelt de toekomst niet");
+  r.push("  automatisch beter.");
+  return r.join("\n");
+}
+
+function kopieerAnalyse(){
+  if(!LAATSTE_METING){tStat("Voer eerst een meting uit.",true);return;}
+  var tekst=LAATSTE_METING;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(tekst).then(function(){
+      tStat("Rapport gekopieerd \u2014 plak het in een gesprek met Claude voor een beoordeling.");
+    }).catch(function(){toonAnalyseVenster(tekst);});
+  }else toonAnalyseVenster(tekst);
+}
+function toonAnalyseVenster(tekst){
+  var w=document.getElementById('analyseVenster');
+  if(!w)return;
+  w.style.display="block";
+  w.querySelector('textarea').value=tekst;
+  w.querySelector('textarea').select();
+}
+window.kopieerAnalyse=kopieerAnalyse;
 
 function renderKPIs(hiRet,loRet,cTot,n){
   var spread=hiRet-loRet;
