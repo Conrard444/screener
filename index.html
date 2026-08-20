@@ -5901,19 +5901,52 @@ function takeSnapshot(){
     tStat("Dit is demodata \u2014 die wordt niet vastgelegd, omdat verzonnen cijfers je accuratesse-meting waardeloos maken. Draai eerst een echte screening.",true);
     return;
   }
-  var items=CURRENT.map(function(d){
-    return {symbol:d.symbol,name:d.name,score:rawScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),price:d.price};
+  // Het HELE universum vastleggen, niet alleen de getoonde top. Dat is niet alleen meer
+  // data: het verwijdert een selectiefout. Bewaar je alleen hoogscoorders, dan meet je
+  // achteraf hoe die het deden zonder te weten hoe de láág scorende aandelen presteerden.
+  // Juist dat verschil is wat je wilt weten - en zonder de onderkant is de correlatie
+  // systematisch vertekend (bereikbeperking).
+  var bron=(SCORESET&&SCORESET.length)?SCORESET:CURRENT;
+  var items=bron.map(function(d){
+    return {symbol:d.symbol,name:d.name,isin:d.isin||null,sector:d.sector||null,
+            score:rawScore(d),m:momentumScore(d),v:valuationScore(d),
+            g:growthScore(d),q:qualityScore(d),price:d.price};
   });
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
-    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value},items:items});
+    universum:$('exchange')?$('exchange').options[$('exchange').selectedIndex].text:null,
+    getoond:CURRENT.length,
+    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+($('wq')?$('wq').value:30)},
+    items:items});
   var zonderKoers=items.filter(function(it){return it.price==null;}).length;
   var waarschuwing = zonderKoers
     ? " \u26a0\ufe0f "+zonderKoers+" van "+items.length+" zonder koers \u2014 die kunnen later niet gemeten worden. "+
       "Een Finnhub-sleutel levert koersen voor VS-aandelen; Eulerpool geeft alleen fundamentals."
     : "";
-  tStat("Vastgelegd: "+items.length+" waarden op "+new Date().toLocaleDateString()+"."+waarschuwing, zonderKoers>0);
+  var extra=(items.length>CURRENT.length)
+    ? " (het volledige universum, niet alleen de getoonde "+CURRENT.length+")" : "";
+  tStat("Vastgelegd: "+items.length+" waarden"+extra+" op "+
+        new Date().toLocaleDateString()+"."+waarschuwing, zonderKoers>0);
+  // Opslag bewaken: met volledige universa groeit de geschiedenis sneller. Bij overmaat
+  // dunnen we de óudste opnamen uit tot de top-100 per opname; de meest recente blijven
+  // volledig, want die heb je nodig voor toekomstige metingen.
+  bewaakGeschiedenis();
   renderSnapList();
   if(typeof saveCloud==="function")saveCloud();
+}
+
+function bewaakGeschiedenis(){
+  var grootte=function(){ try{ return JSON.stringify(HISTORY).length; }catch(e){ return 0; } };
+  if(grootte()<2500000)return;
+  var uitgedund=0;
+  for(var i=0;i<HISTORY.length-4&&grootte()>2500000;i++){
+    var s=HISTORY[i];
+    if(!s.items||s.items.length<=100)continue;
+    s.items=s.items.slice().sort(function(a,b){return (b.score||0)-(a.score||0);}).slice(0,100);
+    s.uitgedund=true;
+    uitgedund++;
+  }
+  if(uitgedund)console.info("Kompas: "+uitgedund+" oudere momentopnamen ingekort tot de top 100 "+
+    "om binnen de opslaglimiet te blijven.");
 }
 
 // accuratesse meten: haal huidige koersen op voor aandelen in snapshots, vergelijk met toenmalige
@@ -5965,6 +5998,10 @@ function computeAndShowAccuracy(snaps,prices){
     s.items.forEach(function(it){
       if(prices[it.symbol]!=null && it.price!=null && it.price>0){
         var ret=((prices[it.symbol]-it.price)/it.price)*100;
+        // Momentopnamen van vandaag hebben per definitie 0% rendement: de koers is nog
+        // niet veranderd. Die meten niets en verdunnen alleen de uitkomst.
+        var leeftijdDagen=(Date.now()-s.ts)/86400000;
+        if(leeftijdDagen<2) return;
         pairs.push({score:it.score,m:it.m,v:it.v,g:it.g,q:(it.q!=null?it.q:50),ret:ret});
       }
     });
@@ -5977,11 +6014,20 @@ function computeAndShowAccuracy(snaps,prices){
   var avg=function(arr,f){return arr.reduce(function(s,x){return s+f(x);},0)/arr.length;};
   var hiRet=avg(hi,function(x){return x.ret;}),loRet=avg(lo,function(x){return x.ret;});
   // correlatie (Pearson) tussen elke factor en rendement
+  // Correlatie over alleen de datapunten waar deze factor daadwerkelijk gemeten is.
+  // Voorheen telden ontbrekende waarden als nul mee (JavaScript rekent null als 0), wat
+  // de momentumcorrelatie sterk vertekende: gemeten -0,12 terwijl het werkelijk -0,31 was.
   function corr(f){
-    var xs=pairs.map(f),ys=pairs.map(function(x){return x.ret;});
-    var mx=avg(pairs,f),my=avg(pairs,function(x){return x.ret;});
+    var punten=pairs.filter(function(x){var v=f(x);return v!=null&&!isNaN(v);});
+    var n=punten.length;
+    if(n<3)return 0;
+    var mx=punten.reduce(function(s,x){return s+f(x);},0)/n;
+    var my=punten.reduce(function(s,x){return s+x.ret;},0)/n;
     var num=0,dx=0,dy=0;
-    for(var i=0;i<pairs.length;i++){var a=xs[i]-mx,b=ys[i]-my;num+=a*b;dx+=a*a;dy+=b*b;}
+    for(var i=0;i<n;i++){
+      var a=f(punten[i])-mx, b=punten[i].ret-my;
+      num+=a*b; dx+=a*a; dy+=b*b;
+    }
     if(dx===0||dy===0)return 0;
     return num/Math.sqrt(dx*dy);
   }
@@ -6010,8 +6056,22 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
 
   r.push("ACCURATESSEMETING KOMPAS \u2014 "+nu.toLocaleDateString('nl-BE'));
   r.push("");
+  // Hoeveel ván die datapunten zijn onafhankelijk? Hetzelfde aandeel in veertien
+  // momentopnamen levert veertien regels op, maar nauwelijks veertien keer zoveel
+  // informatie: de meetperiodes overlappen bijna volledig.
+  var vingerafdrukken={};
+  pairs.forEach(function(p){ vingerafdrukken[p.g+"|"+p.q]=1; });
+  var uniek=Object.keys(vingerafdrukken).length;
+
   r.push("MEETOPZET");
   r.push("  datapunten: "+pairs.length+" (aandeel-momentopname combinaties)");
+  r.push("  geschat aantal unieke effecten: "+uniek+
+         " \u2014 de rest zijn herhaalde metingen van dezelfde posities");
+  // scorebereik: bij alleen hoogscoorders is de correlatie systematisch te laag
+  var scoresAlle=pairs.map(function(p){return p.score;});
+  var laagste=Math.min.apply(null,scoresAlle), hoogste=Math.max.apply(null,scoresAlle);
+  r.push("  scorebereik in de meting: "+laagste+" tot "+hoogste+
+         (laagste>45?"  (LET OP: alleen hoger scorende posities \u2014 zie voorbehoud)":""));
   r.push("  momentopnamen: "+snaps.length);
   r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
   r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
@@ -6059,6 +6119,15 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var uniek={}; pairs.forEach(function(p){uniek[p.score]=1;});
   if(Object.keys(uniek).length<pairs.length*0.6)
     bezwaren.push("Veel dezelfde scores: weinig onderscheid tussen posities beperkt wat de correlatie kan aantonen.");
+  if(laagste>45)bezwaren.push("Het scorebereik loopt van "+laagste+" tot "+hoogste+
+    ": er zitten nauwelijks laag scorende posities in de meting. Daardoor kun je niet zien "+
+    "of lage scores ook werkelijk slechter presteren, en wordt de correlatie systematisch "+
+    "onderschat (bereikbeperking). Leg het volledige universum vast, niet alleen de top.");
+  if(uniek<pairs.length*0.5)bezwaren.push("Van de "+pairs.length+" datapunten komen er veel van dezelfde effecten ("+
+    uniek+" unieke). Overlappende meetperiodes maken waarnemingen afhankelijk; de effectieve steekproef is kleiner dan het aantal regels suggereert.");
+  var gemRend=pairs.reduce(function(s,p){return s+p.ret;},0)/pairs.length;
+  if(Math.abs(gemRend)>3)bezwaren.push("Het gemiddelde rendement over alle posities is "+gemRend.toFixed(1)+
+    "%. In een sterk stijgende of dalende markt bewegen alle koersen dezelfde kant op, wat de meting kleurt naar één marktregime.");
   if(!bezwaren.length)bezwaren.push("Geen directe methodologische bezwaren, maar bedenk dat marktbrede bewegingen alle rendementen tegelijk beïnvloeden.");
   bezwaren.forEach(function(b){r.push("  - "+b);});
   r.push("");
