@@ -1775,6 +1775,10 @@ function valueTrap(d){
 }
 
 var CURRENT=[],SCORESET=null,sortKey="score",sortDir=-1;
+// Alles wat een screening opleverde, vóór de weergavefilters (P/E-max, marktwaarde).
+// Die filters bepalen wat je wilt zíen, niet wat een geldige meting is: een aandeel met
+// P/E 50 is juist waardevol voor de accuratesse-meting, want het verbreedt het scorebereik.
+var ALLE_ANALYSES=[];
 var DEMO_ACTIVE=false; // true zolang de tabel voorbeelddata toont
 function $(id){return document.getElementById(id);}
 var wmEl=$('wm'),wvEl=$('wv'),wgEl=$('wg'),wqEl=$('wq');
@@ -2520,6 +2524,8 @@ window.HOLDING_SET=HOLDING_SET; // zichtbaar/uitbreidbaar vanuit de browser-cons
 
 // toont bij de universumkeuze hoeveel calls die screening ongeveer kost
 function showCostEstimate(){
+  // volledige analyse verandert de kosten aanzienlijk bij grote universa
+  var volledig=$('volledigeAnalyse')&&$('volledigeAnalyse').checked;
   var el=document.getElementById('costHint'); if(!el)return;
   var syms=chosenUniverse();
   var est=estimateCalls(syms.length,syms);
@@ -3361,7 +3367,9 @@ function run(){
   var stage1;
   if(useFunnel){
     st.className="status";
-    st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)\u2026";
+    var allesAan=$('volledigeAnalyse')&&$('volledigeAnalyse').checked;
+    st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)"+
+      (allesAan?" \u2014 daarna gaan ze allemaal door naar de volledige analyse":"")+"\u2026";
     stage1=runQueue(universe,1,quoteOnly,"Vooranalyse").then(function(quotes){
       // rangschik op dagverandering, neem de top (3x de toonlimiet, min 40)
       var keep=Math.max(limit*3,40);
@@ -3386,6 +3394,7 @@ function run(){
     if(state.dayLimit)return [];
     return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
   }).then(function(all){
+    ALLE_ANALYSES=all.slice();          // ongefilterd, voor momentopnamen
     var passed=all.filter(passesFilters);
     SCORESET=passed.slice();
     buildPeers(SCORESET);
@@ -4991,6 +5000,9 @@ if($('exchange'))$('exchange').addEventListener('change',function(){
   else if($('status').className.indexOf("err")>-1){ $('status').className="status"; $('status').textContent=""; }
 });
 if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
+if($('volledigeAnalyse'))$('volledigeAnalyse').onchange=function(){
+  if(typeof showCostEstimate==="function")showCostEstimate();
+};
 
 // Weging terugzetten op de standaard. Op een aanraakscherm verschuift een regelaar
 // makkelijk per ongeluk; zonder herstelknop is de oorspronkelijke verdeling lastig terug
@@ -5906,7 +5918,8 @@ function takeSnapshot(){
   // achteraf hoe die het deden zonder te weten hoe de láág scorende aandelen presteerden.
   // Juist dat verschil is wat je wilt weten - en zonder de onderkant is de correlatie
   // systematisch vertekend (bereikbeperking).
-  var bron=(SCORESET&&SCORESET.length)?SCORESET:CURRENT;
+  var bron=(ALLE_ANALYSES&&ALLE_ANALYSES.length)?ALLE_ANALYSES
+          :((SCORESET&&SCORESET.length)?SCORESET:CURRENT);
   var items=bron.map(function(d){
     return {symbol:d.symbol,name:d.name,isin:d.isin||null,sector:d.sector||null,
             score:rawScore(d),m:momentumScore(d),v:valuationScore(d),
@@ -5923,7 +5936,9 @@ function takeSnapshot(){
       "Een Finnhub-sleutel levert koersen voor VS-aandelen; Eulerpool geeft alleen fundamentals."
     : "";
   var extra=(items.length>CURRENT.length)
-    ? " (het volledige universum, niet alleen de getoonde "+CURRENT.length+")" : "";
+    ? " \u2014 alles wat geanalyseerd is, niet alleen de "+CURRENT.length+" getoonde" : "";
+  if(SCORESET&&items.length>SCORESET.length)
+    extra+=" (inclusief "+(items.length-SCORESET.length)+" die door je P/E- of marktwaardefilter vielen)";
   tStat("Vastgelegd: "+items.length+" waarden"+extra+" op "+
         new Date().toLocaleDateString()+"."+waarschuwing, zonderKoers>0);
   // Opslag bewaken: met volledige universa groeit de geschiedenis sneller. Bij overmaat
