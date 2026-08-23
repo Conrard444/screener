@@ -4785,13 +4785,17 @@ function updateSourceBar(){
 
 // Sorteren en filteren van de portefeuille. Apart gezet omdat dit de logica is die het
 // vaakst wijzigt; in renderPortfolio zat het verweven met zes andere verantwoordelijkheden.
+// Rendement en waarde van een positie. Buiten pfSorteerEnFilter gehouden omdat zowel de
+// sortering als de kaartweergave ze gebruikt; toen ze binnen die functie stonden viel de
+// kaartweergave om met "plOf is not defined".
+function plOf(p){var r=positieRendement(p);return r?r.v:null;}
+function valueOf(p){var w=positieWaarde(p);return w!=null?w:-1;}
+
 function pfSorteerEnFilter(bron){
   // ---- sorteren ----
   var sortKey=$('pfSort')?$('pfSort').value:"alarm";
   var list=bron.slice();
   var alarmRank={red:0,orange:1,green:2,undefined:3};
-  function plOf(p){var r=positieRendement(p);return r?r.v:null;}
-  function valueOf(p){var w=positieWaarde(p);return w!=null?w:-1;}
   list.sort(function(a,b){
     if(sortKey==="alarm"){
       var ra=alarmRank[a._alarm&&a._alarm.level]; if(ra==null)ra=3;
@@ -4903,7 +4907,7 @@ function renderPortfolio(){
   }
   el.innerHTML=list.map(function(p){
     var pl = plOf(p);
-    var val = (p._fresh&&p._fresh.price)?(p._fresh.price*p.qty):null;
+    var val = positieWaarde(p);   // brokerkoers heeft voorrang, net als elders
     return '<div class="pf-card '+(p._alarm?"alarm-"+p._alarm.level:"")+'">'+
       '<div class="pf-head"><span class="tk">'+p.symbol+'</span>'+
       (function(){
