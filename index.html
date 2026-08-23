@@ -5921,9 +5921,31 @@ function takeSnapshot(){
   var bron=(ALLE_ANALYSES&&ALLE_ANALYSES.length)?ALLE_ANALYSES
           :((SCORESET&&SCORESET.length)?SCORESET:CURRENT);
   var items=bron.map(function(d){
-    return {symbol:d.symbol,name:d.name,isin:d.isin||null,sector:d.sector||null,
-            score:rawScore(d),m:momentumScore(d),v:valuationScore(d),
-            g:growthScore(d),q:qualityScore(d),price:d.price};
+    var t=valueTrap(d);
+    // Naast de berekende scores ook de RUWE cijfers bewaren. Dat is het verschil tussen
+    // achteraf alleen de weging kunnen bijstellen, en een compleet andere scoreformule
+    // kunnen toetsen zonder de data opnieuw op te halen. Zonder deze velden is elke
+    // herziening van de methodiek een gok.
+    return {
+      symbol:d.symbol, name:d.name, isin:d.isin||null, sector:d.sector||null,
+      // berekende scores
+      score:rawScore(d), m:momentumScore(d), v:valuationScore(d),
+      g:growthScore(d), q:qualityScore(d),
+      trap:t.level,
+      // ruwe waarderingscijfers
+      price:d.price, pe:d.pe, peNorm:d.peNorm, pb:d.pb, peg:d.peg,
+      // ruwe fundamenten
+      roe:d.roe, margin:d.margin, de:d.de, revG:d.revG, epsG:d.epsG,
+      piotroski:d.piotroski, altmanZ:d.altmanZ, roicSpread:d.roicSpread, aaqs:d.aaqs,
+      // context die het gedrag kan verklaren
+      mcap:d._mcap!=null?Math.round(d._mcap/1e6):null,   // in miljoenen
+      chg:d.chg, mom1m:d.mom1m, dd:d.dd,
+      bron:d._src||null,
+      // hoeveel van de vier factoren steunen op echte data?
+      volledig:[d.pe!=null||d.peNorm!=null, d.revG!=null||d.epsG!=null,
+                d.roe!=null||d.aaqs!=null||d.piotroski!=null,
+                d.mom1m!=null||d.chg!=null].filter(Boolean).length
+    };
   });
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
     universum:$('exchange')?$('exchange').options[$('exchange').selectedIndex].text:null,
@@ -5952,16 +5974,33 @@ function takeSnapshot(){
 function bewaakGeschiedenis(){
   var grootte=function(){ try{ return JSON.stringify(HISTORY).length; }catch(e){ return 0; } };
   if(grootte()<2500000)return;
-  var uitgedund=0;
-  for(var i=0;i<HISTORY.length-4&&grootte()>2500000;i++){
+  // Stap 1: oudste opnamen afslanken tot de kernvelden. Dat behoudt álle aandelen (en dus
+  // het volledige scorebereik) en offert alleen de ruwe cijfers op, die je vooral nodig hebt
+  // om alternatieve formules te toetsen op recente data.
+  var kern=['symbol','name','sector','score','m','v','g','q','price','mcap','trap','volledig'];
+  var afgeslankt=0;
+  for(var i=0;i<HISTORY.length-6&&grootte()>2500000;i++){
     var s=HISTORY[i];
-    if(!s.items||s.items.length<=100)continue;
-    s.items=s.items.slice().sort(function(a,b){return (b.score||0)-(a.score||0);}).slice(0,100);
-    s.uitgedund=true;
-    uitgedund++;
+    if(!s.items||s.afgeslankt)continue;
+    s.items=s.items.map(function(it){
+      var o={}; kern.forEach(function(k){ if(it[k]!=null)o[k]=it[k]; }); return o;
+    });
+    s.afgeslankt=true; afgeslankt++;
   }
-  if(uitgedund)console.info("Kompas: "+uitgedund+" oudere momentopnamen ingekort tot de top 100 "+
-    "om binnen de opslaglimiet te blijven.");
+  // Stap 2: pas als dat niet volstaat, aandelen weglaten - en dan gespreid over het hele
+  // scorebereik in plaats van alleen de top, anders ontstaat precies de bereikbeperking
+  // die de meting vertekent.
+  var uitgedund=0;
+  for(var j=0;j<HISTORY.length-4&&grootte()>2500000;j++){
+    var s2=HISTORY[j];
+    if(!s2.items||s2.items.length<=100)continue;
+    var gesorteerd=s2.items.slice().sort(function(a,b){return (b.score||0)-(a.score||0);});
+    var stap=gesorteerd.length/100, behouden=[];
+    for(var k=0;k<100;k++)behouden.push(gesorteerd[Math.floor(k*stap)]);
+    s2.items=behouden; s2.uitgedund=true; uitgedund++;
+  }
+  if(afgeslankt||uitgedund)console.info("Kompas: "+afgeslankt+" opnamen afgeslankt tot kernvelden, "+
+    uitgedund+" uitgedund tot 100 gespreide aandelen, om binnen de opslaglimiet te blijven.");
 }
 
 // accuratesse meten: haal huidige koersen op voor aandelen in snapshots, vergelijk met toenmalige
@@ -6017,10 +6056,29 @@ function computeAndShowAccuracy(snaps,prices){
         // niet veranderd. Die meten niets en verdunnen alleen de uitkomst.
         var leeftijdDagen=(Date.now()-s.ts)/86400000;
         if(leeftijdDagen<2) return;
-        pairs.push({score:it.score,m:it.m,v:it.v,g:it.g,q:(it.q!=null?it.q:50),ret:ret});
+        pairs.push({score:it.score,m:it.m,v:it.v,g:it.g,q:(it.q!=null?it.q:50),ret:ret,
+          snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
+          trap:it.trap, volledig:it.volledig,
+          pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs});
       }
     });
   });
+  // Vergelijkingsmaatstaf uit de meting zelf: het mediane rendement van alle aandelen in
+  // dezelfde momentopname. Zonder dit meet je vooral wat de markt deed. Steeg alles 5%,
+  // dan is een aandeel dat 6% steeg nauwelijks een prestatie - maar de correlatie ziet dat
+  // verschil niet. Met overrendement meet je wat de score toevoegt bóven de markt.
+  var perSnap={};
+  pairs.forEach(function(p){ (perSnap[p.snapTs]=perSnap[p.snapTs]||[]).push(p.ret); });
+  Object.keys(perSnap).forEach(function(ts){
+    var r=perSnap[ts].slice().sort(function(a,b){return a-b;});
+    perSnap[ts]={mediaan:r.length%2?r[(r.length-1)/2]:(r[r.length/2-1]+r[r.length/2])/2, n:r.length};
+  });
+  pairs.forEach(function(p){
+    var b=perSnap[p.snapTs];
+    p.markt=b?b.mediaan:0;
+    p.over=p.ret-p.markt;      // overrendement t.o.v. de rest van het universum
+  });
+
   if(pairs.length<3){tStat("Te weinig vergelijkbare datapunten ("+pairs.length+"). Leg meer momentopnamen vast over de tijd.",true);return;}
   // gemiddeld rendement hoge vs lage score (mediaan-split)
   var sorted=pairs.slice().sort(function(a,b){return b.score-a.score;});
@@ -6117,9 +6175,68 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
          "%, hoogste "+rends[rends.length-1].toFixed(1)+"%");
   r.push("");
 
-  r.push("RUWE DATAPUNTEN (score; momentum; waardering; groei; kwaliteit; rendement%)");
+  // ---- Overrendement: wat de score toevoegt bóven de markt ----
+  function corrOver(veld){
+    var pts=pairs.filter(function(p){return p[veld]!=null&&!isNaN(p[veld]);});
+    if(pts.length<3)return null;
+    var mx=pts.reduce(function(s,p){return s+p[veld];},0)/pts.length;
+    var my=pts.reduce(function(s,p){return s+p.over;},0)/pts.length;
+    var num=0,dx=0,dy=0;
+    pts.forEach(function(p){var a=p[veld]-mx,b=p.over-my;num+=a*b;dx+=a*a;dy+=b*b;});
+    return (dx&&dy)?num/Math.sqrt(dx*dy):0;
+  }
+  var gemMarkt=pairs.reduce(function(s,p){return s+p.markt;},0)/pairs.length;
+  var sO=pairs.slice().sort(function(a,b){return b.score-a.score;});
+  var hO=Math.floor(sO.length/2);
+  var hiO=sO.slice(0,hO).reduce(function(s,p){return s+p.over;},0)/hO;
+  var loO=sO.slice(-hO).reduce(function(s,p){return s+p.over;},0)/hO;
+
+  r.push("OVERRENDEMENT (t.o.v. de mediaan van hetzelfde universum in dezelfde periode)");
+  r.push("  Dit corrigeert voor marktbrede bewegingen. Het gemiddelde marktrendement in deze");
+  r.push("  metingen was "+gemMarkt.toFixed(1)+"%; wat hieronder staat is wat de score DAARBOVEN toevoegde.");
+  r.push("  correlatie score met overrendement: "+(corrOver('score')||0).toFixed(3));
+  r.push("  spread hoog-laag in overrendement: "+(hiO-loO).toFixed(1)+" procentpunt");
+  r.push("  per factor \u2014 momentum "+(corrOver('m')||0).toFixed(3)+
+         ", waardering "+(corrOver('v')||0).toFixed(3)+
+         ", groei "+(corrOver('g')||0).toFixed(3)+
+         ", kwaliteit "+(corrOver('q')||0).toFixed(3));
+  r.push("");
+
+  // ---- Uitsplitsingen die patronen blootleggen ----
+  function groepeer(sleutelFn,lbl){
+    var g={};
+    pairs.forEach(function(p){
+      var k=sleutelFn(p); if(k==null)return;
+      (g[k]=g[k]||[]).push(p);
+    });
+    var regels=[];
+    Object.keys(g).sort().forEach(function(k){
+      var lijst=g[k]; if(lijst.length<5)return;
+      var s2=lijst.slice().sort(function(a,b){return b.score-a.score;});
+      var h2=Math.floor(s2.length/2);
+      if(h2<2)return;
+      var hi2=s2.slice(0,h2).reduce(function(s,p){return s+p.over;},0)/h2;
+      var lo2=s2.slice(-h2).reduce(function(s,p){return s+p.over;},0)/h2;
+      regels.push("  "+String(k).slice(0,22).padEnd(24)+" n="+String(lijst.length).padStart(3)+
+                  "   spread "+(hi2-lo2>=0?"+":"")+(hi2-lo2).toFixed(1)+"pp");
+    });
+    if(regels.length){ r.push(lbl); regels.forEach(function(x){r.push(x);}); r.push(""); }
+  }
+  groepeer(function(p){return p.sector;},"WERKT DE SCORE OVERAL? (spread per sector, alleen groepen met 5+ punten)");
+  groepeer(function(p){
+    if(p.mcap==null)return null;
+    return p.mcap<10000?"klein (<10 mld)":(p.mcap<100000?"middel (10-100 mld)":"groot (>100 mld)");
+  },"WERKT DE SCORE BIJ ELKE OMVANG?");
+  groepeer(function(p){return p.volledig!=null?(p.volledig+" van 4 factoren gemeten"):null;},
+           "MAAKT DATAVOLLEDIGHEID UIT?");
+
+  r.push("RUWE DATAPUNTEN");
+  r.push("  score; mom; waard; groei; kwal; rend%; overrend%; sector; mcap(mln); P/E; K/B; ROE; omzetgr; winstgr");
   pairs.slice().sort(function(a,b){return b.score-a.score;}).forEach(function(p){
-    r.push("  "+[p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1)].join("; "));
+    r.push("  "+[p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1),p.over.toFixed(1),
+                 p.sector||"?",p.mcap!=null?p.mcap:"",
+                 p.pe!=null?p.pe:"",p.pb!=null?p.pb:"",p.roe!=null?p.roe:"",
+                 p.revG!=null?p.revG:"",p.epsG!=null?p.epsG:""].join("; "));
   });
   r.push("");
 
@@ -6155,6 +6272,11 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   r.push("  niet, en zou een andere weging verdedigbaar zijn? Houd rekening met het risico van");
   r.push("  overfitting: een weging die het verleden mooi verklaart voorspelt de toekomst niet");
   r.push("  automatisch beter.");
+  r.push("");
+  r.push("  Let bij het beoordelen vooral op het OVERRENDEMENT, niet op het ruwe rendement:");
+  r.push("  dat eerste corrigeert voor marktbrede bewegingen. En de ruwe cijfers per aandeel");
+  r.push("  (P/E, ROE, groei) staan erbij, dus alternatieve scoreformules zijn te toetsen");
+  r.push("  zonder nieuwe data \u2014 niet alleen andere wegingen van dezelfde vier factoren.");
   return r.join("\n");
 }
 
