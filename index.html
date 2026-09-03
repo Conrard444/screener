@@ -3533,7 +3533,7 @@ function run(){
   var throttle=BRON.throttle(universe);
   var CALLS_FULL=Math.max.apply(null,universe.slice(0,20).map(function(s){return BRON.kosten(s);}).concat([2]));
   var MAX_CALLS_PER_MIN=55;
-  var state={callsInWindow:0,dayLimit:null,skipped:[],redenen:{}};
+  var state={stempels:[],dayLimit:null,skipped:[],redenen:{}};
   // vooraf melden welke bron gebruikt wordt, zodat verrassingen uitblijven
   var bronnenInGebruik={};
   universe.forEach(function(s){var b=BRON.voor(s); if(b)bronnenInGebruik[b]=(bronnenInGebruik[b]||0)+1;});
@@ -3547,39 +3547,77 @@ function run(){
   }
 
   function countdown(seconds,reason){
+    // begrensd op 65 seconden: langer wachten heeft geen zin, want het tijdvenster is
+    // een minuut. Zonder die grens kan een verkeerde berekening tot een eindeloze pauze leiden.
+    seconds=Math.max(1,Math.min(65,Math.round(seconds)));
     return new Promise(function(resolve){
-      var left=seconds;
+      var left=seconds, klaar=false;
+      function stop(){ if(!klaar){klaar=true;resolve();} }
+      // harde vangnet: hoe dan ook doorgaan na de looptijd plus twee seconden
+      setTimeout(stop,(seconds+2)*1000);
       function tick(){
-        if(left<=0){resolve();return;}
+        if(klaar)return;
+        if(left<=0){stop();return;}
         st.className="status";
-        st.textContent="\u23f3 "+reason+" \u2014 pauze ("+left+"s)\u2026";
+        st.textContent="\u23f3 "+reason+" \u2014 nog "+left+"s (dit telt niet mee in je API-verbruik)";
         left--;setTimeout(tick,1000);
       }
       tick();
     });
   }
 
-  // generieke gethrottlede wachtrij: verwerkt symbolen sequentieel met call-budget per minuut
+  // Schuivend tijdvenster voor de snelheidslimiet.
+  //
+  // Voorheen telde een simpele teller die alleen ná een pauze op nul ging. Duurt een
+  // screening natuurlijkerwijs enkele minuten door netwerkvertraging, dan telt die teller
+  // gewoon door en pauzeert hij zonder reden - ook op het laatste aandeel, waar je dan
+  // een volle minuut staat te wachten op niets.
+  //
+  // Nu houden we per aanroep een tijdstempel bij en tellen alleen wat er in de afgelopen
+  // zestig seconden werkelijk gebeurde. Pauzeren gebeurt precies zolang als nodig, niet
+  // standaard 61 seconden.
+  state.stempels=state.stempels||[];
+  function ruimStempels(){
+    var grens=Date.now()-60000;
+    state.stempels=state.stempels.filter(function(t){return t>grens;});
+  }
+  function wachttijdNodig(callsPer){
+    ruimStempels();
+    if(state.stempels.length+callsPer<=MAX_CALLS_PER_MIN)return 0;
+    // wacht tot de oudste aanroep uit het venster valt, plus een seconde marge
+    var oudste=state.stempels[0];
+    return Math.max(1,Math.ceil((oudste+60000-Date.now())/1000)+1);
+  }
+
   function runQueue(symbols,callsPer,fetchFn,label){
     var seq=Promise.resolve([]);
     symbols.forEach(function(sym,i){
       seq=seq.then(function(acc){
         if(state.dayLimit)return acc;
         var pre=Promise.resolve();
-        if(throttle && state.callsInWindow+callsPer>MAX_CALLS_PER_MIN){
-          pre=countdown(61,"Snelheidslimiet nadert").then(function(){state.callsInWindow=0;});
+        if(throttle){
+          var wacht=wachttijdNodig(callsPer);
+          if(wacht>0)pre=countdown(wacht,"Snelheidslimiet nadert");
         }
         return pre.then(function(){
           return fetchFn(sym,key).then(function(e){
-            acc.push(e);state.callsInWindow+=callsPer;
+            acc.push(e);
+            var nu=Date.now();
+            for(var c=0;c<callsPer;c++)state.stempels.push(nu);
             if(i%4===0)st.textContent=label+"\u2026 "+(i+1)+"/"+symbols.length;
             return acc;
           }).catch(function(err){
             var msg=(err&&err.msg)||"";
             if(throttle && /429|rate limit|too many/i.test(msg)){
+              // limiet werkelijk geraakt: het venster leegmaken en een volle minuut wachten
               return countdown(61,"Snelheidslimiet geraakt").then(function(){
-                state.callsInWindow=0;
-                return fetchFn(sym,key).then(function(e){acc.push(e);state.callsInWindow+=callsPer;return acc;})
+                state.stempels=[];
+                return fetchFn(sym,key).then(function(e){
+                    acc.push(e);
+                    var nu2=Date.now();
+                    for(var c2=0;c2<callsPer;c2++)state.stempels.push(nu2);
+                    return acc;
+                  })
                   .catch(function(err2){
                     var m2=(err2&&err2.msg)||"";
                     if(/limit|exceed|monthly|reached/i.test(m2))state.dayLimit=m2;
