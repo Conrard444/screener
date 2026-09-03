@@ -558,6 +558,17 @@ var BRON={
       Analyse-instrument, geen financieel advies &mdash;
       <span style="cursor:pointer;text-decoration:underline" onclick="document.querySelector('[data-tab=uitleg]').click()">lees de uitleg</span>
     </div>
+    <!-- Cloud-status in de kop: op elk tabblad zichtbaar, zodat je nooit onbewust
+         zonder synchronisatie werkt en je wijzigingen alleen lokaal blijven staan. -->
+    <div id="cloudKop" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+         margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px">
+      <span id="cloudKopStatus" style="color:var(--muted)">&#9729;&#65039; niet ingelogd &mdash;
+        wijzigingen blijven alleen op dit apparaat</span>
+      <button class="btn-ghost" id="cloudKopLogin"
+        style="height:28px;padding:0 12px;font-size:11.5px">Inloggen met Google</button>
+      <button class="btn-ghost" id="cloudKopLogout"
+        style="height:28px;padding:0 12px;font-size:11.5px;display:none">Uitloggen</button>
+    </div>
   </header>
 
   <div class="tabs">
@@ -1291,6 +1302,30 @@ function haalRamingen(identifier,token){
     }).catch(function(){return null;});
 }
 
+// Netto aandelenuitgifte: geeft het bedrijf aandelen uit of koopt het ze in?
+// Bedrijven die verwateren presteren historisch slechter, inkopers beter. De bron levert
+// geen historie, dus we bouwen die op uit onze eigen momentopnamen - hetzelfde principe
+// als bij de bijstelling van ramingen.
+function bepaalUitgifte(d){
+  if(d.aandelenAantal==null||typeof HISTORY==="undefined")return null;
+  var sleutel=d.isin||d.symbol, beste=null;
+  HISTORY.forEach(function(s){
+    if(s.demo)return;
+    (s.items||[]).forEach(function(it){
+      if((it.isin||it.symbol)!==sleutel||it.aandelenAantal==null)return;
+      var leeftijd=Date.now()-s.ts;
+      // minstens drie maanden terug: korter zegt niets over verwatering
+      if(leeftijd<90*86400000)return;
+      if(!beste||s.ts>beste.ts)beste={ts:s.ts,n:it.aandelenAantal};
+    });
+  });
+  if(!beste||!beste.n)return null;
+  var dagen=Math.round((Date.now()-beste.ts)/86400000);
+  var verandering=((d.aandelenAantal-beste.n)/beste.n)*100;
+  // omrekenen naar jaarbasis, zodat perioden vergelijkbaar zijn
+  return +((verandering*365/dagen)).toFixed(2);
+}
+
 // Bijstelling t.o.v. de vorige momentopname: zelf opgebouwd, want de bron levert die niet.
 // Zoekt de meest recente eerdere opname met een raming voor hetzelfde effect én boekjaar.
 function bepaalBijstelling(d){
@@ -1333,7 +1368,7 @@ var KERNVELDEN=[
   // groei
   'revG','epsG',
   // koers en momentum
-  'price','chg','mom1m','dd',
+  'price','chg','mom1m','dd','vol','maxTerugval','aandelenAantal','uitgifte',
   // omvang en herkomst
   '_mcap','_src','currency',
   // winstverrassing (alleen aanwezig als de optie aanstaat)
@@ -4257,6 +4292,7 @@ function enrichEulerMetrics(isin,token){
         currency: m.currency||null,
         price: koers, priceDerived: true,
         _mcap: mcap, shares: shares,
+        aandelenAantal: shares!=null?Math.round(shares/1e6):null,   // in miljoenen, voor uitgiftemeting
         // waardering
         pe: pe, pb: pb, ps: num(val.ps,1), evEbitda: num(val.evEbitda,1),
         peNorm: peNorm, epsGem: epsGem!=null?+epsGem.toFixed(2):null,
@@ -4320,7 +4356,32 @@ function fetchOhlcvEuler(isin,token,dagen){
       reeks.forEach(function(r){ if(r.c>top)top=r.c; });
       var dd = top>0 ? +(((laatste-top)/top)*100).toFixed(1) : null;
 
+      // Volatiliteit uit dezelfde reeks: kost geen extra call en meet iets wat de vier
+      // bestaande factoren niet zien. Twee aandelen met hetzelfde jaarrendement kunnen
+      // sterk verschillen in de weg ernaartoe, en aandelen met lage volatiliteit
+      // presteren historisch beter dan hun risico rechtvaardigt.
+      var vol=null, maxTerugval=null;
+      if(reeks.length>=40){
+        var dagrend=[];
+        for(var i=1;i<reeks.length;i++){
+          if(reeks[i-1].c>0)dagrend.push((reeks[i].c-reeks[i-1].c)/reeks[i-1].c);
+        }
+        if(dagrend.length>=30){
+          var gem=dagrend.reduce(function(s,x){return s+x;},0)/dagrend.length;
+          var variantie=dagrend.reduce(function(s,x){return s+(x-gem)*(x-gem);},0)/dagrend.length;
+          vol=+(Math.sqrt(variantie)*Math.sqrt(252)*100).toFixed(1);   // op jaarbasis
+        }
+        // grootste tussentijdse terugval: hoe diep ging het onderuit vanaf een piek
+        var piek=reeks[0].c, diepste=0;
+        reeks.forEach(function(r){
+          if(r.c>piek)piek=r.c;
+          if(piek>0){ var v=(r.c-piek)/piek; if(v<diepste)diepste=v; }
+        });
+        maxTerugval=+(diepste*100).toFixed(1);
+      }
+
       return {price:+laatste.toFixed(2), chg:chg, mom1m:mom1m, dd:dd,
+              vol:vol, maxTerugval:maxTerugval,
               punten:reeks.length, hoogste:+top.toFixed(2)};
     }).catch(function(){return null;});
 }
@@ -6208,6 +6269,11 @@ function takeSnapshot(){
   var items=bron.map(function(d){
     var kern=kerngegevens(d);
     var t=valueTrap(d);
+    // uitgifte afleiden uit eerdere opnamen (kost geen API-call)
+    if(typeof bepaalUitgifte==="function"){
+      var u=bepaalUitgifte(d);
+      if(u!=null)kern.uitgifte=u;
+    }
     // scores als momentopname van de toen geldende methodiek, expliciet gemarkeerd
     kern.score=rawScore(d);
     kern.m=momentumScore(d); kern.v=valuationScore(d);
@@ -6362,7 +6428,9 @@ function computeAndShowAccuracy(snaps,prices){
           snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
           trap:it.trap, volledig:it.volledig,
           pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs,
-          verrassing:it.verrassing, verrassingConsistentie:it.verrassingConsistentie});
+          verrassing:it.verrassing, verrassingConsistentie:it.verrassingConsistentie,
+          vol:it.vol, maxTerugval:it.maxTerugval, uitgifte:it.uitgifte,
+          ramingSpreiding:it.ramingSpreiding, bijstelling:it.bijstelling});
       }
     });
   });
@@ -6696,6 +6764,17 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   },"WERKT DE SCORE BIJ ELKE OMVANG?");
   groepeer(function(p){return p.volledig!=null?(p.volledig+" van 4 factoren gemeten"):null;},
            "MAAKT DATAVOLLEDIGHEID UIT?");
+  groepeer(function(p){
+    if(p.vol==null)return null;
+    return p.vol<20?"lage volatiliteit (<20%)":
+           (p.vol<35?"gemiddeld (20-35%)":
+           (p.vol<55?"hoog (35-55%)":"zeer hoog (>55%)"));
+  },"HANGT HET SAMEN MET VOLATILITEIT? (indien koershistorie opgehaald)");
+  groepeer(function(p){
+    if(p.uitgifte==null)return null;
+    return p.uitgifte>2?"verwatert (>2%/jaar meer aandelen)":
+           (p.uitgifte>-1?"stabiel aandelenaantal":"koopt aandelen in");
+  },"HANGT HET SAMEN MET AANDELENUITGIFTE?");
   groepeer(function(p){
     if(p.verrassing==null)return null;
     return p.verrassing>2?"winst >2% boven verwachting":
@@ -7053,7 +7132,20 @@ $('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.len
 
 // ---- Firebase cloud-sync ----
 var FB={app:null,auth:null,db:null,user:null,ready:false};
-function syncMsg(t){var e=$('syncStatus');if(e)e.innerHTML=t;}
+function syncMsg(t){
+  var e=$('syncStatus'); if(e)e.innerHTML=t;
+  // kop meelaten lopen: daar staat een compactere variant zonder de uitleg erachter
+  var k=$('cloudKopStatus');
+  if(k)k.innerHTML=String(t).replace(/Cloud-sync:\s*/,"").replace(/\s*\u2014 log in om.*$/,"");
+}
+// Toont of verbergt de inlogknoppen op beide plekken tegelijk.
+function toonInlogStatus(ingelogd){
+  [['loginBtn','logoutBtn'],['cloudKopLogin','cloudKopLogout']].forEach(function(p){
+    var aan=$(p[0]), uit=$(p[1]);
+    if(aan)aan.style.display=ingelogd?"none":"";
+    if(uit)uit.style.display=ingelogd?"":"none";
+  });
+}
 (function initFirebase(){
   if(typeof firebase==="undefined"||!window.FIREBASE_CONFIG){
     syncMsg("\u2601\ufe0f Cloud-sync niet beschikbaar (Firebase niet geladen \u2014 werkt alleen op de online versie).");
@@ -7067,13 +7159,11 @@ function syncMsg(t){var e=$('syncStatus');if(e)e.innerHTML=t;}
     FB.auth.onAuthStateChanged(function(user){
       FB.user=user;
       if(user){
-        $('loginBtn').style.display="none";
-        $('logoutBtn').style.display="";
+        toonInlogStatus(true);
         syncMsg("\u2601\ufe0f Ingelogd als <b>"+(user.displayName||user.email)+"</b> \u2014 synchroniseren\u2026");
         loadCloud();
       }else{
-        $('loginBtn').style.display="";
-        $('logoutBtn').style.display="none";
+        toonInlogStatus(false);
         syncMsg("\u2601\ufe0f Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.");
       }
     });
@@ -7088,6 +7178,8 @@ $('loginBtn').onclick=function(){
   FB.auth.signInWithPopup(prov).catch(function(e){syncMsg("Inloggen mislukt: "+(e&&e.message||e));});
 };
 $('logoutBtn').onclick=function(){if(FB.auth)FB.auth.signOut();};
+if($('cloudKopLogin'))$('cloudKopLogin').onclick=function(){$('loginBtn').click();};
+if($('cloudKopLogout'))$('cloudKopLogout').onclick=function(){if(FB.auth)FB.auth.signOut();};
 if($('saveSettingsBtn'))$('saveSettingsBtn').onclick=function(){if(typeof saveSettingsCloud==="function")saveSettingsCloud();};
 if($('syncKeys'))$('syncKeys').onchange=function(){
   if(!FB.user){syncMsg("Log eerst in om sleutels te synchroniseren.");$('syncKeys').checked=false;return;}
