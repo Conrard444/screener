@@ -865,6 +865,8 @@ var BRON={
       <div class="control-row compact">
         <button class="btn-save" id="snapshot">Vastleggen</button>
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
+        <button class="btn-ghost" onclick="toonHerberekenVenster()"
+          title="Herrekent bewaarde momentopnamen met de huidige scoremethodiek. Toont eerst wat er verandert; terug te draaien.">Herrekenen</button>
         <button class="btn-ghost" id="analyseKnop" onclick="kopieerAnalyse()" style="display:none"
           title="Kopieert de meting inclusief ruwe data en voorbehouden, klaar om in een gesprek met Claude te plakken">
           Rapport kopi&euml;ren</button>
@@ -878,6 +880,7 @@ var BRON={
 
     <div id="kpiWrap"></div>
     <div id="factorWrap"></div>
+    <div id="herrekenVenster" style="display:none;margin:12px 0"></div>
     <div id="analyseVenster" style="display:none;margin:12px 0">
       <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
         Selecteer en kopieer deze tekst, en plak hem in een gesprek met Claude:</div>
@@ -1171,7 +1174,7 @@ function momentumScore(d){
   if(!heeftData) return null;
   if(!isLong()&&PEERS){
     var a=pctRank(d.chg,PEERS.chg,false),b=pctRank(d.mom1m,PEERS.mom1m,false);
-    if(a!=null&&b!=null)return Math.round(a*0.4+b*0.6);
+    if(a!=null&&b!=null)return herschaal(Math.round(a*0.4+b*0.6), 1.9);
   }
   var parts=[],sum=0;
   if(d.chg!=null&&!isNaN(d.chg)){parts.push([norm(d.chg,-5,8,false),0.4]);sum+=0.4;}
@@ -1182,6 +1185,89 @@ function momentumScore(d){
 }
 // Is dit "goedkoop" of "goedkoop met reden"? Bij financiële nood of krimpende winst is een lage
 // waardering geen koopje maar een waarschuwing - de markt prijst het risico in.
+// Ongeldige waarderingscijfers eruit filteren vóór ze gescoord worden.
+// Aanleiding: Eulerpool gaf voor BESI een P/E van 0 terug. Zo'n nul werd als "extreem
+// goedkoop" gescoord (75 punten) terwijl het simpelweg ontbrekende data is. Een negatieve
+// P/E betekent verlies - ook geen koopje, maar werd net zo beloond.
+// Herschaalt een samengestelde score terug naar de volle 0-100 band.
+//
+// Waarom dit nodig is: waardering en kwaliteit combineren elk meerdere percentielen door
+// ze te middelen. Gemiddelden van onafhankelijke waarden clusteren rond het midden (het
+// centrale-limietverschijnsel), waardoor de helft van alle aandelen binnen ~25 punten valt
+// terwijl momentum ~49 punten spreidt. Gevolg: de weegregelaars liegen. Zet je waardering
+// op 25 en momentum op 30, dan is de werkelijke invloed 50% in plaats van 83%, simpelweg
+// omdat een samengedrukte factor minder onderscheid maakt.
+//
+// De correctie rekt de verdeling op rond het midden. De rangorde blijft exact gelijk;
+// alleen de afstanden worden vergelijkbaar met een niet-gemiddelde factor.
+// ---- Kerngegevens per effect ----
+// De velden die de scorelogica leest. Dit is de bron van waarheid: een momentopname bewaart
+// déze cijfers, niet de scores. Een score is een afgeleide van een methodiek die kan wijzigen;
+// de onderliggende meting niet. Zo blijft elke toekomstige formule toepasbaar op oude data.
+//
+// De lijst is afgeleid uit wat momentumScore, valuationScore, growthScore, qualityScore,
+// holdingScore en valueTrap daadwerkelijk uitlezen. Voeg je een veld toe aan de scorelogica,
+// zet het dan ook hier neer - anders is die factor achteraf niet meer te herrekenen.
+var KERNVELDEN=[
+  // identificatie
+  'symbol','isin','name','ticker','queriedAs','sector','industry',
+  // waardering
+  'pe','peNorm','pb','peg','peVsHist',
+  // winstgevendheid en kwaliteit
+  'roe','roce','margin','piotroski','altmanZ','roicSpread','aaqs',
+  'profitContinuity','beneishFlag',
+  // groei
+  'revG','epsG',
+  // koers en momentum
+  'price','chg','mom1m','dd',
+  // omvang en herkomst
+  '_mcap','_src','currency'
+];
+
+function kerngegevens(d){
+  var o={};
+  KERNVELDEN.forEach(function(k){
+    var v=d[k];
+    if(v!==undefined&&v!==null&&!(typeof v==="number"&&isNaN(v)))o[k]=v;
+  });
+  return o;
+}
+
+// Hoeveel van de scorelogica kan uit deze gegevens herrekend worden?
+function herrekenbaarheid(item){
+  if(!item)return {niveau:"geen",factoren:0};
+  var waardering=(item.pe!=null||item.peNorm!=null||item.pb!=null||item.peVsHist!=null);
+  var groei=(item.revG!=null||item.epsG!=null);
+  var kwaliteit=(item.roe!=null||item.aaqs!=null||item.piotroski!=null||item.roce!=null);
+  var momentum=(item.mom1m!=null||item.chg!=null);
+  var n=[waardering,groei,kwaliteit,momentum].filter(Boolean).length;
+  return {niveau:n===4?"volledig":(n>=2?"gedeeltelijk":"geen"), factoren:n,
+          waardering:waardering,groei:groei,kwaliteit:kwaliteit,momentum:momentum};
+}
+
+function herschaal(score,aantalDelen){
+  if(score==null||isNaN(score))return score;
+  if(!aantalDelen||aantalDelen<2)return score;
+  // spreiding van een gemiddelde van k delen is ongeveer 1/sqrt(k) van één deel
+  var factor=Math.sqrt(aantalDelen);
+  var uit=50+(score-50)*factor;
+  return Math.round(Math.max(0,Math.min(100,uit)));
+}
+
+function geldigeRatio(v,min,max){
+  if(v==null||isNaN(v)||!isFinite(v))return null;
+  if(v<=min||v>max)return null;
+  return +v;
+}
+function schoonWaardering(d){
+  return {
+    pe:     geldigeRatio(d.pe,     0.5, 500),   // onder 0,5 of negatief = geen zinvolle P/E
+    peNorm: geldigeRatio(d.peNorm, 0.5, 500),
+    pb:     geldigeRatio(d.pb,     0.05, 200),  // negatief eigen vermogen = niet vergelijkbaar
+    peg:    geldigeRatio(d.peg,    0.01, 20)
+  };
+}
+
 function valuationIsSuspect(d){
   if(d.altmanZ!=null&&d.altmanZ<1.81)return true;          // distress-zone
   if(d.piotroski!=null&&d.piotroski<=3)return true;          // zwakke financiële kracht
@@ -1191,6 +1277,11 @@ function valuationIsSuspect(d){
   return false;
 }
 function valuationScore(d){
+  // eerst de ongeldige waarden eruit: nullen en negatieve ratio's zijn geen koopjes
+  var s=schoonWaardering(d);
+  d={pe:s.pe, peNorm:s.peNorm, pb:s.pb, peg:s.peg,
+     altmanZ:d.altmanZ, piotroski:d.piotroski, epsG:d.epsG, roicSpread:d.roicSpread,
+     aaqs:d.aaqs, sector:d.sector, symbol:d.symbol, peVsHist:d.peVsHist, _mcap:d._mcap};
   // Genormaliseerde P/E indien beschikbaar: gebaseerd op de gemiddelde winst over vijf jaar
   // in plaats van één jaar. Voorkomt dat een cyclisch bedrijf in een dieptejaar als extreem
   // duur oogt (BESI: P/E 129 op dieptejaarwinst, 86 op het vijfjaarsgemiddelde).
@@ -1203,7 +1294,7 @@ function valuationScore(d){
       (1-(Math.log10(Math.max(3,d.peNorm))-Math.log10(6))/(Math.log10(150)-Math.log10(6)))*100)));
     var pbS=(d.pb!=null)?Math.round(Math.max(0,Math.min(100,
       (1-(Math.log10(Math.max(0.3,d.pb))-Math.log10(0.6))/(Math.log10(60)-Math.log10(0.6)))*100))):null;
-    if(pbS!=null)return capSuspectValue(d, Math.round(normS*0.65+pbS*0.35));
+    if(pbS!=null)return capSuspectValue(d, herschaal(Math.round(normS*0.65+pbS*0.35), 1.8));
     return capSuspectValue(d, normS);
   }
   // Beste signaal indien beschikbaar: hoe verhoudt de huidige P/E zich tot de EIGEN 5-jaarshistorie
@@ -1221,8 +1312,9 @@ function valuationScore(d){
   }
   // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels
   if(!isLong()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
-    if(a!=null&&b!=null&&c!=null)return capSuspectValue(d, Math.round(a*0.4+b*0.4+c*0.2));}
-  return capSuspectValue(d, Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2));
+    if(a!=null&&b!=null&&c!=null)
+      return capSuspectValue(d, herschaal(Math.round(a*0.4+b*0.4+c*0.2), 2.6));}
+  return capSuspectValue(d, herschaal(Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2), 2.6));
 }
 // begrenst de waarderingsscore wanneer de goedkoopte verdacht is: nooit hoger dan 55,
 // zodat een bedrijf in nood niet bovenaan eindigt puur omdat het optisch goedkoop is
@@ -1240,7 +1332,7 @@ function growthScore(d){
   if(g==null){
     var rs=(d.revG!=null)?norm(d.revG,-40,40,false):null;
     var es=(d.epsG!=null)?norm(d.epsG,-50,60,false):null;
-    if(rs!=null&&es!=null)g=Math.round(rs*0.45+es*0.55);
+    if(rs!=null&&es!=null)g=herschaal(Math.round(rs*0.45+es*0.55), 2.0);
     else if(es!=null)g=es;
     else if(rs!=null)g=rs;
     else g=40;
@@ -1708,7 +1800,8 @@ function holdingScore(d){
 
   if(!sum) return 50;
   var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
-  return Math.max(0,Math.min(100,Math.round(score/sum)));
+  // herschalen naar het aantal meegewogen delen: middelen drukt de verdeling samen
+  return herschaal(Math.max(0,Math.min(100,Math.round(score/sum))), Math.max(1,parts.length*0.8));
 }
 
 function rawScore(d){
@@ -3468,6 +3561,30 @@ $('csv').onclick=function(){
 };
 
 // ---- Opslaglaag: werkt in elke browser (localStorage), met fallback ----
+// ---- Opslagbewaking ----
+// Mislukte opslag was tot nu toe onzichtbaar: elke LS.set zat in een lege catch. Raakt de
+// browseropslag vol, dan verdwijnen momentopnamen en portefeuillewijzigingen zonder melding.
+// Stille dataverlies is de vervelendste storing die er is, dus dat maken we zichtbaar.
+var OPSLAG_FOUTEN=0, OPSLAG_GEMELD=false;
+function meldOpslagProbleem(sleutel,e){
+  OPSLAG_FOUTEN++;
+  var vol=e&&(e.name==="QuotaExceededError"||/quota|exceeded|full/i.test(e.message||""));
+  console.warn("Kompas: opslaan van '"+sleutel+"' mislukt",e&&e.message);
+  if(OPSLAG_GEMELD)return;
+  OPSLAG_GEMELD=true;
+  var balk=document.createElement('div');
+  balk.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9998;padding:12px 16px;"+
+    "background:#c0392b;color:#fff;font-size:13px;line-height:1.5;box-shadow:0 -2px 12px rgba(0,0,0,.4)";
+  balk.innerHTML="<b>Opslaan mislukt.</b> "+
+    (vol ? "De opslagruimte van je browser is vol. Verwijder oude momentopnamen bij Tracking, "+
+           "of gebruik de knop 'Alles wissen' bij Instellingen."
+         : "Je browser blokkeert opslag \u2014 dat gebeurt in privémodus of bij strenge "+
+           "privacy-instellingen.")+
+    " Wijzigingen gaan verloren zodra je deze pagina sluit."+
+    "<span style='float:right;cursor:pointer;font-weight:600' onclick='this.parentNode.remove()'>sluiten</span>";
+  document.body.appendChild(balk);
+}
+
 var LS={
   available:(function(){
     try{ var t="__kompas_test__"; window.localStorage.setItem(t,"1"); window.localStorage.removeItem(t); return true; }
@@ -3486,7 +3603,10 @@ var LS={
   set:function(key,val){
     return new Promise(function(res){
       try{
-        if(LS.available){ window.localStorage.setItem("kompas_"+key,val); res(true); return; }
+        if(LS.available){
+          try{ window.localStorage.setItem("kompas_"+key,val); res(true); return; }
+          catch(opslagFout){ meldOpslagProbleem(key,opslagFout); res(false); return; }
+        }
       }catch(e){}
       if(window.storage&&window.storage.set){
         window.storage.set(key,val).then(function(){res(true);}).catch(function(){res(false);});
@@ -5924,34 +6044,27 @@ function takeSnapshot(){
   // systematisch vertekend (bereikbeperking).
   var bron=(ALLE_ANALYSES&&ALLE_ANALYSES.length)?ALLE_ANALYSES
           :((SCORESET&&SCORESET.length)?SCORESET:CURRENT);
+  // De kerngegevens zijn wat we bewaren; de scores komen daar bovenop als verslag van
+  // wat de tool destijds toonde. Wijzigt de methodiek, dan zijn de scores opnieuw af te
+  // leiden - de meting zelf niet, dus die is leidend.
   var items=bron.map(function(d){
+    var kern=kerngegevens(d);
     var t=valueTrap(d);
-    // Naast de berekende scores ook de RUWE cijfers bewaren. Dat is het verschil tussen
-    // achteraf alleen de weging kunnen bijstellen, en een compleet andere scoreformule
-    // kunnen toetsen zonder de data opnieuw op te halen. Zonder deze velden is elke
-    // herziening van de methodiek een gok.
-    return {
-      symbol:d.symbol, name:d.name, isin:d.isin||null, sector:d.sector||null,
-      // berekende scores
-      score:rawScore(d), m:momentumScore(d), v:valuationScore(d),
-      g:growthScore(d), q:qualityScore(d),
-      trap:t.level,
-      // ruwe waarderingscijfers
-      price:d.price, pe:d.pe, peNorm:d.peNorm, pb:d.pb, peg:d.peg,
-      // ruwe fundamenten
-      roe:d.roe, margin:d.margin, de:d.de, revG:d.revG, epsG:d.epsG,
-      piotroski:d.piotroski, altmanZ:d.altmanZ, roicSpread:d.roicSpread, aaqs:d.aaqs,
-      // context die het gedrag kan verklaren
-      mcap:d._mcap!=null?Math.round(d._mcap/1e6):null,   // in miljoenen
-      chg:d.chg, mom1m:d.mom1m, dd:d.dd,
-      bron:d._src||null,
-      // hoeveel van de vier factoren steunen op echte data?
-      volledig:[d.pe!=null||d.peNorm!=null, d.revG!=null||d.epsG!=null,
-                d.roe!=null||d.aaqs!=null||d.piotroski!=null,
-                d.mom1m!=null||d.chg!=null].filter(Boolean).length
-    };
+    // scores als momentopname van de toen geldende methodiek, expliciet gemarkeerd
+    kern.score=rawScore(d);
+    kern.m=momentumScore(d); kern.v=valuationScore(d);
+    kern.g=growthScore(d); kern.q=qualityScore(d);
+    kern.trap=t.level;
+    return kern;
   });
+  // Welke methodiek gold er? Zo kun je later zien welke opnamen nog met de oude
+  // berekening zijn gemaakt, zonder te hoeven raden.
+  var dekking=items.map(herrekenbaarheid);
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
+    methodiek:"v2-herschaald",
+    herrekenbaar:{volledig:dekking.filter(function(x){return x.niveau==="volledig";}).length,
+                  gedeeltelijk:dekking.filter(function(x){return x.niveau==="gedeeltelijk";}).length,
+                  geen:dekking.filter(function(x){return x.niveau==="geen";}).length},
     universum:$('exchange')?$('exchange').options[$('exchange').selectedIndex].text:null,
     getoond:CURRENT.length,
     weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+($('wq')?$('wq').value:30)},
@@ -6051,6 +6164,20 @@ function measureAccuracy(){
 }
 
 function computeAndShowAccuracy(snaps,prices){
+  // Vergelijkingsgroepen per momentopname: percentielscores hebben een peergroep nodig,
+  // en die moet uit dezelfde opname komen - niet uit de huidige screening.
+  var herrekenSets={}, herrekenPeers={}, herrekenSectorPeers={};
+  snaps.forEach(function(s){
+    var bruikbaar=(s.items||[]).filter(function(it){return herrekenbaarheid(it).niveau!=="geen";});
+    if(bruikbaar.length<3)return;
+    var vorigeSet=SCORESET, vorigePeers=PEERS, vorigeSector=SECTOR_PEERS;
+    buildPeers(bruikbaar);
+    herrekenSets[s.ts]=bruikbaar;
+    herrekenPeers[s.ts]=PEERS;
+    herrekenSectorPeers[s.ts]=SECTOR_PEERS;
+    SCORESET=vorigeSet; PEERS=vorigePeers; SECTOR_PEERS=vorigeSector;
+  });
+
   var pairs=[]; // {score,m,v,g,ret}
   snaps.forEach(function(s){
     s.items.forEach(function(it){
@@ -6060,7 +6187,20 @@ function computeAndShowAccuracy(snaps,prices){
         // niet veranderd. Die meten niets en verdunnen alleen de uitkomst.
         var leeftijdDagen=(Date.now()-s.ts)/86400000;
         if(leeftijdDagen<2) return;
-        pairs.push({score:it.score,m:it.m,v:it.v,g:it.g,q:(it.q!=null?it.q:50),ret:ret,
+        // Scores hérrekenen uit de kerngegevens waar dat kan, in plaats van de destijds
+        // bewaarde waarden te gebruiken. Zo meet je consequent met één methodiek in plaats
+        // van een mengsel van oude en nieuwe berekeningen.
+        var hr=herrekenbaarheid(it), sc=it.score, sm=it.m, sv=it.v, sg=it.g, sq=it.q;
+        if(hr.niveau==="volledig"||hr.niveau==="gedeeltelijk"){
+          var vorigeSet=SCORESET, vorigePeers=PEERS, vorigeSector=SECTOR_PEERS;
+          SCORESET=herrekenSets[s.ts]||[it];
+          PEERS=herrekenPeers[s.ts]||null; SECTOR_PEERS=herrekenSectorPeers[s.ts]||null;
+          sc=totalScore(it); sm=momentumScore(it); sv=valuationScore(it);
+          sg=growthScore(it); sq=qualityScore(it);
+          SCORESET=vorigeSet; PEERS=vorigePeers; SECTOR_PEERS=vorigeSector;
+        }
+        pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
+          herrekend:hr.niveau,
           snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
           trap:it.trap, volledig:it.volledig,
           pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs});
@@ -6124,6 +6264,166 @@ function computeAndShowAccuracy(snaps,prices){
 // die context is elke conclusie over voorspellende kracht misleidend.
 var LAATSTE_METING=null;
 
+// ---- Momentopnamen herrekenen met de huidige scoremethodiek ----
+// Twee situaties, met een wezenlijk verschil in betrouwbaarheid:
+//   1. Opnamen mét ruwe cijfers (pe, roe, revG, ...) -> volledige herberekening, exact.
+//   2. Opnamen zonder ruwe cijfers -> alleen de herschaling op de bewaarde factorscores.
+//      Dat benadert de nieuwe methode, maar corrigeert niet voor bijvoorbeeld de
+//      P/E-schoning, want de ruwe P/E is er niet meer.
+// De originele waarden blijven bewaard, zodat de bewerking terug te draaien is.
+
+function kanVolledigHerrekenen(item){
+  return item && (item.pe!=null||item.pb!=null||item.roe!=null||item.aaqs!=null||
+                  item.revG!=null||item.piotroski!=null);
+}
+
+function analyseerHerberekening(){
+  var echt=[], benaderd=[], alGedaan=0, totaal=0;
+  HISTORY.forEach(function(s,i){
+    if(s.demo)return;
+    (s.items||[]).forEach(function(it){
+      totaal++;
+      if(it._origScore!=null){alGedaan++;return;}
+      if(kanVolledigHerrekenen(it))echt.push({s:i,it:it}); else benaderd.push({s:i,it:it});
+    });
+  });
+  return {echt:echt, benaderd:benaderd, alGedaan:alGedaan, totaal:totaal,
+          opnamen:HISTORY.filter(function(s){return !s.demo;}).length};
+}
+
+function herrekenMomentopnamen(alleenPreview){
+  var a=analyseerHerberekening();
+  if(!a.totaal){ tStat("Geen momentopnamen om te herrekenen.",true); return; }
+
+  var wijzigingen=[], verschilSom=0;
+
+  // 1) volledige herberekening waar de ruwe cijfers er zijn
+  var perOpname={};
+  a.echt.forEach(function(x){ (perOpname[x.s]=perOpname[x.s]||[]).push(x.it); });
+  Object.keys(perOpname).forEach(function(si){
+    var items=perOpname[si];
+    // vergelijkingsgroep opbouwen uit deze opname zelf, zoals bij een echte screening
+    var set=items.map(function(it){
+      return {symbol:it.symbol, sector:it.sector, pe:it.pe, peNorm:it.peNorm, pb:it.pb,
+              peg:it.peg, roe:it.roe, margin:it.margin, de:it.de, revG:it.revG, epsG:it.epsG,
+              piotroski:it.piotroski, altmanZ:it.altmanZ, roicSpread:it.roicSpread,
+              aaqs:it.aaqs, chg:it.chg, mom1m:it.mom1m, dd:it.dd, _mcap:it.mcap!=null?it.mcap*1e6:null};
+    });
+    var bewaardeSet=SCORESET, bewaardePeers=PEERS, bewaardeSector=SECTOR_PEERS;
+    SCORESET=set; buildPeers(set);
+    items.forEach(function(it,k){
+      var d=set[k];
+      var nieuw={score:totalScore(d), m:momentumScore(d), v:valuationScore(d),
+                 g:growthScore(d), q:qualityScore(d)};
+      if(nieuw.score!=null&&nieuw.score!==it.score){
+        wijzigingen.push({symbool:it.symbol, oud:it.score, nieuw:nieuw.score, soort:"volledig"});
+        verschilSom+=Math.abs(nieuw.score-it.score);
+      }
+      if(!alleenPreview){
+        it._origScore=it.score; it._origM=it.m; it._origV=it.v; it._origG=it.g; it._origQ=it.q;
+        it.score=nieuw.score; it.m=nieuw.m; it.v=nieuw.v; it.g=nieuw.g; it.q=nieuw.q;
+        it._herrekend="volledig";
+      }
+    });
+    SCORESET=bewaardeSet; PEERS=bewaardePeers; SECTOR_PEERS=bewaardeSector;
+  });
+
+  // 2) benadering waar alleen de scores bewaard zijn: herschaling toepassen
+  a.benaderd.forEach(function(x){
+    var it=x.it;
+    var nv=herschaal(it.v,2.6), nq=herschaal(it.q,2.4), ng=herschaal(it.g,2.0), nm=herschaal(it.m,1.9);
+    var w=weights();
+    var ns=Math.round((nm!=null?nm:50)*w.wm+(nv!=null?nv:50)*w.wv+
+                      (ng!=null?ng:50)*w.wg+(nq!=null?nq:50)*w.wq);
+    if(ns!==it.score){
+      wijzigingen.push({symbool:it.symbol, oud:it.score, nieuw:ns, soort:"benaderd"});
+      verschilSom+=Math.abs(ns-it.score);
+    }
+    if(!alleenPreview){
+      it._origScore=it.score; it._origM=it.m; it._origV=it.v; it._origG=it.g; it._origQ=it.q;
+      it.score=ns; it.m=nm; it.v=nv; it.g=ng; it.q=nq;
+      it._herrekend="benaderd";
+    }
+  });
+
+  if(alleenPreview){
+    var gem=wijzigingen.length?(verschilSom/wijzigingen.length):0;
+    var grootste=wijzigingen.slice().sort(function(p,q){
+      return Math.abs(q.nieuw-q.oud)-Math.abs(p.nieuw-p.oud);}).slice(0,6);
+    return {aantal:wijzigingen.length, gemiddeld:gem, grootste:grootste,
+            echt:a.echt.length, benaderd:a.benaderd.length, alGedaan:a.alGedaan,
+            opnamen:a.opnamen, totaal:a.totaal};
+  }
+  if(typeof saveCloud==="function")saveCloud();
+  renderSnapList();
+  tStat("Herrekend: "+wijzigingen.length+" van "+a.totaal+" waarden aangepast ("+
+        a.echt.length+" volledig, "+a.benaderd.length+" benaderd). "+
+        "De oorspronkelijke scores zijn bewaard; je kunt dit terugdraaien.");
+  return null;
+}
+
+function draaiHerberekeningTerug(){
+  var n=0;
+  HISTORY.forEach(function(s){
+    (s.items||[]).forEach(function(it){
+      if(it._origScore==null)return;
+      it.score=it._origScore; it.m=it._origM; it.v=it._origV; it.g=it._origG; it.q=it._origQ;
+      delete it._origScore; delete it._origM; delete it._origV; delete it._origG;
+      delete it._origQ; delete it._herrekend;
+      n++;
+    });
+  });
+  if(typeof saveCloud==="function")saveCloud();
+  renderSnapList();
+  tStat(n?("Teruggedraaid: "+n+" waarden staan weer op hun oorspronkelijke score."):"Er was niets herrekend.");
+}
+
+function toonHerberekenVenster(){
+  var p=herrekenMomentopnamen(true);
+  if(!p){return;}
+  var el=document.getElementById('herrekenVenster');
+  if(!el)return;
+  if(p.alGedaan&&!p.aantal){
+    el.style.display="block";
+    el.innerHTML='<div class="snap"><b>Al herrekend.</b> '+p.alGedaan+' waarden staan al op de '+
+      'nieuwe methodiek. <button class="btn-ghost" onclick="draaiHerberekeningTerug()" '+
+      'style="margin-left:10px;height:28px;font-size:11px">Terugdraaien</button></div>';
+    return;
+  }
+  var lijst=p.grootste.map(function(w){
+    return '<div style="font-size:12px;padding:2px 0">'+w.symbool+': <b>'+w.oud+'</b> \u2192 <b>'+
+      w.nieuw+'</b> <span style="color:'+(w.nieuw>w.oud?'var(--green)':'var(--red)')+'">('+
+      (w.nieuw>w.oud?'+':'')+(w.nieuw-w.oud)+')</span> '+
+      '<span style="opacity:.6;font-size:10.5px">'+w.soort+'</span></div>';
+  }).join("");
+  el.style.display="block";
+  el.innerHTML='<div class="snap" style="border-left:3px solid var(--accent)">'+
+    '<b>Voorbeeld van de herberekening</b>'+
+    '<div style="font-size:12.5px;margin-top:8px;line-height:1.7">'+
+      p.aantal+' van '+p.totaal+' waarden veranderen, gemiddeld '+p.gemiddeld.toFixed(1)+' punten.<br>'+
+      '<span style="color:var(--green)">'+p.echt+' volledig herrekend</span> uit de bewaarde ruwe cijfers \u2014 exact.<br>'+
+      (p.benaderd?'<span style="color:var(--accent)">'+p.benaderd+' benaderd</span>: die opnamen bevatten geen '+
+        'ruwe cijfers, dus alleen de herschaling is toegepast. De P/E-schoning kan daar niet '+
+        'meer gecorrigeerd worden.<br>':'')+
+    '</div>'+
+    '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Grootste verschuivingen:</div>'+
+      lijst+'</div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="btn-go" onclick="herrekenMomentopnamen(false);document.getElementById(\'herrekenVenster\').style.display=\'none\'" '+
+        'style="height:32px;font-size:12px">Doorvoeren</button>'+
+      '<button class="btn-ghost" onclick="document.getElementById(\'herrekenVenster\').style.display=\'none\'" '+
+        'style="height:32px;font-size:12px">Annuleren</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:10px">'+
+      'De oorspronkelijke scores blijven bewaard, dus dit is terug te draaien. Let op: een '+
+      'meting over herrekende én originele opnamen vergelijkt twee methodieken door elkaar.'+
+    '</div></div>';
+}
+window.herrekenMomentopnamen=herrekenMomentopnamen;
+window.draaiHerberekeningTerug=draaiHerberekeningTerug;
+window.toonHerberekenVenster=toonHerberekenVenster;
+
 function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var r=[];
   var nu=new Date();
@@ -6147,6 +6447,10 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   // scorebereik: bij alleen hoogscoorders is de correlatie systematisch te laag
   var scoresAlle=pairs.map(function(p){return p.score;});
   var laagste=Math.min.apply(null,scoresAlle), hoogste=Math.max.apply(null,scoresAlle);
+  var telHer={volledig:0,gedeeltelijk:0,geen:0};
+  pairs.forEach(function(p){ if(p.herrekend)telHer[p.herrekend]=(telHer[p.herrekend]||0)+1; });
+  r.push("  herrekend uit kerngegevens: "+telHer.volledig+" volledig, "+
+         telHer.gedeeltelijk+" gedeeltelijk, "+telHer.geen+" niet (oude opnamen zonder ruwe cijfers)");
   r.push("  scorebereik in de meting: "+laagste+" tot "+hoogste+
          (laagste>45?"  (LET OP: alleen hoger scorende posities \u2014 zie voorbehoud)":""));
   r.push("  momentopnamen: "+snaps.length);
@@ -6255,6 +6559,10 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var uniek={}; pairs.forEach(function(p){uniek[p.score]=1;});
   if(Object.keys(uniek).length<pairs.length*0.6)
     bezwaren.push("Veel dezelfde scores: weinig onderscheid tussen posities beperkt wat de correlatie kan aantonen.");
+  if(telHer.geen>pairs.length*0.3)bezwaren.push("Van de "+pairs.length+" datapunten konden er "+
+    telHer.geen+" niet herrekend worden: dat zijn oudere momentopnamen die alleen de score bewaarden, "+
+    "niet de onderliggende cijfers. Die zijn met een andere methodiek berekend dan de rest, "+
+    "wat de vergelijking vertroebelt.");
   if(laagste>45)bezwaren.push("Het scorebereik loopt van "+laagste+" tot "+hoogste+
     ": er zitten nauwelijks laag scorende posities in de meting. Daardoor kun je niet zien "+
     "of lage scores ook werkelijk slechter presteren, en wordt de correlatie systematisch "+
