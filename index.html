@@ -589,6 +589,16 @@ var BRON={
       </select>
       <button class="btn-go" id="run" style="margin-left:auto">Screenen</button>
       <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken">Laatste tonen</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;margin-left:8px"
+        title="Analyseer élk aandeel in het universum in plaats van alleen de meest bewegende. Kost meer API-calls, maar levert een volledig scorebereik voor je accuratesse-meting.">
+        <input type="checkbox" id="volledigeAnalyse" style="width:auto">
+        <span>volledige analyse</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer"
+        title="Haalt winstverrassingen (hoeveel de winst afweek van de verwachting) en analistenramingen op, inclusief het meningsverschil tussen analisten. Kost 1 tot 2 extra calls per aandeel. Wordt bewaard voor latere analyse en telt niet mee in de score.">
+        <input type="checkbox" id="winstVerrassing" style="width:auto">
+        <span>winstcijfers &amp; ramingen</span>
+      </label>
       <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
       <select id="source" style="display:none"><option value="finnhub" selected>finnhub</option><option value="fmp">fmp</option><option value="eodhd">eodhd</option></select>
@@ -1200,6 +1210,110 @@ function momentumScore(d){
 //
 // De correctie rekt de verdeling op rond het midden. De rangorde blijft exact gelijk;
 // alleen de afstanden worden vergelijkbaar met een niet-gemiddelde factor.
+// ---- Winstverrassingen ----
+// Getest tegen de echte respons: symbol, date, epsEstimate, epsActual, surprisePercent,
+// quarter, year - meerdere kwartalen per aanroep.
+//
+// BELANGRIJKE KANTTEKENING: het datumveld is het EINDE VAN HET KWARTAAL, niet de dag van
+// publicatie. Bedrijven rapporteren doorgaans vier tot zes weken later. Het effect dat we
+// willen meten (koersdrift ná publicatie) begint op de publicatiedag, dus meten vanaf
+// kwartaaleinde bevat weken waarin er nog geen nieuws was. Daarom bewaren we twee dingen:
+//   - de laatste verrassing, met een schatting van hoe vers die is;
+//   - de consistentie over meerdere kwartalen, die niet van de precieze datum afhangt en
+//     daardoor betrouwbaarder is voor achteraf-analyse.
+function haalWinstverrassing(symbool,token,bron){
+  var url = bron==="eulerpool"
+    ? EULER_BASE+"/calendar/earnings-surprises/"+encodeURIComponent(symbool)+"?token="+encodeURIComponent(token)
+    : FINNHUB_BASE+"/stock/earnings?symbol="+encodeURIComponent(symbool)+"&token="+encodeURIComponent(token);
+  return getJson(url).then(function(res){
+    var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
+    if(!rijen.length)return null;
+    rijen=rijen.filter(function(r){return r.surprisePercent!=null&&!isNaN(r.surprisePercent);})
+               .sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    if(!rijen.length)return null;
+    var laatste=rijen[0];
+    var dagenNaKwartaal=Math.round((Date.now()-new Date(laatste.date))/86400000);
+    // publicatie doorgaans 4-6 weken na kwartaaleinde; onder ~30 dagen is er dus
+    // waarschijnlijk nog niets gepubliceerd
+    var waarschijnlijkGepubliceerd = dagenNaKwartaal>=30;
+    var recent=rijen.slice(0,4);
+    var positief=recent.filter(function(r){return r.surprisePercent>0;}).length;
+    return {
+      verrassing: +(+laatste.surprisePercent).toFixed(2),
+      kwartaalEinde: laatste.date,
+      dagenNaKwartaal: dagenNaKwartaal,
+      gepubliceerd: waarschijnlijkGepubliceerd,
+      // consistentie: hoeveel van de laatste vier kwartalen boven verwachting
+      consistentie: recent.length>=3 ? Math.round(positief/recent.length*100) : null,
+      gemiddeld: recent.length>=3
+        ? +(recent.reduce(function(s,r){return s+(+r.surprisePercent);},0)/recent.length).toFixed(2)
+        : null,
+      kwartalen: recent.length
+    };
+  }).catch(function(){return null;});
+}
+
+// ---- Analistenramingen ----
+// Getest tegen de echte respons: per boekjaar epsEstimate/Low/High, revenueEstimate/Low/High,
+// ebitEstimate en het aantal analisten. Meerdere jaren vooruit, tot 2030.
+//
+// Er zit GEEN bijstellingshistorie in: je ziet de raming van vandaag, niet of analisten
+// die vorige maand verhoogden. Twee gevolgen:
+//   1. Meningsverschil (de spreiding tussen laagste en hoogste raming) is meteen bruikbaar.
+//      Grote onenigheid gaat historisch samen met lagere rendementen - een onzekerheidsmaat
+//      die niet in de vier bestaande factoren zit.
+//   2. Bijstellingen bouwen we zélf op: door de raming bij elke momentopname te bewaren,
+//      kunnen we bij de volgende meting zien of hij omhoog of omlaag ging. Dat is precies
+//      wat de kerngegevens-opzet mogelijk maakt.
+function haalRamingen(identifier,token){
+  return getJson(EULER_BASE+"/equity/estimates/"+encodeURIComponent(identifier)+
+                 "?token="+encodeURIComponent(token))
+    .then(function(res){
+      var rijen=Array.isArray(res)?res:(res&&res.data?res.data:[]);
+      if(!rijen.length)return null;
+      // het eerstvolgende boekjaar is het relevantst; ramingen voor 2030 zeggen weinig
+      var nu=new Date();
+      var toekomstig=rijen.filter(function(r){
+        return r.period && new Date(r.period)>nu && r.epsEstimate!=null;
+      }).sort(function(a,b){ return new Date(a.period)-new Date(b.period); });
+      var r=toekomstig[0];
+      if(!r)return null;
+      var spreiding=null;
+      if(r.epsLow!=null&&r.epsHigh!=null&&r.epsEstimate>0)
+        spreiding=+(((r.epsHigh-r.epsLow)/Math.abs(r.epsEstimate))*100).toFixed(1);
+      return {
+        ramingEps: +(+r.epsEstimate).toFixed(3),
+        ramingJaar: r.year||null,
+        ramingPeriode: r.period||null,
+        ramingSpreiding: spreiding,
+        ramingAnalisten: r.epsAnalysts!=null?+r.epsAnalysts:null
+      };
+    }).catch(function(){return null;});
+}
+
+// Bijstelling t.o.v. de vorige momentopname: zelf opgebouwd, want de bron levert die niet.
+// Zoekt de meest recente eerdere opname met een raming voor hetzelfde effect én boekjaar.
+function bepaalBijstelling(d){
+  if(d.ramingEps==null||typeof HISTORY==="undefined")return null;
+  var sleutel=d.isin||d.symbol;
+  var beste=null;
+  HISTORY.forEach(function(s){
+    if(s.demo)return;
+    (s.items||[]).forEach(function(it){
+      if((it.isin||it.symbol)!==sleutel)return;
+      if(it.ramingEps==null||it.ramingJaar!==d.ramingJaar)return;
+      if(!beste||s.ts>beste.ts)beste={ts:s.ts,eps:it.ramingEps};
+    });
+  });
+  if(!beste||!beste.eps)return null;
+  var dagen=Math.round((Date.now()-beste.ts)/86400000);
+  if(dagen<7)return null;   // te kort dag om van bijstelling te spreken
+  return {
+    bijstelling: +(((d.ramingEps-beste.eps)/Math.abs(beste.eps))*100).toFixed(2),
+    bijstellingDagen: dagen
+  };
+}
+
 // ---- Kerngegevens per effect ----
 // De velden die de scorelogica leest. Dit is de bron van waarheid: een momentopname bewaart
 // déze cijfers, niet de scores. Een score is een afgeleide van een methodiek die kan wijzigen;
@@ -1221,7 +1335,12 @@ var KERNVELDEN=[
   // koers en momentum
   'price','chg','mom1m','dd',
   // omvang en herkomst
-  '_mcap','_src','currency'
+  '_mcap','_src','currency',
+  // winstverrassing (alleen aanwezig als de optie aanstaat)
+  'verrassing','verrassingConsistentie','verrassingGemiddeld','verrassingDagen','verrassingGepubliceerd',
+  // analistenramingen (alleen aanwezig als de optie aanstaat)
+  'ramingEps','ramingJaar','ramingPeriode','ramingSpreiding','ramingAnalisten',
+  'bijstelling','bijstellingDagen'
 ];
 
 function kerngegevens(d){
@@ -3487,6 +3606,37 @@ function run(){
     if(state.dayLimit)return [];
     return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
   }).then(function(all){
+    // winstverrassingen erbij halen indien gevraagd; faalt stil per aandeel
+    var metVerrassing = WINST_VERRASSING
+      ? all.reduce(function(seq,d){
+          return seq.then(function(){
+            var sym=ISIN_RE.test(d.symbol)?(d.ticker||d.symbol):d.symbol;
+            var bron=(d._src==="eulerpool")?"eulerpool":"finnhub";
+            var token=bron==="eulerpool"?MULTI_KEYS.eulerpool:MULTI_KEYS.finnhub;
+            if(!token)return;
+            return haalWinstverrassing(sym,token,bron).then(function(w){
+              if(w){
+                d.verrassing=w.verrassing;
+                d.verrassingConsistentie=w.consistentie;
+                d.verrassingGemiddeld=w.gemiddeld;
+                d.verrassingDagen=w.dagenNaKwartaal;
+                d.verrassingGepubliceerd=w.gepubliceerd;
+              }
+              // ramingen alleen via Eulerpool en alleen met een ISIN
+              if(!MULTI_KEYS.eulerpool||!d.isin)return;
+              return haalRamingen(d.isin,MULTI_KEYS.eulerpool).then(function(r){
+                if(!r)return;
+                d.ramingEps=r.ramingEps; d.ramingJaar=r.ramingJaar;
+                d.ramingPeriode=r.ramingPeriode; d.ramingSpreiding=r.ramingSpreiding;
+                d.ramingAnalisten=r.ramingAnalisten;
+                var b=bepaalBijstelling(d);
+                if(b){ d.bijstelling=b.bijstelling; d.bijstellingDagen=b.bijstellingDagen; }
+              });
+            });
+          });
+        }, Promise.resolve())
+      : Promise.resolve();
+
     ALLE_ANALYSES=all.slice();          // ongefilterd, voor momentopnamen
     var passed=all.filter(passesFilters);
     SCORESET=passed.slice();
@@ -5127,6 +5277,14 @@ if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
 if($('volledigeAnalyse'))$('volledigeAnalyse').onchange=function(){
   if(typeof showCostEstimate==="function")showCostEstimate();
 };
+if($('winstVerrassing'))$('winstVerrassing').onchange=function(){
+  WINST_VERRASSING=this.checked;
+  LS.set('winstVerrassing',this.checked?"1":"0");
+  if(typeof showCostEstimate==="function")showCostEstimate();
+};
+LS.get('winstVerrassing').then(function(r){
+  if(r&&r.value==="1"){WINST_VERRASSING=true;var e=$('winstVerrassing');if(e)e.checked=true;}
+}).catch(function(){});
 
 // Weging terugzetten op de standaard. Op een aanraakscherm verschuift een regelaar
 // makkelijk per ongeluk; zonder herstelknop is de oorspronkelijke verdeling lastig terug
@@ -6203,7 +6361,8 @@ function computeAndShowAccuracy(snaps,prices){
           herrekend:hr.niveau,
           snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
           trap:it.trap, volledig:it.volledig,
-          pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs});
+          pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs,
+          verrassing:it.verrassing, verrassingConsistentie:it.verrassingConsistentie});
       }
     });
   });
@@ -6537,6 +6696,12 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   },"WERKT DE SCORE BIJ ELKE OMVANG?");
   groepeer(function(p){return p.volledig!=null?(p.volledig+" van 4 factoren gemeten"):null;},
            "MAAKT DATAVOLLEDIGHEID UIT?");
+  groepeer(function(p){
+    if(p.verrassing==null)return null;
+    return p.verrassing>2?"winst >2% boven verwachting":
+           (p.verrassing>0?"licht boven verwachting":
+           (p.verrassing>-2?"licht onder verwachting":"winst >2% onder verwachting"));
+  },"HANGT HET SAMEN MET DE WINSTVERRASSING? (indien opgehaald)");
 
   r.push("RUWE DATAPUNTEN");
   r.push("  score; mom; waard; groei; kwal; rend%; overrend%; sector; mcap(mln); P/E; K/B; ROE; omzetgr; winstgr");
