@@ -3679,6 +3679,18 @@ function run(){
     if(state.dayLimit)return [];
     return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
   }).then(function(all){
+    // Mislukte aanroepen leveren undefined op. Zonder deze filter struikelt de verwerking
+    // daarover: passesFilters leest d._mcap, wat op undefined een fout geeft die de hele
+    // keten stil laat afbreken - met de laatste voortgangsmelding blijvend in beeld.
+    all=(all||[]).filter(function(d){return d&&typeof d==="object"&&d.symbol;});
+    if(!all.length){
+      st.className="status err";
+      st.innerHTML='\u26a0\ufe0f Geen enkel aandeel kon opgehaald worden. '+
+        (Object.keys(state.redenen||{}).length
+          ? 'Redenen: '+Object.keys(state.redenen).slice(0,3).join('; ')
+          : 'Controleer je sleutels bij Instellingen.');
+      return;
+    }
     // winstverrassingen erbij halen indien gevraagd; faalt stil per aandeel
     var metVerrassing = WINST_VERRASSING
       ? all.reduce(function(seq,d){
@@ -3708,8 +3720,13 @@ function run(){
             });
           });
         }, Promise.resolve())
+          .catch(function(){})   // per aandeel stil falen, de rest gaat door
       : Promise.resolve();
 
+    // wél afwachten: anders wordt de momentopname vastgelegd voordat de cijfers binnen zijn
+    return metVerrassing.then(function(){ return all; });
+  }).then(function(all){
+    if(!all)return;
     ALLE_ANALYSES=all.slice();          // ongefilterd, voor momentopnamen
     var passed=all.filter(passesFilters);
     SCORESET=passed.slice();
@@ -3758,6 +3775,25 @@ function run(){
       saveLastRun('stocks',data,params);                          // meest recente, ongeacht universum
       if(params&&params.exchange) saveLastRun('stocks_'+params.exchange,data,params); // en per universum
     }
+  }).catch(function(fout){
+    // Vangnet voor de hele screeningsketen. Zonder dit breekt de keten stil af bij een
+    // onverwachte fout en blijft de laatste voortgangsmelding staan: de tool lijkt dan
+    // te hangen terwijl er niets meer gebeurt.
+    console.error("Kompas: screening afgebroken",fout);
+    var reden=(fout&&(fout.msg||fout.message))||String(fout||"onbekende fout");
+    st.className="status err";
+    st.innerHTML='\u26a0\ufe0f De screening liep vast: '+reden.slice(0,120).replace(/</g,"&lt;")+
+      '.<br><span style="opacity:.8">Wat al binnenkwam staat hieronder. Probeer eventueel een '+
+      'kleiner universum, of controleer je sleutels bij Instellingen.</span>';
+    // alsnog tonen wat er wél is opgehaald
+    try{
+      if(typeof ALLE_ANALYSES!=="undefined"&&ALLE_ANALYSES.length){
+        SCORESET=ALLE_ANALYSES.filter(passesFilters);
+        buildPeers(SCORESET);
+        CURRENT=SCORESET.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,limit);
+        render();
+      }
+    }catch(e){ console.error("Kompas: ook het tonen mislukte",e); }
   });
 }
 
