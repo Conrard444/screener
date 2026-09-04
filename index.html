@@ -68,6 +68,9 @@
 })();
 
 // ---- Bronopties (moeten vóór elk gebruik staan) ----
+// Winstverrassingen en analistenramingen ophalen: 1 tot 2 extra calls per aandeel.
+// Standaard uit, want het is aanvullende analysedata en geen onderdeel van de score.
+var WINST_VERRASSING=false;
 var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
