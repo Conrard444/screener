@@ -609,6 +609,11 @@ var BRON={
         <span>volledige analyse</span>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer"
+        title="Vergelijk elk aandeel met zijn eigen sectorgenoten in plaats van met absolute drempels. Een koers-winstverhouding van 15 betekent iets anders bij een nutsbedrijf dan bij software; zonder deze correctie meet de score deels sectorkenmerken.">
+        <input type="checkbox" id="sectorNeutraal" style="width:auto">
+        <span>sectorneutraal</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer"
         title="Haalt winstverrassingen (hoeveel de winst afweek van de verwachting) en analistenramingen op, inclusief het meningsverschil tussen analisten. Kost 1 tot 2 extra calls per aandeel. Wordt bewaard voor latere analyse en telt niet mee in de score.">
         <input type="checkbox" id="winstVerrassing" style="width:auto">
         <span>winstcijfers &amp; ramingen</span>
@@ -1191,13 +1196,31 @@ function peerArr(d,f){
 function currentHorizon(){var el=document.getElementById('horizon');return el?el.value:'kort';}
 function isLong(){return currentHorizon()==='lang';}
 
+// Sectorneutraal vergelijken: elk aandeel afzetten tegen zijn eigen sectorgenoten in plaats
+// van tegen absolute drempels.
+//
+// Waarom dit uitmaakt: een koers-winstverhouding van 15 betekent iets anders bij een
+// nutsbedrijf dan bij software, en de ROE van een bank is niet vergelijkbaar met die van
+// een fabrikant. Zonder sectorcorrectie meet de score deels sectorkenmerken - techbedrijven
+// scoren dan laag op waardering omdat de hele sector duur is, niet omdat dát aandeel duur is.
+//
+// Jouw accuratessemeting wees hierop: binnen sectoren was de spread negatief (-1,7 punt
+// gewogen) terwijl het totaal positief was. Dat patroon past bij een score die sectoren
+// kiest in plaats van aandelen.
+function sectorNeutraal(){
+  var el=document.getElementById('sectorNeutraal');
+  return el ? el.checked : false;
+}
+// Percentielen gebruiken we dus bij korte horizon óf wanneer sectorneutraal aanstaat.
+function gebruikPercentielen(){ return !isLong() || sectorNeutraal(); }
+
 // null = geen momentumdata beschikbaar (bv. Europese aandelen via Eulerpool, dat geen koersen levert).
 // Dat is iets anders dan "slecht momentum" en mag de totaalscore niet omlaag trekken.
 function momentumScore(d){
   var heeftData = (d.chg!=null&&!isNaN(d.chg)) || (d.mom1m!=null&&!isNaN(d.mom1m));
   if(!heeftData) return null;
-  if(!isLong()&&PEERS){
-    var a=pctRank(d.chg,PEERS.chg,false),b=pctRank(d.mom1m,PEERS.mom1m,false);
+  if(gebruikPercentielen()&&PEERS){
+    var a=pctRank(d.chg,peerArr(d,'chg'),false),b=pctRank(d.mom1m,peerArr(d,'mom1m'),false);
     if(a!=null&&b!=null)return herschaal(Math.round(a*0.4+b*0.6), 1.9);
   }
   var parts=[],sum=0;
@@ -1468,7 +1491,7 @@ function valuationScore(d){
     return capSuspectValue(d, hist);
   }
   // korte termijn: sector-relatief (percentiel). lange termijn: absolute drempels
-  if(!isLong()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
+  if(gebruikPercentielen()&&SECTOR_PEERS){var a=pctRank(d.pe,peerArr(d,'pe'),true),b=pctRank(d.peg,peerArr(d,'peg'),true),c=pctRank(d.pb,peerArr(d,'pb'),true);
     if(a!=null&&b!=null&&c!=null)
       return capSuspectValue(d, herschaal(Math.round(a*0.4+b*0.4+c*0.2), 2.6));}
   return capSuspectValue(d, herschaal(Math.round(norm(d.pe,8,55,true)*0.4+norm(d.peg,0.5,4,true)*0.4+norm(d.pb,1,50,true)*0.2), 2.6));
@@ -1556,7 +1579,7 @@ function qualityScore(d){
     if(d.beneishFlag) q=Math.round(q*0.75); // mogelijke winstmanipulatie -> strafkorting
     return Math.max(0,Math.min(100,q));
   }
-  if(!isLong()&&SECTOR_PEERS){
+  if(gebruikPercentielen()&&SECTOR_PEERS){
     var a=pctRank(d.roe,peerArr(d,'roe'),false),
         b=pctRank(d.margin,peerArr(d,'margin'),false),
         c=pctRank(d.de,peerArr(d,'de'),true); // lagere schuld = beter
@@ -1572,7 +1595,7 @@ function weights(){
 }
 // diepte van de daling, relatief: dieper gevallen dan peers = hogere herstelpotentie-score
 function drawdownScore(d){
-  if(!isLong()&&PEERS){var a=pctRank(d.dd,PEERS.dd,true);if(a!=null)return a;}
+  if(gebruikPercentielen()&&PEERS){var a=pctRank(d.dd,peerArr(d,'dd'),true);if(a!=null)return a;}
   return norm(d.dd,-60,0,true);
 }
 function currentMode(){var el=document.getElementById('mode');return el?el.value:'stijgers';}
@@ -5415,6 +5438,15 @@ if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
 if($('volledigeAnalyse'))$('volledigeAnalyse').onchange=function(){
   if(typeof showCostEstimate==="function")showCostEstimate();
 };
+if($('sectorNeutraal'))$('sectorNeutraal').onchange=function(){
+  LS.set('sectorNeutraal',this.checked?"1":"0");
+  if(CURRENT&&CURRENT.length){ buildPeers(SCORESET||CURRENT); render(); }
+};
+LS.get('sectorNeutraal').then(function(r){
+  if(r&&r.value==="1"){var e=$('sectorNeutraal');if(e)e.checked=true;
+    if(CURRENT&&CURRENT.length){buildPeers(SCORESET||CURRENT);render();}}
+}).catch(function(){});
+
 if($('winstVerrassing'))$('winstVerrassing').onchange=function(){
   WINST_VERRASSING=this.checked;
   LS.set('winstVerrassing',this.checked?"1":"0");
@@ -6363,6 +6395,7 @@ function takeSnapshot(){
   var dekking=items.map(herrekenbaarheid);
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:isDemo,
     methodiek:"v2-herschaald",
+    sectorNeutraal:(typeof sectorNeutraal==="function")?sectorNeutraal():false,
     herrekenbaar:{volledig:dekking.filter(function(x){return x.niveau==="volledig";}).length,
                   gedeeltelijk:dekking.filter(function(x){return x.niveau==="gedeeltelijk";}).length,
                   geen:dekking.filter(function(x){return x.niveau==="geen";}).length},
@@ -6759,6 +6792,8 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
          (laagste>45?"  (LET OP: alleen hoger scorende posities \u2014 zie voorbehoud)":""));
   r.push("  momentopnamen: "+snaps.length);
   r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
+  var neutraalGebruikt=snaps.filter(function(s){return s.sectorNeutraal;}).length;
+  r.push("  sectorneutraal gescoord: "+neutraalGebruikt+" van "+snaps.length+" momentopnamen");
   r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
          ", waardering "+Math.round(w.wv*100)+
          ", groei "+Math.round(w.wg*100)+
