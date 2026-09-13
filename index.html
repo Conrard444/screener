@@ -775,6 +775,7 @@ var BRON={
     </div>
 
     <div class="status" id="etfStatus"></div>
+    <div id="indexWrap"></div>
 
     <div class="panel-card">
       <table>
@@ -1394,7 +1395,7 @@ var KERNVELDEN=[
   // groei
   'revG','epsG',
   // koers en momentum
-  'price','chg','mom1m','dd','vol','maxTerugval','aandelenAantal','uitgifte',
+  'price','chg','mom1m','dd','vol','maxTerugval','aandelenAantal','uitgifte','divYield',
   // omvang en herkomst
   '_mcap','_src','currency',
   // winstverrassing (alleen aanwezig als de optie aanstaat)
@@ -3401,6 +3402,29 @@ function enrichFinnhub(symbol,key){
     // daling vanaf 52-weeks top (negatief getal)
     var dd=(price!=null&&hi!=null&&hi>0)?+(((price-hi)/hi)*100).toFixed(1):null;
     var pe=m.peTTM!=null?m.peTTM:(m.peBasicExclExtraTTM!=null?m.peBasicExclExtraTTM:m.peAnnual);
+
+    // Dividendrendement uit de metrics die we toch al ophalen. Finnhub gebruikt wisselende
+    // veldnamen tussen bedrijven en tiers, dus we proberen ze op volgorde van betrouwbaarheid.
+    // De naam van het gevonden veld wordt bewaard, zodat zichtbaar is waar het vandaan komt.
+    var divVelden=['currentDividendYieldTTM','dividendYieldIndicatedAnnual',
+                   'dividendYield5Y','dividendYieldTTM','dividendYieldAnnual'];
+    var divYield=null, divBron=null;
+    for(var dv=0;dv<divVelden.length;dv++){
+      var w=m[divVelden[dv]];
+      if(w!=null && !isNaN(w) && w>0 && w<25){ divYield=+(+w).toFixed(2); divBron=divVelden[dv]; break; }
+    }
+    // terugval: dividend per aandeel gedeeld door de koers
+    if(divYield==null){
+      var dps=m.dividendPerShareTTM!=null?m.dividendPerShareTTM:m.dividendPerShareAnnual;
+      if(dps!=null && !isNaN(dps) && dps>0 && price>0){
+        divYield=+((dps/price)*100).toFixed(2); divBron='dividendPerShare';
+      }
+    }
+    // Een bedrijf dat niets uitkeert heeft rendement nul, niet onbekend. Dat onderscheid
+    // telt: bij nul weten we dat er geen dividend gemist wordt in de rendementsmeting.
+    if(divYield==null && (m.dividendPerShareTTM===0 || m.dividendPerShareAnnual===0)){
+      divYield=0; divBron='geen uitkering';
+    }
     var pb=m.pbAnnual!=null?m.pbAnnual:m.pbQuarterly;
     var revG=m.revenueGrowthTTMYoy!=null?m.revenueGrowthTTMYoy:m.revenueGrowth3Y;
     var epsG=m.epsGrowthTTMYoy!=null?m.epsGrowthTTMYoy:m.epsGrowth3Y;
@@ -3417,6 +3441,7 @@ function enrichFinnhub(symbol,key){
       price:price,chg:chg,mom1m:mom,
       pe:pe!=null?+(+pe).toFixed(1):null,
       peNorm:peNorm, epsGem:epsGem!=null?+epsGem.toFixed(2):null,  // uit de meegeleverde jaarreeks
+      divYield:divYield, _divBron:divBron,
       peg:peg,
       pb:pb!=null?+(+pb).toFixed(1):null,
       revG:revG!=null?+(+revG).toFixed(1):null,  // Finnhub geeft groei al in procent
@@ -3787,12 +3812,30 @@ function run(){
       st.className="status";
       var fun=useFunnel?" (via vooranalyse-trechter)":"";
       var extra=skipped.length?" "+skipped.length+" overgeslagen (niet beschikbaar op je tier: "+skipped.slice(0,6).join(", ")+(skipped.length>6?"\u2026":"")+").":"";
-      st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+" Sorteer via de kolomtitels.";
+      st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+
+        (window._divDekking||"")+" Sorteer via de kolomtitels.";
     }
     render();
     archiefBewaar('aandelen', SCORESET&&SCORESET.length?SCORESET:CURRENT);
     archiefTellerBijwerken();
     if(typeof renderDailyDiff==="function")renderDailyDiff();
+    // Zichtbaar maken hoeveel aandelen een dividendrendement hebben. Nodig omdat de
+    // veldnamen bij Finnhub wisselen: zonder deze terugkoppeling zou het stil mislukken
+    // en zou de rendementsmeting weer alleen de koers meten.
+    (function(){
+      var metDiv=all.filter(function(d){return d.divYield!=null;}).length;
+      var bronnen={};
+      all.forEach(function(d){ if(d._divBron)bronnen[d._divBron]=(bronnen[d._divBron]||0)+1; });
+      if(all.length>=5){
+        var deel=Math.round(metDiv/all.length*100);
+        var tekst=' \u00b7 dividend bekend bij '+metDiv+'/'+all.length+' ('+deel+'%)';
+        if(metDiv===0)tekst+=' \u2014 de rendementsmeting gebruikt dan alleen de koers';
+        else if(Object.keys(bronnen).length)
+          tekst+=' via '+Object.keys(bronnen).join(', ');
+        window._divDekking=tekst;
+      }
+    })();
+
     // resultaat bewaren zodat je het bij het opstarten terugziet zonder nieuwe calls
     if(CURRENT.length&&typeof saveLastRun==="function"){
       var params=currentRunParams();
@@ -4195,7 +4238,84 @@ function etfCloseRisk(d){
   if(d.aum<3)return {level:1,text:"kleine omvang ($"+d.aum+"mld) \u2014 let op liquiditeit en spread"};
   return null;
 }
+// Toont waar je hetzelfde kunt krijgen voor minder: fondsen op dezelfde index, gerangschikt
+// naar wat het je jaarlijks kost om niet de gunstigste te hebben.
+function renderIndexVergelijking(){
+  var el=document.getElementById('indexWrap');
+  if(!el)return;
+  var groepen=groepeerOpIndex(ETF_CURRENT||[]);
+  var namen=Object.keys(groepen);
+  if(!namen.length){ el.innerHTML=""; return; }
+
+  var blokken=namen.map(function(k){
+    var lijst=groepen[k].slice();
+    // beste = laagste totale jaarlast (kosten plus fiscaal lek)
+    lijst.sort(function(a,b){
+      var la=(a.ter||0)+((fiscaleEfficientie(a)||{}).extra||0);
+      var lb=(b.ter||0)+((fiscaleEfficientie(b)||{}).extra||0);
+      return la-lb;
+    });
+    var beste=lijst[0];
+    var index=groepen[k][0].trackingIndex||k;
+    var rijen=lijst.map(function(e,i){
+      var nadeel=i===0?0:jaarlijksNadeel(e,beste);
+      var f=fiscaleEfficientie(e);
+      return '<tr'+(i===0?' style="background:var(--panel-2)"':'')+'>'+
+        '<td class="l">'+(i===0?'<b>':'')+(NAAM.toon(e,30)||e.symbol)+(i===0?'</b> <span style="color:var(--green);font-size:10.5px">gunstigst</span>':'')+
+          '<span style="display:block;font-size:9.5px;color:var(--muted)">'+(e.symbol||'')+'</span></td>'+
+        '<td class="num">'+(e.ter!=null?e.ter.toFixed(2)+'%':'\u2014')+'</td>'+
+        '<td class="num" style="font-size:11.5px">'+(f&&f.domicilie?f.domicilie:'\u2014')+
+          (f&&f.extra>0.01?'<span style="color:var(--red)"> +'+f.extra.toFixed(2)+'%</span>':'')+'</td>'+
+        '<td class="num">'+(e.aum!=null?('$'+(e.aum>=1?e.aum.toFixed(1)+' mld':(e.aum*1000).toFixed(0)+' mln')):'\u2014')+'</td>'+
+        (function(){
+          var fl=fiscaleLastBE(e,50000,10);
+          return '<td class="num" style="font-size:11.5px" title="Geschatte Belgische belasting: '+
+            (fl.vorm==="uitkerend"?'30% roerende voorheffing op dividend boven de vrijstelling van 833 euro'
+                                  :'geen roerende voorheffing, wel '+fl.beurstaksTarief+'% beurstaks')+
+            ' \u2014 op 50.000 euro, 10 jaar aangehouden">'+
+            (fl.vorm?fl.vorm.slice(0,4):'?')+' <span style="color:var(--muted)">'+
+            fl.perJaarProcent+'%</span></td>'+
+          '<td class="num'+(nadeel>0.05?' neg':'')+'">'+(i===0?'\u2014':'+'+nadeel.toFixed(2)+'%/jaar')+'</td>';
+        })()+
+      '</tr>';
+    }).join('');
+    return '<div style="margin-bottom:14px">'+
+      '<div style="font-size:12.5px;color:var(--muted);margin-bottom:5px">'+index+
+        ' <span style="opacity:.7">\u2014 '+lijst.length+' fondsen</span></div>'+
+      '<div class="panel-card"><table><thead><tr>'+
+        '<th class="l">Fonds</th><th class="num">kosten</th>'+
+        '<th class="num" title="Domicilie en het geschatte extra verlies aan bronbelasting op Amerikaanse dividenden">domicilie</th>'+
+        '<th class="num">omvang</th>'+
+        '<th class="num" title="Uitkeringsvorm en de geschatte Belgische belastingdruk per jaar">BE-fiscaal</th>'+
+        '<th class="num" title="Kosten plus fiscaal nadeel ten opzichte van het gunstigste fonds op dezelfde index">meerkost</th>'+
+      '</tr></thead><tbody>'+rijen+'</tbody></table></div></div>';
+  }).join('');
+
+  var vorigeAanname=(typeof registratieBE==="function")?registratieBE():false;
+  el.innerHTML='<h2 style="font-size:13px;font-weight:600;margin:24px 0 10px">'+
+    'Zelfde index, ander fonds <span style="color:var(--muted);font-weight:400">'+
+    namen.length+' index'+(namen.length>1?'en':'')+' met meerdere fondsen</span></h2>'+
+    blokken+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">'+
+    'Fondsen op dezelfde index zijn inwisselbaar, dus verschillen in kosten en bronbelasting '+
+    'werken \u00e9\u00e9n op \u00e9\u00e9n door in je rendement. Het fiscale deel is een schatting op basis van '+
+    'het domicilie en de geschatte Amerikaanse blootstelling \u2014 controleer het in de KID '+
+    'van het fonds voordat je overstapt, en houd rekening met de kosten van verkopen en herkopen.'+
+    '<br><br><b>Over de Belgische belasting:</b> uitkerende fondsen kosten 30% roerende voorheffing '+
+    'op dividend boven de vrijstelling van circa 833 euro per persoon per jaar. Herbeleggende '+
+    'fondsen betalen die niet, maar w\u00e9l 1,32% beurstaks als het fonds in Belgi\u00eb geregistreerd is '+
+    '(anders 0,12%). Welke gunstiger uitpakt hangt af van je bedrag, het dividendrendement en hoe '+
+    'lang je aanhoudt \u2014 er is geen algemeen antwoord.'+
+    '<label style="display:block;margin-top:8px;cursor:pointer">'+
+    '<input type="checkbox" id="etfGeregistreerdBE" '+((typeof registratieBE==="function"&&registratieBE())?'checked':'')+
+    ' style="width:auto;margin-right:6px"> reken met 1,32% beurstaks (fonds in Belgi\u00eb geregistreerd)</label>'+
+    '</div>';
+  var vink=document.getElementById('etfGeregistreerdBE');
+  if(vink){ vink.checked=vorigeAanname; vink.onchange=renderIndexVergelijking; }
+}
+
 function renderEtf(){
+  if(typeof renderIndexVergelijking==="function")setTimeout(renderIndexVergelijking,0);
   buildEtfPeers(ETF_CURRENT);
   var rows=ETF_CURRENT.map(function(d){
     var s=etfTotalScore(d);
@@ -4403,6 +4523,11 @@ function enrichEulerMetrics(isin,token){
         grossMargin: prof.grossMargin!=null?+(+prof.grossMargin).toFixed(1):null,
         // per aandeel
         eps: num(ps.eps), bps: num(ps.bps), dps: num(ps.dps),
+        // Dividendrendement uit dividend per aandeel gedeeld door de koers. Nodig om
+        // TOTAALrendement te kunnen meten: een koers daalt op de ex-dividenddatum, dus
+        // wie alleen naar de koers kijkt onderschat aandelen die veel uitkeren.
+        divYield: (ps.dps!=null && koers>0)
+                  ? +((ps.dps/koers)*100).toFixed(2) : null,
         dividendYield: pct(ps.dividendYield),
         // hefboom
         de: num(lev.debtToEquity), currentRatio: num(lev.currentRatio),
@@ -5037,6 +5162,176 @@ window.removePosition=removePosition;
 // Een ETF heeft geen ROE, winstgroei of P/E in de zin van een bedrijf; die krijgt een eigen beoordeling.
 var ETF_KNOWN={};    // tickers waarvan SecuritiesDB bevestigt dat het een fonds is
 var ETF_NOT_FUND={}; // tickers waarvan we weten dat het géén fonds is (voorkomt herhaalde pogingen)// beoordeelt een ETF op fondskenmerken i.p.v. bedrijfsfundamentals
+// ---- Belgische fiscale last per fonds ----
+// Dividendrendement zelf is géén kwaliteitsmaat: bij een indexvolger komt het uit de index,
+// niet uit het fonds. Twee fondsen op dezelfde index keren hetzelfde uit. Sterker nog, een
+// herbeleggend fonds rapporteert nul - dat positief scoren zou het beter presterende fonds
+// juist lager zetten.
+//
+// Wat wél verschilt is de belasting. Voor een Belgische belegger:
+//   - uitkerend: 30% roerende voorheffing op elk dividend, jaarlijks
+//   - herbeleggend: geen roerende voorheffing, maar 1,32% beurstaks bij aan- en verkoop
+//     (0,12% als het fonds niet in België geregistreerd is)
+//   - er geldt een vrijstelling van circa 833 euro dividend per persoon per jaar,
+//     terug te vragen via de aangifte
+// Bij lang aanhouden weegt de jaarlijkse dividendbelasting zwaarder; bij vaak handelen
+// de beurstaks. Daarom rekenen we het door in plaats van er een score van te maken.
+function registratieBE(){
+  var el=document.getElementById('etfGeregistreerdBE');
+  return el?el.checked:false;
+}
+var BE_ROERENDE_VOORHEFFING=0.30;
+var BE_VRIJSTELLING=833;       // euro dividend per persoon per jaar
+
+function fiscaleLastBE(e, bedrag, jarenAanhouden){
+  bedrag=bedrag||10000;
+  jarenAanhouden=jarenAanhouden||10;
+  var vorm=uitkeringsvorm(e);
+  var rendement=(e.dividendYield!=null&&e.dividendYield>0&&e.dividendYield<10)
+                 ? e.dividendYield/100 : null;
+  // bij een herbeleggend fonds staat het rendement op nul; schat dan uit de index
+  if(rendement==null||rendement===0){
+    var t=((e.trackingIndex||"")+" "+(e.name||"")).toLowerCase();
+    rendement = /bond|aggregate|treasury|govt/.test(t) ? 0.030
+              : /high.?dividend|dividend aristocrat|yield/.test(t) ? 0.035
+              : /emerging/.test(t) ? 0.028
+              : 0.018;   // brede aandelenindex
+  }
+  var dividendPerJaar=bedrag*rendement;
+  var belastbaar=Math.max(0,dividendPerJaar-BE_VRIJSTELLING);
+
+  // Beurstaks: 1,32% geldt voor een herbeleggend fonds dat (of waarvan de uitkerende
+  // versie) in België geregistreerd is; anders 0,12%. Die registratie staat niet in de
+  // brongegevens, dus het is een aanname - en een belangrijke, want ze keert de uitkomst om.
+  var geregistreerdBE = (typeof registratieBE==="function") ? registratieBE() : false;
+  var beurstaksTarief = (vorm==="herbeleggend" && geregistreerdBE) ? 0.0132 : 0.0012;
+  var beurstaks=bedrag*beurstaksTarief*2;    // aankoop én verkoop
+  var maxBeurstaks=(beurstaksTarief>0.005)?4000:1300;
+  beurstaks=Math.min(beurstaks, maxBeurstaks*2);
+
+  var dividendbelasting = (vorm==="uitkerend")
+    ? belastbaar*BE_ROERENDE_VOORHEFFING*jarenAanhouden : 0;
+
+  var totaal=dividendbelasting+beurstaks;
+  return {
+    vorm: vorm,
+    beurstaksTarief: +(beurstaksTarief*100).toFixed(2),
+    rendementGebruikt: +(rendement*100).toFixed(2),
+    geschat: (e.dividendYield==null||e.dividendYield===0),
+    dividendbelastingPerJaar: +(dividendbelasting/jarenAanhouden).toFixed(0),
+    beurstaks: +beurstaks.toFixed(0),
+    totaalOverPeriode: +totaal.toFixed(0),
+    perJaarProcent: +((totaal/jarenAanhouden)/bedrag*100).toFixed(3)
+  };
+}
+
+// ---- Fondsen die dezelfde index volgen ----
+// De nuttigste vergelijking bij fondsen: twee producten op dezelfde index zijn inwisselbaar,
+// dus het goedkoopste met het gunstigste domicilie wint. Verschillen in kosten of
+// bronbelasting werken één op één door in je rendement, zonder tegenprestatie.
+function normaliseerIndex(naam){
+  if(!naam)return null;
+  // Alles wat de indexnaam niet onderscheidt eruit: fondsvorm, munt, uitkeringsvorm en de
+  // rendementsvariant. "S&P 500 Index (Net Return)" en "S&P 500 UCITS ETF" zijn dezelfde
+  // index; zonder deze schoning belanden ze in aparte groepen en mis je juist de vergelijking.
+  return String(naam).toLowerCase()
+    .replace(/\((?:[^)]*)\)/g,' ')                     // alles tussen haakjes
+    .replace(/\b(ucits|etf|fund|index|indices|idx)\b/g,' ')
+    .replace(/\b(net|gross|total|price)\s*return\b/g,' ')
+    .replace(/\b(tr|nr|gr|pr)\s+(net|gross)\b/g,' ')
+    .replace(/\b(tr|nr|gr|pr)\b/g,' ')
+    .replace(/\b(net|gross)\b/g,' ')
+    .replace(/\b(eur|usd|gbp|chf|jpy)\b/g,' ')
+    .replace(/\b(hedged?|unhedged|acc|accumulating|dist|distributing|inc|cap)\b/g,' ')
+    // NIET weghalen: esg, screened, sri, socially. Dat zijn andere indices met een
+    // andere samenstelling, geen schrijfwijzevariant - samenvoegen zou fondsen
+    // vergelijken die iets anders volgen.
+    .replace(/\b(swap|physical|synthetic|replication)\b/g,' ')
+    .replace(/[^a-z0-9]+/g,' ').trim();
+}
+function groepeerOpIndex(lijst){
+  var groepen={};
+  lijst.forEach(function(e){
+    var k=normaliseerIndex(e.trackingIndex);
+    if(!k||k.length<4)return;
+    (groepen[k]=groepen[k]||[]).push(e);
+  });
+  // alleen groepen met meer dan één fonds zijn interessant
+  Object.keys(groepen).forEach(function(k){ if(groepen[k].length<2)delete groepen[k]; });
+  return groepen;
+}
+
+// Wat kost het je per jaar om niet het beste alternatief te hebben?
+function jaarlijksNadeel(fonds,beste){
+  var kosten=(fonds.ter!=null&&beste.ter!=null) ? (fonds.ter-beste.ter) : 0;
+  var fa=fiscaleEfficientie(fonds), fb=fiscaleEfficientie(beste);
+  var fiscaal=(fa&&fb&&fa.extra!=null&&fb.extra!=null) ? (fa.extra-fb.extra) : 0;
+  return +(kosten+fiscaal).toFixed(3);
+}
+
+// ---- Fiscale efficiëntie van een fonds ----
+// Het domicilie bepaalt hoeveel bronbelasting er op Amerikaanse dividenden blijft hangen.
+// Ierland heeft een verdrag met de VS (15%), Luxemburg niet in dezelfde mate (tot 30%).
+// Bij een wereldindex met ~70% Amerikaanse aandelen en 2% dividendrendement scheelt dat
+// ongeveer 0,2 tot 0,3 procentpunt per jaar - vaak meer dan het verschil in lopende kosten.
+//
+// Dit telt alléén mee naar rato van de Amerikaanse blootstelling: bij een Europees fonds
+// maakt het domicilie voor dit punt niets uit.
+var DOMICILIE={
+  IE:{naam:"Ierland",   usTarief:0.15, uitleg:"belastingverdrag met de VS: 15% op Amerikaanse dividenden"},
+  LU:{naam:"Luxemburg", usTarief:0.30, uitleg:"geen volledig verdragstarief; tot 30% op Amerikaanse dividenden"},
+  US:{naam:"Verenigde Staten", usTarief:0.15, uitleg:"Amerikaans fonds; voor Europese particulieren doorgaans niet verhandelbaar"},
+  FR:{naam:"Frankrijk", usTarief:0.30, uitleg:"geen verdragstarief voor fondsen"},
+  DE:{naam:"Duitsland", usTarief:0.30, uitleg:"geen verdragstarief voor fondsen"},
+  CH:{naam:"Zwitserland", usTarief:0.30, uitleg:"buiten UCITS"}
+};
+
+// Schat hoeveel Amerikaanse blootstelling een fonds heeft, uit de naam of de gevolgde index.
+function usAandeel(e){
+  var t=((e.trackingIndex||"")+" "+(e.name||"")+" "+(e.longName||"")).toLowerCase();
+  if(/s&p 500|s&p500|nasdaq|russell|msci usa|us equity|united states/.test(t))return 1.0;
+  if(/msci world|ftse developed|world equity/.test(t))return 0.70;
+  if(/all.?world|acwi|ftse global|global equity/.test(t))return 0.62;
+  if(/emerging|em equity|europe|stoxx|euro|dax|cac|ftse 100|japan|asia|pacific/.test(t))return 0.05;
+  if(/bond|aggregate|treasury|govt|corporate/.test(t))return 0.0;   // obligaties: geen dividendlek
+  return 0.45;   // onbekend: middenweg
+}
+
+function fiscaleEfficientie(e){
+  var dom=(e.domicile||"").toUpperCase().slice(0,2);
+  var info=DOMICILIE[dom];
+  var us=usAandeel(e);
+  if(!info)return {score:null, us:us, domicilie:dom||null};
+  // verlies in procentpunt per jaar, uitgaand van ~2% dividendrendement op het VS-deel
+  var dividend=(e.dividendYield!=null && e.dividendYield>0 && e.dividendYield<8) ? e.dividendYield/100 : 0.02;
+  var lek=us*dividend*info.usTarief*100;
+  var beste=us*dividend*0.15*100;
+  var extra=+(lek-beste).toFixed(3);      // hoeveel meer dan het gunstigste tarief
+  // score: 100 bij geen extra lek, aflopend tot 0 bij 0,5 procentpunt extra
+  var score=Math.round(Math.max(0,Math.min(100,100-(extra/0.5)*100)));
+  return {score:score, extra:extra, us:us, domicilie:dom, naam:info.naam, uitleg:info.uitleg};
+}
+
+// Hoe lang bestaat het fonds? Een jong fonds heeft geen staat van dienst en loopt meer
+// kans op opheffing, wat je dwingt te verkopen op een moment dat jou niet uitkomt.
+function staatVanDienst(e){
+  if(!e.inceptionDate)return null;
+  var jaren=(Date.now()-new Date(e.inceptionDate))/(365.25*86400000);
+  if(isNaN(jaren)||jaren<0)return null;
+  // onder 3 jaar zwak, boven 10 jaar volwaardig
+  return {jaren:+jaren.toFixed(1), score:Math.round(Math.max(0,Math.min(100,(jaren/10)*100)))};
+}
+
+// Herbeleggend of uitkerend: uit de naam, en als terugval uit het dividendrendement.
+function uitkeringsvorm(e){
+  var t=((e.name||"")+" "+(e.longName||"")+" "+(e.tickers||"")).toLowerCase();
+  if(/\bacc\b|accumulating|accumulerend|thesaurier|\(c\)|cap\b/.test(t))return "herbeleggend";
+  if(/\bdist\b|distributing|uitkerend|\(d\)|inc\b/.test(t))return "uitkerend";
+  if(e.dividendYield!=null && e.dividendYield>0.1)return "uitkerend";
+  if(e.dividendYield===0)return "herbeleggend";
+  return null;
+}
+
 function etfPortfolioScore(e){
   if(!e)return null;
   // Kosten wegen het zwaarst: het is het enige cijfer dat vooraf vaststaat en gegarandeerd
@@ -5069,8 +5364,24 @@ function etfPortfolioScore(e){
     // omvang als risico-indicator: kleine fondsen sluiten vaker en hebben bredere spreads.
     // Schaal loopt door tot ~$200 mld zodat grote fondsen onderling nog onderscheiden worden.
     var size=Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,e.aum))+1.3)/3.6*100)));
-    parts.push([size,0.17]); sum+=0.17; detail.size=size;
+    parts.push([size,0.14]); sum+=0.14; detail.size=size;
   }
+  // Fiscale efficiëntie: het domicilie bepaalt hoeveel bronbelasting op Amerikaanse
+  // dividenden blijft hangen. Bij een wereldindex weegt dat zwaarder dan een paar
+  // honderdsten verschil in lopende kosten, dus het hoort in de score thuis.
+  var fisc=fiscaleEfficientie(e);
+  if(fisc && fisc.score!=null && fisc.us>0.1){
+    parts.push([fisc.score,0.12]); sum+=0.12;
+    detail.fiscaal=fisc.score; detail.fiscaalExtra=fisc.extra;
+    detail.domicilie=fisc.naam; detail.usAandeel=fisc.us;
+  }
+  // Staat van dienst: een fonds van twee jaar heeft geen geschiedenis en sluit vaker.
+  var svd=staatVanDienst(e);
+  if(svd){
+    parts.push([svd.score,0.07]); sum+=0.07;
+    detail.leeftijd=svd.jaren; detail.leeftijdScore=svd.score;
+  }
+  detail.uitkering=uitkeringsvorm(e);
   if(!sum) return null; // geen enkel bruikbaar cijfer -> geen score i.p.v. misleidende 50
 
   var score=0; parts.forEach(function(p){score+=p[0]*p[1];});
@@ -6516,7 +6827,18 @@ function computeAndShowAccuracy(snaps,prices){
   snaps.forEach(function(s){
     s.items.forEach(function(it){
       if(prices[it.symbol]!=null && it.price!=null && it.price>0){
-        var ret=((prices[it.symbol]-it.price)/it.price)*100;
+        // TOTAALrendement: koerswinst plus het dividend dat in die periode is uitgekeerd.
+        //
+        // Een koers daalt op de ex-dividenddatum met ongeveer het uitgekeerde bedrag. Wie
+        // alleen de koers vergelijkt, meet dus te laag bij aandelen die veel uitkeren - en
+        // dat werkt systematisch één kant op: nutsbedrijven, banken en consumentenmerken
+        // keren meer uit dan techbedrijven. Precies de categorie die een waarderingsfactor
+        // selecteert, werd daardoor onderschat.
+        var koersRendement=((prices[it.symbol]-it.price)/it.price)*100;
+        var dagen=(Date.now()-s.ts)/86400000;
+        var dividendDeel=(it.divYield!=null&&it.divYield>0&&it.divYield<25)
+                         ? it.divYield*(dagen/365) : 0;
+        var ret=koersRendement+dividendDeel;
         // Momentopnamen van vandaag hebben per definitie 0% rendement: de koers is nog
         // niet veranderd. Die meten niets en verdunnen alleen de uitkomst.
         var leeftijdDagen=(Date.now()-s.ts)/86400000;
@@ -6536,6 +6858,7 @@ function computeAndShowAccuracy(snaps,prices){
         pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
           herrekend:hr.niveau,
           snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
+          divYield:it.divYield, koersDeel:+koersRendement.toFixed(1), divDeel:+dividendDeel.toFixed(2),
           trap:it.trap, volledig:it.volledig,
           pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs,
           verrassing:it.verrassing, verrassingConsistentie:it.verrassingConsistentie,
@@ -6793,6 +7116,11 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   r.push("  momentopnamen: "+snaps.length);
   r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
   var neutraalGebruikt=snaps.filter(function(s){return s.sectorNeutraal;}).length;
+  var metDiv=pairs.filter(function(p){return p.divYield!=null&&p.divYield>0;}).length;
+  var gemDiv=metDiv?pairs.reduce(function(s,p){return s+(p.divDeel||0);},0)/pairs.length:0;
+  r.push("  rendement gemeten als: TOTAALrendement (koers plus dividend)");
+  r.push("    dividend bekend bij "+metDiv+" van "+pairs.length+" datapunten"+
+         (gemDiv>0.01?", gemiddeld "+gemDiv.toFixed(2)+" procentpunt van het rendement":""));
   r.push("  sectorneutraal gescoord: "+neutraalGebruikt+" van "+snaps.length+" momentopnamen");
   r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
          ", waardering "+Math.round(w.wv*100)+
@@ -6915,6 +7243,10 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var uniek={}; pairs.forEach(function(p){uniek[p.score]=1;});
   if(Object.keys(uniek).length<pairs.length*0.6)
     bezwaren.push("Veel dezelfde scores: weinig onderscheid tussen posities beperkt wat de correlatie kan aantonen.");
+  if(metDiv<pairs.length*0.5)bezwaren.push("Bij "+(pairs.length-metDiv)+" van de "+pairs.length+
+    " datapunten is het dividendrendement onbekend, dus daar is alleen het koersrendement gemeten. "+
+    "Dat onderschat aandelen die veel uitkeren \u2014 doorgaans nutsbedrijven, banken en "+
+    "consumentenmerken, precies de categorie die een waarderingsfactor selecteert.");
   if(telHer.geen>pairs.length*0.3)bezwaren.push("Van de "+pairs.length+" datapunten konden er "+
     telHer.geen+" niet herrekend worden: dat zijn oudere momentopnamen die alleen de score bewaarden, "+
     "niet de onderliggende cijfers. Die zijn met een andere methodiek berekend dan de rest, "+
