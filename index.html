@@ -3828,10 +3828,16 @@ function run(){
       all.forEach(function(d){ if(d._divBron)bronnen[d._divBron]=(bronnen[d._divBron]||0)+1; });
       if(all.length>=5){
         var deel=Math.round(metDiv/all.length*100);
-        var tekst=' \u00b7 dividend bekend bij '+metDiv+'/'+all.length+' ('+deel+'%)';
-        if(metDiv===0)tekst+=' \u2014 de rendementsmeting gebruikt dan alleen de koers';
+        // Onderscheid tussen "keert niets uit" en "we weten het niet". Dat telt: bij een
+        // bedrijf zonder dividend klopt het koersrendement, bij ontbrekende data niet.
+        var nul=all.filter(function(d){return d.divYield===0;}).length;
+        var onbekend=all.filter(function(d){return d.divYield==null;}).length;
+        var tekst=' \u00b7 dividend: '+(metDiv-nul)+' met uitkering, '+nul+' zonder, '+
+                  onbekend+' onbekend';
+        if(onbekend>all.length*0.3)
+          tekst+=' \u2014 bij die laatste meet de accuratessetoets alleen de koers';
         else if(Object.keys(bronnen).length)
-          tekst+=' via '+Object.keys(bronnen).join(', ');
+          tekst+=' (via '+Object.keys(bronnen).join(', ')+')';
         window._divDekking=tekst;
       }
     })();
@@ -4526,8 +4532,33 @@ function enrichEulerMetrics(isin,token){
         // Dividendrendement uit dividend per aandeel gedeeld door de koers. Nodig om
         // TOTAALrendement te kunnen meten: een koers daalt op de ex-dividenddatum, dus
         // wie alleen naar de koers kijkt onderschat aandelen die veel uitkeren.
-        divYield: (ps.dps!=null && koers>0)
-                  ? +((ps.dps/koers)*100).toFixed(2) : null,
+        // Dividendrendement langs drie wegen, in volgorde van betrouwbaarheid. Nodig om
+        // TOTAALrendement te meten: een koers daalt op de ex-dividenddatum, dus wie alleen
+        // de koers vergelijkt onderschat aandelen die veel uitkeren.
+        divYield: (function(){
+          // 1. het rendement dat de bron zelf geeft
+          var direct=ps.dividendYield!=null?+ps.dividendYield*100:null;
+          if(direct!=null && direct>=0 && direct<25)return +direct.toFixed(2);
+          // 2. dividend per aandeel gedeeld door de koers
+          if(ps.dps!=null && koers>0){
+            var uit=(ps.dps/koers)*100;
+            if(uit>=0 && uit<25)return +uit.toFixed(2);
+          }
+          // 3. het laatste jaar uit de historische reeks waarin wél een dividend stond
+          for(var h=0;h<hist.length;h++){
+            if(hist[h] && hist[h].dps!=null && koers>0){
+              var oud=(hist[h].dps/koers)*100;
+              if(oud>=0 && oud<25)return +oud.toFixed(2);
+            }
+          }
+          return null;
+        })(),
+        _divBron: (function(){
+          if(ps.dividendYield!=null)return 'bronrendement';
+          if(ps.dps!=null)return 'dividend per aandeel';
+          for(var h=0;h<hist.length;h++){ if(hist[h]&&hist[h].dps!=null)return 'historische reeks'; }
+          return null;
+        })(),
         dividendYield: pct(ps.dividendYield),
         // hefboom
         de: num(lev.debtToEquity), currentRatio: num(lev.currentRatio),
@@ -7204,6 +7235,15 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   },"WERKT DE SCORE BIJ ELKE OMVANG?");
   groepeer(function(p){return p.volledig!=null?(p.volledig+" van 4 factoren gemeten"):null;},
            "MAAKT DATAVOLLEDIGHEID UIT?");
+  // Toetst of het ontbreken van dividendgegevens de meting scheeftrekt. Gedragen de
+  // onbekenden zich als niet-uitkeerders, dan is er niets aan de hand; lijken ze op de
+  // uitkeerders, dan mis je systematisch rendement bij juist die groep.
+  groepeer(function(p){
+    if(p.divYield==null)return "dividend onbekend";
+    if(p.divYield===0)return "keert niets uit";
+    return p.divYield<2?"laag dividend (<2%)":
+           (p.divYield<4?"gemiddeld (2-4%)":"hoog dividend (>4%)");
+  },"HANGT HET SAMEN MET DIVIDEND? (en zijn de onbekenden anders?)");
   groepeer(function(p){
     if(p.vol==null)return null;
     return p.vol<20?"lage volatiliteit (<20%)":
