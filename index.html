@@ -7799,6 +7799,9 @@ $('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.len
 
 // ---- Firebase cloud-sync ----
 var FB={app:null,auth:null,db:null,user:null,ready:false};
+
+// Initialiseer Firebase direct (niet in IIFE) zodat auth state persistent blijft
+initFirebase();
 function syncMsg(t){
   var e=$('syncStatus'); if(e)e.innerHTML=t;
   // kop meelaten lopen: daar staat een compactere variant zonder de uitleg erachter
