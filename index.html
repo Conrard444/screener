@@ -67,16 +67,6 @@
   });
 })();
 
-// ---- Bronopties (moeten vr elk gebruik staan) ----
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
-      tb.onclick=function(){
-        Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
-        Array.prototype.forEach.call(document.querySelectorAll('.tabpane'),function(x){x.classList.remove('active');});
-        tb.classList.add('active');
-        $('tab-'+tb.dataset.tab).classList.add('active');
-        if(tb.dataset.tab==='tracking') renderSnapList();
-      };
-    });
 // ---- Bronopties (moeten vóór elk gebruik staan) ----
 // Winstverrassingen en analistenramingen ophalen: 1 tot 2 extra calls per aandeel.
 // Standaard uit, want het is aanvullende analysedata en geen onderdeel van de score.
@@ -4352,7 +4342,7 @@ function etfTrackScore(d){ // dynamische track record score gebaseerd op histori
 // Schaal: 0% = 100, 15% = 75, 30% = 50, 45% = 25 (realistischere schaal voor ETF's)
 function etfVolatilityScore(d){
   if(d.vol != null) {
-    return Math.round(Math.max(0, Math.min(100, 100 - (d.vol * 1.67)))));
+    return Math.round(Math.max(0, Math.min(100, 100 - (d.vol * 1.67))));
   }
   return 50;
 }
@@ -4361,7 +4351,7 @@ function etfVolatilityScore(d){
 // Schaal: Sharpe 0 = 50, Sharpe 1 = 75, Sharpe 2 = 100 (lineaire toename)
 function etfSharpeScore(d){
   if(d.sharpe != null) {
-    return Math.round(Math.max(0, Math.min(100, 50 + (d.sharpe * 25)))));
+    return Math.round(Math.max(0, Math.min(100, 50 + (d.sharpe * 25))));
   }
   return 50;
 }
@@ -7800,8 +7790,6 @@ $('clearHist').onclick=function(){if(HISTORY.length&&confirm("Alle "+HISTORY.len
 // ---- Firebase cloud-sync ----
 var FB={app:null,auth:null,db:null,user:null,ready:false};
 
-// Initialiseer Firebase direct (niet in IIFE) zodat auth state persistent blijft
-initFirebase();
 function syncMsg(t){
   var e=$('syncStatus'); if(e)e.innerHTML=t;
   // kop meelaten lopen: daar staat een compactere variant zonder de uitleg erachter
@@ -8069,6 +8057,7 @@ function showLastRunFor(exchange){
       });
       if(typeof syncWeightUI==="function")syncWeightUI();
     }
+
     render();
     $('status').className="status";
     $('status').innerHTML='\ud83d\udcbe Bewaarde screening \u2014 '+describeRun(run)+
@@ -8152,6 +8141,19 @@ loadLastRun('stocks').then(function(run){
     tip.appendChild(btn); tip.style.display="block";
   });
 })();
+
+// ---- Tab-navigatie: pas binden als de DOM klaar is ----
+document.addEventListener('DOMContentLoaded',function(){
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
+    tb.onclick=function(){
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
+      Array.prototype.forEach.call(document.querySelectorAll('.tabpane'),function(x){x.classList.remove('active');});
+      tb.classList.add('active');
+      $('tab-'+tb.dataset.tab).classList.add('active');
+      if(tb.dataset.tab==='tracking') renderSnapList();
+    };
+  });
+});
 
 render();
 </script>
