@@ -392,6 +392,10 @@ var BRON={
   .bar-top{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin:16px 0 14px;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
   .field{display:flex;flex-direction:column;gap:4px}
   .field label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+  /* invoerveld met eenheid (bv. "mld $") in één regel naast elkaar */
+  .unitrow{display:flex;align-items:center;gap:4px}
+  /* checkbox-labels in de toprij: uniform, zonder inline styles */
+  .chk{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
   input[type=text],input[type=password],input[type=number],input[type=date],select{
     background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
     padding:8px 12px;height:36px;box-sizing:border-box;border-radius:6px;
@@ -620,31 +624,31 @@ var BRON={
     <div class="control-row">
       <span class="inline-lbl" id="srcIndicator">Bronnen worden beheerd bij <b>Instellingen</b></span>
       <span class="inline-lbl" id="quotaBar" style="font-size:11px;margin-left:12px"></span>
-      <select id="colPreset" style="margin-left:auto;max-width:170px" title="Kies welke kolommen zichtbaar zijn, zodat alles op je scherm past">
+      <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
+      <label class="chk" style="margin-left:auto"
+        title="Analyseer élk aandeel in het universum in plaats van alleen de meest bewegende. Kost meer API-calls, maar levert een volledig scorebereik voor je accuratesse-meting.">
+        <input type="checkbox" id="volledigeAnalyse" style="width:auto">
+        <span>volledige analyse</span>
+      </label>
+      <label class="chk"
+        title="Vergelijk elk aandeel met zijn eigen sectorgenoten in plaats van met absolute drempels. Een koers-winstverhouding van 15 betekent iets anders bij een nutsbedrijf dan bij software; zonder deze correctie meet de score deels sectorkenmerken.">
+        <input type="checkbox" id="sectorNeutraal" style="width:auto">
+        <span>sectorneutraal</span>
+      </label>
+      <label class="chk"
+        title="Haalt winstverrassingen (hoeveel de winst afweek van de verwachting) en analistenramingen op, inclusief het meningsverschil tussen analisten. Kost 1 tot 2 extra calls per aandeel. Wordt bewaard voor latere analyse en telt niet mee in de score.">
+        <input type="checkbox" id="winstVerrassing" style="width:auto">
+        <span>winstcijfers &amp; ramingen</span>
+      </label>
+      <select id="colPreset" style="max-width:170px" title="Kies welke kolommen zichtbaar zijn, zodat alles op je scherm past">
         <option value="minimaal">Kolommen: minimaal</option>
         <option value="essentie">Kolommen: essentie</option>
         <option value="waardering">Kolommen: waardering</option>
         <option value="kwaliteit">Kolommen: kwaliteit</option>
         <option value="alles" selected>Kolommen: alles</option>
       </select>
-      <button class="btn-go" id="run" style="margin-left:auto" aria-label="Voer screening uit">Screenen</button>
+      <button class="btn-go" id="run" aria-label="Voer screening uit">Screenen</button>
       <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken" aria-label="Toon laatste screening">Laatste tonen</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;margin-left:8px"
-        title="Analyseer élk aandeel in het universum in plaats van alleen de meest bewegende. Kost meer API-calls, maar levert een volledig scorebereik voor je accuratesse-meting.">
-        <input type="checkbox" id="volledigeAnalyse" style="width:auto">
-        <span>volledige analyse</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer"
-        title="Vergelijk elk aandeel met zijn eigen sectorgenoten in plaats van met absolute drempels. Een koers-winstverhouding van 15 betekent iets anders bij een nutsbedrijf dan bij software; zonder deze correctie meet de score deels sectorkenmerken.">
-        <input type="checkbox" id="sectorNeutraal" style="width:auto">
-        <span>sectorneutraal</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer"
-        title="Haalt winstverrassingen (hoeveel de winst afweek van de verwachting) en analistenramingen op, inclusief het meningsverschil tussen analisten. Kost 1 tot 2 extra calls per aandeel. Wordt bewaard voor latere analyse en telt niet mee in de score.">
-        <input type="checkbox" id="winstVerrassing" style="width:auto">
-        <span>winstcijfers &amp; ramingen</span>
-      </label>
-      <button class="btn-ghost" id="csv" title="Download de huidige tabel als CSV-bestand (voor Excel of eigen analyse)">CSV</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
       <select id="source" style="display:none"><option value="finnhub" selected>finnhub</option><option value="fmp">fmp</option><option value="eodhd">eodhd</option></select>
       <input type="password" id="apikey" style="display:none" autocomplete="off">
@@ -652,6 +656,7 @@ var BRON={
       <button id="saveKey" style="display:none"></button>
     </div>
     <div class="control-row compact">
+      <span class="inline-lbl" style="color:var(--ink);font-weight:600">Filters:</span>
       <div class="field">
         <label>Universum</label>
         <select id="exchange">
@@ -682,10 +687,10 @@ var BRON={
         <label title="Korte termijn: relatieve scores, reageert snel maar schommelt. Lange termijn: trage fundamenten, absolute scores + demping — veel stabieler.">Horizon</label>
         <select id="horizon"><option value="kort" selected>Kort (reactief)</option><option value="lang">Lang (stabiel)</option></select>
       </div>
-      <div class="field"><label>Marktwaarde &gt;</label><input type="number" id="mcap" value="0" style="width:60px"><span class="inline-lbl">mld $</span></div>
-      <div class="field"><label>P/E &lt;</label><input type="number" id="pemax" value="40" style="width:60px"></div>
-      <div class="field"><label>Dividend &gt;</label><input type="number" id="divYieldMin" value="0" style="width:60px"><span class="inline-lbl">%</span></div>
-      <div class="field"><label>Altman Z &gt;</label><input type="number" id="altmanZMin" value="1.81" style="width:60px" title="Faillissementsrisico: < 1.81 = distress-zone"></div>
+      <div class="field"><label>Marktwaarde &gt;</label><div class="unitrow"><input type="number" id="mcap" value="0" style="width:70px"><span class="inline-lbl">mld $</span></div></div>
+      <div class="field"><label>P/E &lt;</label><input type="number" id="pemax" value="40" style="width:70px"></div>
+      <div class="field"><label>Dividend &gt;</label><div class="unitrow"><input type="number" id="divYieldMin" value="0" style="width:70px"><span class="inline-lbl">%</span></div></div>
+      <div class="field"><label>Altman Z &gt;</label><input type="number" id="altmanZMin" value="1.81" style="width:70px" title="Faillissementsrisico: < 1.81 = distress-zone"></div>
       <div class="field">
         <label title="Filter de resultaten op type: alleen holdings (investeringsmaatschappijen) of juist alleen operationele bedrijven.">Type</label>
         <select id="typeFilter">
@@ -704,7 +709,7 @@ var BRON={
           <option value="small">Small Cap (&lt;$2B)</option>
         </select>
       </div>
-      <div class="field"><label>Piotroski &ge;</label><input type="number" id="piotroskiMin" value="5" style="width:60px" title="Financiële gezondheid: 0-9, hoger = beter"></div>
+      <div class="field"><label>Piotroski &ge;</label><input type="number" id="piotroskiMin" value="5" style="width:70px" title="Financiële gezondheid: 0-9, hoger = beter"></div>
     </div>
     <div class="control-row compact">
       <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging<span id="wnote" style="color:var(--accent);font-weight:400"></span>:</span>
