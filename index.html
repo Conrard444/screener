@@ -1214,7 +1214,7 @@ function buildPeers(set){
 // kies sector-peers als de sector genoeg leden heeft, anders universum-breed
 function peerArr(d,f){
   var s=d.sector||"Overig";
-  if(SECTOR_PEERS&&SECTOR_PEERS[s]){
+  if(SECTOR_PEERS&&SECTOR_PEERS[s]&&SECTOR_PEERS[s][f]){
     var arr=SECTOR_PEERS[s][f].filter(function(x){return x!=null&&!isNaN(x);});
     if(arr.length>=4) return SECTOR_PEERS[s][f];
   }
