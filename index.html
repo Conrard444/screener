@@ -1084,8 +1084,9 @@ var BRON={
       <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
       <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
       <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
-    </div>
     </details>
+    </div>
+  </details>
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">Aandelen</summary>
       <div style="padding:8px 0 0"><details>
@@ -1098,30 +1099,34 @@ var BRON={
     <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
     <p><b>China / Hongkong:</b> dekt grote namen via Amerikaanse ADR (bv. BABA, JD, PDD) of HK-notering (.HK) &mdash; <u>niet</u> de binnenlandse A-aandelenmarkt van Shanghai/Shenzhen, die achter gespecialiseerde databronnen zit. Namen met een <span class="trap warn" style="font-size:9px">VIE</span>-label gebruiken een Variable Interest Entity-structuur: je koopt dan een contractuele aanspraak op de winst, geen direct eigendom van het onderliggende bedrijf &mdash; een juridisch/politiek risico dat losstaat van de vier factoren en niet in de score verwerkt zit.</p>
     <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
-  </div>
     </details>
+  </div>
+  </details>
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">ETF's</summary>
       <div style="padding:8px 0 0"><details style="margin:16px 0 0">
       <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
       <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
-    </div>
     </details>
+    </div>
+  </details>
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">ETF's</summary>
       <div style="padding:8px 0 0"><details>
       <summary>&#128273; Over ETF-data</summary>
       <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
       <p><b>Europese ETF's</b>: kies een van de &#127466;&#127482;-selecties in de lijst. Die zijn opgebouwd met ISIN's (bv. IE00B4L5Y983), het formaat waar Eulerpool het betrouwbaarst mee werkt. Ze lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
-    </div>
     </details>
+    </div>
+  </details>
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">Tracking</summary>
       <div style="padding:8px 0 0"><details style="margin:16px 0 0">
       <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe accuratesse gemeten wordt</summary>
       <p class="sub" style="margin-top:8px">Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien. Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld, en zelfs dan blijft verleden geen garantie. Gebruik dit om te leren, niet om zekerheid te claimen.</p>
-    </div>
     </details>
+    </div>
+  </details>
 
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">Waar de scores op rusten</summary>

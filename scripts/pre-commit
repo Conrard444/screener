@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Git pre-commit hook: blokkeert commits met syntactisch kapotte inline scripts.
+# Git pre-commit hook: draait de volledige kwaliteitscontrole v\u00f3\u00f3r elke commit.
 # Installatie: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 cd "$(git rev-parse --show-toplevel)"
-if [ -f scripts/check-js.sh ]; then
-  ./scripts/check-js.sh || {
+if [ -f scripts/check-all.sh ]; then
+  ./scripts/check-all.sh || {
     echo ""
-    echo "COMMIT GEWEIGERD: de JS-syntaxcontrole faalde."
+    echo "COMMIT GEWEIGERD: de kwaliteitscontrole faalde."
     echo "Los de fouten hierboven op en probeer opnieuw."
     exit 1
   }
