@@ -370,6 +370,8 @@ var BRON={
     --bg:#0e1116;--panel:#161b22;--panel-2:#1c232d;--line:#2a323d;
     --ink:#e8eef5;--muted:#8a97a6;--accent:#d4a843;--green:#46c08a;
     --red:#e0635f;--blue:#5aa9e6;--radius:10px;
+    --shadow:0 2px 8px rgba(0,0,0,0.3);
+    --shadow-lg:0 4px 16px rgba(0,0,0,0.4);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
@@ -377,39 +379,41 @@ var BRON={
     color:var(--ink);font-family:'IBM Plex Sans',sans-serif;line-height:1.5;padding:24px 20px 60px;
   }
   .wrap{max-width:1600px;margin:0 auto}
-  header{margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:14px}
-  h1{font-family:'Fraunces',serif;font-weight:900;font-size:27px;letter-spacing:-.02em;line-height:1.05}
+  header{margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:16px}
+  h1{font-family:'Fraunces',serif;font-weight:900;font-size:28px;letter-spacing:-.02em;line-height:1.05}
   h1 .x{color:var(--accent);font-style:italic}
-  .sub{color:var(--muted);font-size:13px;margin-top:6px;max-width:660px}
-  .disclaimer{margin-top:14px;font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:9px 13px;border-radius:6px}
+  .sub{color:var(--muted);font-size:14px;margin-top:8px;max-width:660px}
+  .disclaimer{margin-top:16px;font-size:13px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:10px 14px;border-radius:8px;box-shadow:var(--shadow)}
   /* Verdicht control-panel: vervangt losse bar-top/filters/weights dozen door één paneel met interne secties */
-  .control-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 14px;overflow:hidden}
-  .control-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;padding:12px 16px}
+  .control-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 16px;overflow:hidden;box-shadow:var(--shadow)}
+  .control-row{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding:14px 18px}
   .control-row+.control-row{border-top:1px solid var(--line)}
-  .control-row.compact{gap:8px 12px;padding:9px 16px}
+  .control-row.compact{gap:10px 14px;padding:12px 18px}
   .bar-top{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin:16px 0 14px;padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
   .field{display:flex;flex-direction:column;gap:4px}
-  .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
   input[type=text],input[type=password],input[type=number],input[type=date],select{
     background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
-    padding:0 10px;height:34px;box-sizing:border-box;border-radius:6px;
-    font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+    padding:8px 12px;height:36px;box-sizing:border-box;border-radius:6px;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;transition:all 0.2s ease;
+  }
+  input[type=text]:focus,input[type=password]:focus,input[type=number]:focus,input[type=date]:focus,select:focus{
+    outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(212,168,67,0.2);
   }
   input[type=checkbox]{height:auto;width:auto}
-  input:focus,select:focus{outline:none;border-color:var(--accent)}
-  input[type=number]{width:84px}
+  input[type=number]{width:90px}
   button{
-    cursor:pointer;border:1px solid transparent;border-radius:6px;
-    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:12.5px;line-height:1;
-    padding:0 16px;height:34px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
-    white-space:nowrap;transition:.15s;
+    cursor:pointer;border:1px solid transparent;border-radius:8px;
+    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:13px;line-height:1;
+    padding:8px 18px;height:36px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    white-space:nowrap;transition:all 0.2s ease;text-decoration:none;
   }
   .btn-go{background:var(--accent);color:#1a1206;border-color:var(--accent)}
-  .btn-go:hover{filter:brightness(1.08)}
+  .btn-go:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:var(--shadow)}
   .btn-ghost{background:transparent;color:var(--muted);border-color:var(--line)}
-  .btn-ghost:hover{color:var(--ink);border-color:var(--muted)}
+  .btn-ghost:hover{color:var(--ink);border-color:var(--muted);background:var(--panel-2)}
   .btn-save{background:var(--green);color:#06231a;border-color:var(--green)}
-  .btn-save:hover{filter:brightness(1.08)}
+  .btn-save:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:var(--shadow)}
   /* kleine tekstknoppen binnen kaarten blijven subtiel */
   .pf-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11.5px;
     text-decoration:underline;padding:0;height:auto;font-weight:400}
@@ -426,19 +430,19 @@ var BRON={
   .inline-lbl{font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px}
   .demo-flag{color:var(--accent);font-family:'IBM Plex Mono'}
   table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
-  th,td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
   /* compacte modus: nog dichter op elkaar voor smalle schermen */
   body.compact table{font-size:11px}
-  body.compact th,body.compact td{padding:5px 4px}
-  th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap;vertical-align:bottom}
+  body.compact th,body.compact td{padding:6px 8px}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap;vertical-align:bottom}
   th:hover{color:var(--ink)}
   th .q{display:inline-block;margin-left:3px;font-size:9px;width:13px;height:13px;line-height:13px;text-align:center;border-radius:50%;background:var(--panel-2);color:var(--muted);font-weight:600;vertical-align:middle;cursor:help}
   th:hover .q{background:var(--accent);color:#1a1206}
   th.l,td.l{text-align:left}
-  tbody tr{transition:background .12s}
-  tbody tr:hover{background:var(--panel)}
+  tbody tr{transition:background 0.15s ease}
+  tbody tr:hover{background:var(--panel-2)}
   .tk{font-family:'IBM Plex Mono';font-weight:600;font-size:14px}
-  .nm{color:var(--muted);font-size:10px;display:block;margin-top:1px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nm{color:var(--muted);font-size:10px;display:block;margin-top:1px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mkt{display:inline-block;font-size:9.5px;padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono';letter-spacing:.05em;margin-left:6px;vertical-align:middle}
   .mkt.US{background:rgba(90,169,230,.15);color:var(--blue)}
   .mkt.EU{background:rgba(212,168,67,.15);color:var(--accent)}
@@ -455,20 +459,21 @@ var BRON={
   .trap.ok{background:rgba(70,192,138,.14);color:var(--green)}
   .trap.warn{background:rgba(212,168,67,.16);color:var(--accent)}
   .trap.danger{background:rgba(224,99,95,.18);color:var(--red)}
-  .panel-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto}
+  .panel-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto;box-shadow:var(--shadow)}
   .legend{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.7}
   .legend b{color:var(--ink);font-weight:600}
   .legend code{font-family:'IBM Plex Mono';background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:11.5px}
-  details{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:4px 18px}
+  details{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:4px 18px;box-shadow:var(--shadow)}
   summary{cursor:pointer;font-weight:600;padding:12px 0;font-size:14px}
   details p{font-size:13px;color:var(--muted);margin:8px 0}
   details code{font-family:'IBM Plex Mono';color:var(--accent);font-size:12px}
-  .tabs{display:flex;gap:4px;margin:18px 0 0;border-bottom:1px solid var(--line)}
-  .tab{background:none;border:none;color:var(--muted);padding:11px 18px;font-family:'IBM Plex Sans';font-weight:600;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;border-radius:0;margin-bottom:-1px}
-  .tab:hover{color:var(--ink)}
-  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabs{display:flex;gap:6px;margin:20px 0 0;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;color:var(--muted);padding:12px 20px;font-family:'IBM Plex Sans';font-weight:600;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;border-radius:0;margin-bottom:-1px;transition:all 0.2s ease}
+  .tab:hover{color:var(--ink);background:var(--panel-2)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--panel)}
   .tabpane{display:none}
-  .tabpane.active{display:block}
+  .tabpane.active{display:block;animation:fadeIn 0.2s ease-in}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
   .track-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0}
   .kpi-row{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0}
   .kpi{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
@@ -488,7 +493,7 @@ var BRON={
 
   /* ---- Mobiel: smalle schermen ---- */
   @media (max-width:680px){
-    body{padding:16px 12px 60px}
+    body{padding:14px 10px 50px}
     h1{font-size:24px}
     .sub{font-size:13px}
     .bar-top,.filters{padding:12px;gap:10px}
@@ -4265,22 +4270,22 @@ function indexGroupOf(sym){
 }
 
 var ETF_DEMO=[
-  {symbol:"VOO",  name:"Vanguard S&P 500",        aum:520, ter:0.03, holdings:503,  top10:35.2, yield:1.3, chg:0.4},
-  {symbol:"VTI",  name:"Vanguard Total Stock Mkt", aum:410, ter:0.03, holdings:3700, top10:26.1, yield:1.3, chg:0.5},
-  {symbol:"SPY",  name:"SPDR S&P 500",             aum:560, ter:0.09, holdings:503,  top10:35.2, yield:1.2, chg:0.4},
-  {symbol:"QQQ",  name:"Invesco Nasdaq 100",       aum:300, ter:0.20, holdings:101,  top10:51.4, yield:0.5, chg:0.9},
-  {symbol:"VXUS", name:"Vanguard Total Intl Stock",aum:80,  ter:0.07, holdings:8600, top10:11.3, yield:2.8, chg:-0.2},
-  {symbol:"VEA",  name:"Vanguard FTSE Developed",  aum:135, ter:0.05, holdings:3900, top10:12.0, yield:2.6, chg:-0.1},
-  {symbol:"VWO",  name:"Vanguard FTSE Emerging",   aum:85,  ter:0.08, holdings:5600, top10:24.5, yield:2.9, chg:-0.5},
-  {symbol:"IWM",  name:"iShares Russell 2000",     aum:65,  ter:0.19, holdings:1960, top10:4.5,  yield:1.1, chg:0.7},
-  {symbol:"SCHD", name:"Schwab US Dividend Eq.",   aum:60,  ter:0.06, holdings:104,  top10:41.0, yield:3.4, chg:0.2},
-  {symbol:"VYM",  name:"Vanguard High Div Yield",  aum:55,  ter:0.06, holdings:530,  top10:18.7, yield:2.9, chg:0.3},
-  {symbol:"ARKK", name:"ARK Innovation",           aum:6,   ter:0.75, holdings:35,   top10:55.0, yield:0.0, chg:-1.8},
-  {symbol:"XLK",  name:"Technology Select SPDR",   aum:75,  ter:0.09, holdings:65,   top10:65.2, yield:0.6, chg:1.1},
-  {symbol:"XLF",  name:"Financial Select SPDR",    aum:45,  ter:0.09, holdings:73,   top10:52.0, yield:1.6, chg:0.3},
-  {symbol:"XLE",  name:"Energy Select SPDR",       aum:35,  ter:0.09, holdings:23,   top10:75.0, yield:3.2, chg:-0.6},
-  {symbol:"BND",  name:"Vanguard Total Bond Mkt",  aum:110, ter:0.03, holdings:11000,top10:8.2,  yield:4.1, chg:0.1},
-  {symbol:"AGG",  name:"iShares Core US Aggregate",aum:105, ter:0.03, holdings:12500,top10:7.8,  yield:4.0, chg:0.1},
+  {symbol:"VOO",  name:"Vanguard S&P 500",        aum:520, ter:0.03, holdings:503,  top10:35.2, yield:1.3, chg:0.4, return5Y:12.5, return3Y:9.8, inceptionDate:"2010-09-07", vol:15.2, sharpe:1.2},
+  {symbol:"VTI",  name:"Vanguard Total Stock Mkt", aum:410, ter:0.03, holdings:3700, top10:26.1, yield:1.3, chg:0.5, return5Y:11.8, return3Y:8.5, inceptionDate:"2001-05-24", vol:16.1, sharpe:1.1},
+  {symbol:"SPY",  name:"SPDR S&P 500",             aum:560, ter:0.09, holdings:503,  top10:35.2, yield:1.2, chg:0.4, return5Y:12.2, return3Y:9.5, inceptionDate:"1993-01-22", vol:15.0, sharpe:1.3},
+  {symbol:"QQQ",  name:"Invesco Nasdaq 100",       aum:300, ter:0.20, holdings:101,  top10:51.4, yield:0.5, chg:0.9, return5Y:18.2, return3Y:12.3, inceptionDate:"1999-03-10", vol:22.5, sharpe:1.5},
+  {symbol:"VXUS", name:"Vanguard Total Intl Stock",aum:80,  ter:0.07, holdings:8600, top10:11.3, yield:2.8, chg:-0.2, return5Y:7.2, return3Y:5.1, inceptionDate:"2011-01-26", vol:18.3, sharpe:0.9},
+  {symbol:"VEA",  name:"Vanguard FTSE Developed",  aum:135, ter:0.05, holdings:3900, top10:12.0, yield:2.6, chg:-0.1, return5Y:6.8, return3Y:4.8, inceptionDate:"2007-07-20", vol:17.5, sharpe:0.85},
+  {symbol:"VWO",  name:"Vanguard FTSE Emerging",   aum:85,  ter:0.08, holdings:5600, top10:24.5, yield:2.9, chg:-0.5, return5Y:5.1, return3Y:3.2, inceptionDate:"2005-03-04", vol:21.8, sharpe:0.7},
+  {symbol:"IWM",  name:"iShares Russell 2000",     aum:65,  ter:0.19, holdings:1960, top10:4.5,  yield:1.1, chg:0.7, return5Y:8.9, return3Y:6.2, inceptionDate:"2000-05-22", vol:20.1, sharpe:0.95},
+  {symbol:"SCHD", name:"Schwab US Dividend Eq.",   aum:60,  ter:0.06, holdings:104,  top10:41.0, yield:3.4, chg:0.2, return5Y:10.2, return3Y:7.8, inceptionDate:"2011-10-11", vol:14.8, sharpe:1.0},
+  {symbol:"VYM",  name:"Vanguard High Div Yield",  aum:55,  ter:0.06, holdings:530,  top10:18.7, yield:2.9, chg:0.3, return5Y:9.8, return3Y:7.2, inceptionDate:"2006-11-10", vol:13.5, sharpe:1.1},
+  {symbol:"ARKK", name:"ARK Innovation",           aum:6,   ter:0.75, holdings:35,   top10:55.0, yield:0.0, chg:-1.8, return5Y:3.2, return3Y:-5.1, inceptionDate:"2014-10-31", vol:35.2, sharpe:0.4},
+  {symbol:"XLK",  name:"Technology Select SPDR",   aum:75,  ter:0.09, holdings:65,   top10:65.2, yield:0.6, chg:1.1, return5Y:15.3, return3Y:11.8, inceptionDate:"1998-12-16", vol:19.8, sharpe:1.25},
+  {symbol:"XLF",  name:"Financial Select SPDR",    aum:45,  ter:0.09, holdings:73,   top10:52.0, yield:1.6, chg:0.3, return5Y:10.5, return3Y:8.1, inceptionDate:"1998-12-16", vol:16.2, sharpe:1.05},
+  {symbol:"XLE",  name:"Energy Select SPDR",       aum:35,  ter:0.09, holdings:23,   top10:75.0, yield:3.2, chg:-0.6, return5Y:8.7, return3Y:5.9, inceptionDate:"1998-12-16", vol:23.4, sharpe:0.88},
+  {symbol:"BND",  name:"Vanguard Total Bond Mkt",  aum:110, ter:0.03, holdings:11000,top10:8.2,  yield:4.1, chg:0.1, return5Y:3.1, return3Y:2.4, inceptionDate:"2007-04-03", vol:8.2, sharpe:0.6},
+  {symbol:"AGG",  name:"iShares Core US Aggregate",aum:105, ter:0.03, holdings:12500,top10:7.8,  yield:4.0, chg:0.1, return5Y:2.9, return3Y:2.2, inceptionDate:"2003-09-22", vol:7.9, sharpe:0.55},
 ];
 var ETF_PEERS=null;
 function buildEtfPeers(set){
@@ -4299,16 +4304,98 @@ function etfDiversityScore(d){
   return a!=null?a:(b!=null?b:50);
 }
 function etfLiquidityScore(d){return d.aum!=null?Math.round(Math.max(0,Math.min(100,(Math.log10(Math.max(0.05,d.aum))+1.3)/3.6*100))):50;}
-function etfTrackScore(d){ // proxy: track record vergt historische returns die we niet los ophalen; blijft licht gewogen en neutraal
-  return 55;
+function etfTrackScore(d){ // dynamische track record score gebaseerd op historische returns en leeftijd
+  if(d.return5Y != null) {
+    return Math.round(Math.max(0, Math.min(100, d.return5Y * 10)));
+  }
+  if(d.return3Y != null) {
+    return Math.round(Math.max(0, Math.min(100, d.return3Y * 6.67)));
+  }
+  if(d.inceptionDate) {
+    var years = (new Date() - new Date(d.inceptionDate)) / (1000 * 60 * 60 * 24 * 365);
+    return Math.round(Math.max(0, Math.min(100, years * 20)));
+  }
+  return 50;
 }
+
+// Volatiliteitsscore: lagere volatiliteit = hogere score
+// Schaal: 0% vol = 100 score, 30% vol = 0 score (lineaire afname)
+function etfVolatilityScore(d){
+  if(d.vol != null) {
+    return Math.round(Math.max(0, Math.min(100, 100 - (d.vol * 3.33)))));
+  }
+  return 50;
+}
+
+// Sharpe ratio score: hogere Sharpe = betere risico-rendement verhouding
+// Schaal: Sharpe 0 = 50, Sharpe 2 = 100 (lineaire toename)
+function etfSharpeScore(d){
+  if(d.sharpe != null) {
+    return Math.round(Math.max(0, Math.min(100, 50 + (d.sharpe * 25)))));
+  }
+  return 50;
+}
+
+// Categorie-specifieke weging voor ETF's
+function getEtfCategory(d) {
+  // Bepaal categorie op basis van symbol of name
+  var sym = (d.symbol || "").toUpperCase();
+  var name = (d.name || "").toLowerCase();
+  
+  // Obligaties detecteren
+  if(/BND|AGG|TLT|IEF|SHY|LQD|HYG|JNK|GOVT|VGIT|VGSH|VGLT|MUB|VTEB|TIP|VTIP|SGOV|BIL|SHV|USFR|EMB|BNDX|BNDW/i.test(sym) ||
+     /obligatie|bond|fixed income/i.test(name)) {
+    return "obligaties";
+  }
+  // Grondstoffen detecteren
+  if(/GLD|IAU|SLV|SIVR|PDBC|DBC|USO|UNG|PPLT|PALL|COPX|GDX|GDXJ|REMX|LIT|URA|XME|WOOD|CORN|WEAT|IBIT|FBTC|ETHA/i.test(sym) ||
+     /grondstof|commodity|gold|silver|oil|gas|metal/i.test(name)) {
+    return "grondstoffen";
+  }
+  // Default: aandelen
+  return "aandelen";
+}
+
+// Categorie-specifieke wegingen toepassen
+function getEtfCategoryWeights(category) {
+  // Obligaties: meer gewicht op kosten en liquiditeit, minder op groei/track record
+  if(category === "obligaties") {
+    return {wc: 0.45, wd: 0.25, wl: 0.20, wt: 0.10};
+  }
+  // Grondstoffen: meer gewicht op liquiditeit en volatiliteit
+  if(category === "grondstoffen") {
+    return {wc: 0.30, wd: 0.20, wl: 0.30, wt: 0.20};
+  }
+  // Aandelen: standaard weging
+  return {wc: 0.38, wd: 0.25, wl: 0.20, wt: 0.17};
+}
+
 function etfWeights(){
   var wc=+$('ewc').value,wd=+$('ewd').value,wl=+$('ewl').value,wt=+$('ewt').value;var s=wc+wd+wl+wt||1;
   return {wc:wc/s,wd:wd/s,wl:wl/s,wt:wt/s};
 }
 function etfTotalScore(d){
-  var w=etfWeights();
-  var s=Math.round(etfCostScore(d)*w.wc+etfDiversityScore(d)*w.wd+etfLiquidityScore(d)*w.wl+etfTrackScore(d)*w.wt);
+  // Bepaal of we categorie-specifieke wegingen moeten toepassen
+  var category = getEtfCategory(d);
+  var catWeights = getEtfCategoryWeights(category);
+  
+  // Gebruik categorie-specifieke wegingen als de gebruikersinstellingen op standaard staan
+  var w = etfWeights();
+  var useCustomWeights = (w.wc !== 0.38 || w.wd !== 0.25 || w.wl !== 0.20 || w.wt !== 0.17);
+  
+  if(!useCustomWeights) {
+    w = catWeights;
+  }
+  
+  // Bereken basis score met volatiliteit en sharpe als extra factoren
+  var baseScore = etfCostScore(d)*w.wc + etfDiversityScore(d)*w.wd + etfLiquidityScore(d)*w.wl + etfTrackScore(d)*w.wt;
+  
+  // Voeg volatiliteit en sharpe toe als extra factoren (10% gewicht samen)
+  var volScore = etfVolatilityScore(d);
+  var sharpeScore = etfSharpeScore(d);
+  var riskAdjScore = (volScore * 0.05 + sharpeScore * 0.05);
+  
+  var s = Math.round(baseScore + riskAdjScore);
   if(d.isLeveraged||d.isInverse) s=Math.round(s*0.5); // ongeschikt om lang aan te houden
   return Math.max(0,Math.min(100,s));
 }
