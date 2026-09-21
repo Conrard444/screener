@@ -494,7 +494,10 @@ var BRON={
     .bar-top,.filters{padding:12px;gap:10px}
     .control-row{padding:10px 12px;gap:8px 10px}
     .control-row .field,.bar-top .field,.filters .grp{width:100%}
-    .control-row select,.control-row input[type=text],.control-row input[type=password]{width:100%}
+    .control-row select,.control-row input[type=text],.control-row input[type=password],.control-row input[type=number],.control-row input[type=date]{width:100%}
+    /* Grotere touch-targets voor mobiel */
+    button{min-height:44px;padding:12px 16px;font-size:14px}
+    input[type=text],input[type=number],input[type=password],select{font-size:14px;padding:10px 12px}
     .control-row button{flex:1;min-width:120px;margin-left:0 !important}
     .control-row input[type=range]{width:100%}
     .control-row .wlabel{width:100%;display:flex;justify-content:space-between}
@@ -596,13 +599,14 @@ var BRON={
       <span class="inline-lbl" id="srcIndicator">Bronnen worden beheerd bij <b>Instellingen</b></span>
       <span class="inline-lbl" id="quotaBar" style="font-size:11px;margin-left:12px"></span>
       <select id="colPreset" style="margin-left:auto;max-width:170px" title="Kies welke kolommen zichtbaar zijn, zodat alles op je scherm past">
+        <option value="minimaal">Kolommen: minimaal</option>
         <option value="essentie">Kolommen: essentie</option>
         <option value="waardering">Kolommen: waardering</option>
         <option value="kwaliteit">Kolommen: kwaliteit</option>
         <option value="alles" selected>Kolommen: alles</option>
       </select>
-      <button class="btn-go" id="run" style="margin-left:auto">Screenen</button>
-      <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken">Laatste tonen</button>
+      <button class="btn-go" id="run" style="margin-left:auto" aria-label="Voer screening uit">Screenen</button>
+      <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken" aria-label="Toon laatste screening">Laatste tonen</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;margin-left:8px"
         title="Analyseer élk aandeel in het universum in plaats van alleen de meest bewegende. Kost meer API-calls, maar levert een volledig scorebereik voor je accuratesse-meting.">
         <input type="checkbox" id="volledigeAnalyse" style="width:auto">
@@ -658,6 +662,8 @@ var BRON={
       </div>
       <div class="field"><label>Marktwaarde &gt;</label><input type="number" id="mcap" value="0" style="width:60px"><span class="inline-lbl">mld $</span></div>
       <div class="field"><label>P/E &lt;</label><input type="number" id="pemax" value="40" style="width:60px"></div>
+      <div class="field"><label>Dividend &gt;</label><input type="number" id="divYieldMin" value="0" style="width:60px"><span class="inline-lbl">%</span></div>
+      <div class="field"><label>Altman Z &gt;</label><input type="number" id="altmanZMin" value="1.81" style="width:60px" title="Faillissementsrisico: < 1.81 = distress-zone"></div>
       <div class="field">
         <label title="Filter de resultaten op type: alleen holdings (investeringsmaatschappijen) of juist alleen operationele bedrijven.">Type</label>
         <select id="typeFilter">
@@ -667,6 +673,16 @@ var BRON={
           <option value="new">Verberg wat ik al heb</option>
         </select>
       </div>
+      <div class="field">
+        <label>Marktcap</label>
+        <select id="mcapRange" title="Filter op marktkapitalisatie">
+          <option value="all">Alle</option>
+          <option value="large">Large Cap (&gt;$10B)</option>
+          <option value="mid">Mid Cap ($2B-$10B)</option>
+          <option value="small">Small Cap (&lt;$2B)</option>
+        </select>
+      </div>
+      <div class="field"><label>Piotroski &ge;</label><input type="number" id="piotroskiMin" value="5" style="width:60px" title="Financiële gezondheid: 0-9, hoger = beter"></div>
     </div>
     <div class="control-row compact">
       <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging<span id="wnote" style="color:var(--accent);font-weight:400"></span>:</span>
@@ -842,6 +858,11 @@ var BRON={
       <span class="inline-lbl">Sorteren</span>
       <select id="pfSort">
         <option value="alarm">Alarmniveau (rood eerst)</option>
+        <option value="trap">Val-trap (rood eerst)</option>
+        <option value="qual">Kwaliteit (hoog \u2192 laag)</option>
+        <option value="altmanZ">Altman Z (hoog \u2192 laag)</option>
+        <option value="piotroski">Piotroski (hoog \u2192 laag)</option>
+        <option value="divYield">Dividend (hoog \u2192 laag)</option>
         <option value="score">Score (hoog \u2192 laag)</option>
         <option value="scoreAsc">Score (laag \u2192 hoog)</option>
         <option value="pl">Resultaat % (hoog \u2192 laag)</option>
@@ -1140,6 +1161,12 @@ const DEMO=[
   {symbol:"BAYN.DE",name:"Bayer AG",       market:"EU",sector:"Gezondheidszorg",roe:-8.1,margin:-6.5,de:1.10,dd:-52.3,price:27.8, chg:1.1,mom1m:6.1, pe:9.4, peg:0.7,pb:0.9, revG:-1.2,epsG:-15.0},
   {symbol:"MC.PA",name:"LVMH",             market:"EU",sector:"Consument",roe:18.4,margin:16.2,de:0.55,dd:-28.4,price:610.3,chg:-0.6,mom1m:-2.1,pe:21.3,peg:2.9,pb:5.2, revG:2.1, epsG:-1.4},
   {symbol:"NESN.SW",name:"Nestle SA",      market:"EU",sector:"Consument",roe:30.5,margin:11.6,de:1.30,dd:-15.7,price:83.7, chg:0.3,mom1m:1.2, pe:18.9,peg:3.5,pb:6.0, revG:1.8, epsG:3.0},
+  // Testgevallen voor verbeterde scoremethodiek
+  {symbol:"TEST1", name:"Test P/E=0",        market:"US",sector:"Technologie",roe:5.0,margin:5.0,de:0.5,dd:-10.0,price:10.0,chg:1.0,mom1m:2.0, pe:0,peg:0.5,pb:1.0, revG:5.0, epsG:0},
+  {symbol:"TEST2", name:"Test P/E negatief", market:"US",sector:"Technologie",roe:-2.0,margin:-5.0,de:1.0,dd:-20.0,price:5.0, chg:-1.0,mom1m:-3.0, pe:-5,peg:0.3,pb:0.8, revG:10.0, epsG:-15.0},
+  {symbol:"TEST3", name:"Test Groei zonder winst", market:"US",sector:"Technologie",roe:5.0,margin:2.0,de:0.3,dd:-5.0,price:20.0,chg:3.0,mom1m:5.0, pe:8.0,peg:0.4,pb:1.5, revG:40.0, epsG:-12.0},
+  {symbol:"TEST4", name:"Test Winstgroei -15%", market:"US",sector:"Technologie",roe:10.0,margin:10.0,de:0.4,dd:-8.0,price:30.0,chg:1.5,mom1m:3.0, pe:12.0,peg:0.8,pb:2.0, revG:25.0, epsG:-15.0},
+  {symbol:"TEST5", name:"Test Winstgroei -5%",  market:"US",sector:"Technologie",roe:12.0,margin:8.0,de:0.35,dd:-5.0,price:25.0,chg:2.0,mom1m:4.0, pe:10.0,peg:0.7,pb:1.8, revG:15.0, epsG:-5.0},
 ];
 
 // --- Absolute normalisatie (fallback wanneer er te weinig peers zijn) ---
@@ -1217,16 +1244,30 @@ function gebruikPercentielen(){ return !isLong() || sectorNeutraal(); }
 
 // null = geen momentumdata beschikbaar (bv. Europese aandelen via Eulerpool, dat geen koersen levert).
 // Dat is iets anders dan "slecht momentum" en mag de totaalscore niet omlaag trekken.
+// Ondersteunt nu ook 3-maand (mom3m) en 6-maand (mom6m) momentum voor betere langetermijnvoorspelling.
 function momentumScore(d){
-  var heeftData = (d.chg!=null&&!isNaN(d.chg)) || (d.mom1m!=null&&!isNaN(d.mom1m));
+  var heeftData = (d.chg!=null&&!isNaN(d.chg)) || (d.mom1m!=null&&!isNaN(d.mom1m)) || 
+                  (d.mom3m!=null&&!isNaN(d.mom3m)) || (d.mom6m!=null&&!isNaN(d.mom6m));
   if(!heeftData) return null;
+  
   if(gebruikPercentielen()&&PEERS){
-    var a=pctRank(d.chg,peerArr(d,'chg'),false),b=pctRank(d.mom1m,peerArr(d,'mom1m'),false);
-    if(a!=null&&b!=null)return herschaal(Math.round(a*0.4+b*0.6), 1.9);
+    var a=pctRank(d.chg,peerArr(d,'chg'),false);
+    var b=pctRank(d.mom1m,peerArr(d,'mom1m'),false);
+    var c=pctRank(d.mom3m,peerArr(d,'mom3m'),false);
+    var e=pctRank(d.mom6m,peerArr(d,'mom6m'),false);
+    
+    // Als 3m/6m ontbreekt, gebruik dan 50 (neutraal) als fallback
+    if(a!=null&&b!=null) {
+      var score = a*0.2 + b*0.3 + (c!=null?c:50)*0.3 + (e!=null?e:50)*0.2;
+      return herschaal(Math.round(score), 1.9);
+    }
   }
+  
   var parts=[],sum=0;
-  if(d.chg!=null&&!isNaN(d.chg)){parts.push([norm(d.chg,-5,8,false),0.4]);sum+=0.4;}
-  if(d.mom1m!=null&&!isNaN(d.mom1m)){parts.push([norm(d.mom1m,-15,25,false),0.6]);sum+=0.6;}
+  if(d.chg!=null&&!isNaN(d.chg)){parts.push([norm(d.chg,-5,8,false),0.2]);sum+=0.2;}
+  if(d.mom1m!=null&&!isNaN(d.mom1m)){parts.push([norm(d.mom1m,-15,25,false),0.3]);sum+=0.3;}
+  if(d.mom3m!=null&&!isNaN(d.mom3m)){parts.push([norm(d.mom3m,-25,40,false),0.3]);sum+=0.3;}
+  if(d.mom6m!=null&&!isNaN(d.mom6m)){parts.push([norm(d.mom6m,-30,50,false),0.2]);sum+=0.2;}
   if(!sum)return null;
   var m=0;parts.forEach(function(p){m+=p[0]*p[1];});
   return Math.round(m/sum);
@@ -1437,7 +1478,8 @@ function herschaal(score,aantalDelen){
 
 function geldigeRatio(v,min,max){
   if(v==null||isNaN(v)||!isFinite(v))return null;
-  if(v<=min||v>max)return null;
+  if(v<=0)return null; // Negatieve of nul ratio's (bv. P/E=0 bij verlies) zijn ongeldig
+  if(v<min||v>max)return null;
   return +v;
 }
 function schoonWaardering(d){
@@ -1525,10 +1567,18 @@ function growthScore(d){
   var onrendabel = (d.roicSpread!=null&&d.roicSpread<0) ||
                    (d.margin!=null&&d.margin<0) ||
                    (d.roe!=null&&d.roe<0);
+  
+  // Strengere straf voor onrendabele groei: als winst daalt, groeiscore wordt sterk verminderd
+  if(d.epsG != null && d.epsG < -10) {
+    g = Math.round(g * 0.3); // 70% korting als winst >10% daalt
+  } else if(d.epsG != null && d.epsG < 0) {
+    g = Math.round(g * 0.5); // 50% korting als winst daalt
+  }
+  
   if(onrendabel && g>60) g = 60 + Math.round((g-60)*0.4); // top afvlakken, niet wegvagen
 
   // Omzetgroei zonder winstgroei: groeien tegen elke prijs
-  if(d.revG!=null&&d.epsG!=null&&d.revG>20&&d.epsG<0) g=Math.round(g*0.7);
+  if(d.revG!=null&&d.epsG!=null&&d.revG>20&&d.epsG<0) g=Math.round(g*0.3); // Extra straf: 70% korting
 
   return Math.max(0,Math.min(100,g));
 }
@@ -2030,7 +2080,9 @@ function totalScore(d){
 function valueTrap(d){
   var r=[],lvl=0;
   var cheap=(d.pe!=null&&d.pe<15)||(d.peg!=null&&d.peg<1)||(d.pb!=null&&d.pb<1.5);
-  if(cheap&&d.epsG!=null&&d.epsG<0){lvl=2;r.push("oogt goedkoop maar winst krimpt");}
+  // P/E <= 0 is een val-trap: negatieve of nul P/E betekent verlies, geen koopje
+  if(d.pe!=null&&d.pe<=0){lvl=2;r.push("P/E \u2264 0 \u2014 verlies, geen koopje");}
+  if(cheap&&d.epsG!=null&&d.epsG<0){lvl=Math.max(lvl,2);r.push("oogt goedkoop maar winst krimpt");}
   if(cheap&&d.revG!=null&&d.revG<0){lvl=Math.max(lvl,2);r.push("oogt goedkoop maar omzet krimpt");}
   if(d.mom1m!=null&&d.mom1m>5&&d.epsG!=null&&d.epsG<0){lvl=Math.max(lvl,2);r.push("koers stijgt op dalende winst");}
   // Let op: een hoge PEG of P/E bij lage groei is een wáárderingsoordeel, geen valstrik.
@@ -2062,6 +2114,7 @@ function cls(v){return v>0?"pos":(v<0?"neg":"");}
 
 // kolomweergaven: bepaalt welke kolommen zichtbaar zijn zodat de tabel op je scherm past
 var COL_PRESETS={
+  minimaal:  ["symbol","price","chg","trap","score"],
   essentie:  ["symbol","sector","price","chg","score"],
   waardering:["symbol","price","pe","peg","pb","dd","upside","score"],
   kwaliteit: ["symbol","sector","revG","epsG","qual","trap","score"],
@@ -2581,7 +2634,7 @@ function render(){
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
   });
   var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s"};
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -2850,9 +2903,33 @@ function universeNeedsKey(){
 function passesFilters(d){
   var mcap=(+$('mcap').value||0)*1e9;
   var pemax=+$('pemax').value;
-  // marktwaarde checken we via prijs*aandelen niet beschikbaar hier; gebruik mcap uit quote indien aanwezig
+  var divYieldMin=+$('divYieldMin').value || 0;
+  var altmanZMin=+$('altmanZMin').value || 0;
+  var piotroskiMin=+$('piotroskiMin').value || 0;
+  var mcapRange=$('mcapRange')?$('mcapRange').value:'all';
+  
+  // Marktwaarde filter
   if(d._mcap!=null && mcap>0 && d._mcap<mcap) return false;
+  
+  // P/E filter
   if(!isNaN(pemax) && d.pe!=null && d.pe>pemax) return false;
+  
+  // Dividend filter
+  if(divYieldMin > 0 && d.divYield != null && d.divYield < divYieldMin) return false;
+  
+  // Altman Z filter
+  if(altmanZMin > 0 && d.altmanZ != null && d.altmanZ < altmanZMin) return false;
+  
+  // Piotroski filter
+  if(piotroskiMin > 0 && d.piotroski != null && d.piotroski < piotroskiMin) return false;
+  
+  // Marktcap range filter
+  if(mcapRange !== 'all' && d._mcap != null) {
+    if(mcapRange === 'large' && d._mcap < 10e9) return false; // > $10B
+    if(mcapRange === 'mid' && (d._mcap < 2e9 || d._mcap > 10e9)) return false; // $2B-$10B
+    if(mcapRange === 'small' && d._mcap > 2e9) return false; // < $2B
+  }
+  
   return true;
 }
 
