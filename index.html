@@ -64,9 +64,10 @@
       inp.addEventListener('keydown',function(e){ if(e.key==="Enter")controleer(); });
       setTimeout(function(){inp.focus();},100);
     }
-  
+  });
+})();
 
-    // tab-navigatie
+// ---- Bronopties (moeten vr elk gebruik staan) ----
     Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
       tb.onclick=function(){
         Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
