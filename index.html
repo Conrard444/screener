@@ -64,9 +64,18 @@
       inp.addEventListener('keydown',function(e){ if(e.key==="Enter")controleer(); });
       setTimeout(function(){inp.focus();},100);
     }
-  });
-})();
+  
 
+    // tab-navigatie
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
+      tb.onclick=function(){
+        Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
+        Array.prototype.forEach.call(document.querySelectorAll('.tabpane'),function(x){x.classList.remove('active');});
+        tb.classList.add('active');
+        $('tab-'+tb.dataset.tab).classList.add('active');
+        if(tb.dataset.tab==='tracking') renderSnapList();
+      };
+    });
 // ---- Bronopties (moeten vóór elk gebruik staan) ----
 // Winstverrassingen en analistenramingen ophalen: 1 tot 2 extra calls per aandeel.
 // Standaard uit, want het is aanvullende analysedata en geen onderdeel van de score.
@@ -6850,17 +6859,6 @@ Array.prototype.forEach.call(document.querySelectorAll('th[data-k]'),function(th
 var HISTORY=[]; // lijst van snapshots: {date, items:[{symbol,score,m,v,g,price}]}
 
 function tStat(msg,err){var s=$('trackStatus');s.className=err?"status err":"status";s.textContent=msg;}
-
-// tab-navigatie
-Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(tb){
-  tb.onclick=function(){
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('active');});
-    Array.prototype.forEach.call(document.querySelectorAll('.tabpane'),function(x){x.classList.remove('active');});
-    tb.classList.add('active');
-    $('tab-'+tb.dataset.tab).classList.add('active');
-    if(tb.dataset.tab==='tracking') renderSnapList();
-  };
-});
 
 // momentopname vastleggen van de huidige screening
 function takeSnapshot(){
