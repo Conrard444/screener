@@ -7054,11 +7054,13 @@ function computeAndShowAccuracy(snaps,prices){
           SCORESET=vorigeSet; PEERS=vorigePeers; SECTOR_PEERS=vorigeSector;
         }
         pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
+          sym:it.symbol, holdD:+leeftijdDagen.toFixed(0),
           herrekend:hr.niveau,
           snapTs:s.ts, sector:it.sector||null, mcap:it.mcap||null,
           divYield:it.divYield, koersDeel:+koersRendement.toFixed(1), divDeel:+dividendDeel.toFixed(2),
           trap:it.trap, volledig:it.volledig,
-          pe:it.pe, pb:it.pb, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs,
+          pe:it.pe, pb:it.pb, peg:it.peg, roe:it.roe, revG:it.revG, epsG:it.epsG, aaqs:it.aaqs,
+          piotroski:it.piotroski, altmanZ:it.altmanZ,
           verrassing:it.verrassing, verrassingConsistentie:it.verrassingConsistentie,
           vol:it.vol, maxTerugval:it.maxTerugval, uitgifte:it.uitgifte,
           ramingSpreiding:it.ramingSpreiding, bijstelling:it.bijstelling});
@@ -7288,6 +7290,40 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var oudste=Math.min.apply(null,snaps.map(function(s){return s.ts;}));
   var dagen=Math.round((Date.now()-oudste)/86400000);
   var w=weights();
+  var med=function(a){return a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2;};
+  // Rangcorrelatie (Spearman) naast Pearson: Pearson wordt door uitschieters getrokken,
+  // Spearman kijkt alleen naar de volgorde en is daardoor robuuster.
+  function rangen(waarden){
+    var order=waarden.map(function(v,i){return {v:v,i:i};}).sort(function(a,b){return a.v-b.v;});
+    var r=new Array(waarden.length),i=0;
+    while(i<order.length){
+      var j=i; while(j+1<order.length&&order[j+1].v===order[i].v)j++;
+      var rg=(i+j)/2+1;
+      for(var k2=i;k2<=j;k2++)r[order[k2].i]=rg;
+      i=j+1;
+    }
+    return r;
+  }
+  function rangCorr(f){
+    var pts=pairs.filter(function(p){return f(p)!=null&&!isNaN(f(p));});
+    if(pts.length<3)return null;
+    var x=rangen(pts.map(f)),y=rangen(pts.map(function(p){return p.ret;}));
+    var mx=x.reduce(function(s,v){return s+v;},0)/pts.length;
+    var my=y.reduce(function(s,v){return s+v;},0)/pts.length;
+    var num=0,dx=0,dy=0;
+    for(var i=0;i<pts.length;i++){var a=x[i]-mx,b=y[i]-my;num+=a*b;dx+=a*a;dy+=b*b;}
+    return (dx&&dy)?num/Math.sqrt(dx*dy):null;
+  }
+  function tWaarde(r,n){
+    if(n<4||r==null||isNaN(r))return null;
+    var d=1-r*r; if(d<=0)return null;
+    return r*Math.sqrt((n-2)/d);
+  }
+  function slagingsPct(lijst){
+    if(!lijst.length)return null;
+    return Math.round(100*lijst.filter(function(p){return p.over!=null&&p.over>=0;}).length/lijst.length);
+  }
+  function gemOver(lijst){return lijst.length?lijst.reduce(function(s,p){return s+(p.over||0);},0)/lijst.length:NaN;}
 
   r.push("ACCURATESSEMETING KOMPAS \u2014 "+nu.toLocaleDateString('nl-BE'));
   r.push("");
@@ -7313,6 +7349,11 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
          (laagste>45?"  (LET OP: alleen hoger scorende posities \u2014 zie voorbehoud)":""));
   r.push("  momentopnamen: "+snaps.length);
   r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
+  var holds=pairs.map(function(p){return p.holdD;}).filter(function(h){return h!=null;}).sort(function(a,b){return a-b;});
+  if(holds.length)r.push("  houdperiode per datapunt: mediaan "+med(holds)+
+    " dagen (kortste "+holds[0]+", langste "+holds[holds.length-1]+")");
+  r.push("  oudste opname "+new Date(oudste).toLocaleDateString('nl-BE')+
+    ", nieuwste "+new Date(Math.max.apply(null,snaps.map(function(s){return s.ts;}))).toLocaleDateString('nl-BE'));
   var neutraalGebruikt=snaps.filter(function(s){return s.sectorNeutraal;}).length;
   var metDiv=pairs.filter(function(p){return p.divYield!=null&&p.divYield>0;}).length;
   var gemDiv=metDiv?pairs.reduce(function(s,p){return s+(p.divDeel||0);},0)/pairs.length:0;
@@ -7326,26 +7367,86 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
          ", kwaliteit "+Math.round(w.wq*100));
   r.push("");
   r.push("UITKOMSTEN");
-  r.push("  correlatie totaalscore met rendement: "+cTot.toFixed(3));
+  r.push("  correlatie totaalscore met rendement: "+cTot.toFixed(3)+" (Pearson, n="+pairs.length+")");
+  var rs=rangCorr(function(p){return p.score;});
+  if(rs!=null)r.push("  rangcorrelatie (Spearman): "+rs.toFixed(3)+
+    (Math.abs(rs-cTot)>0.1?"  \u2014 groot verschil met Pearson duidt op uitschieters die de correlatie trekken":""));
+  var tv=tWaarde(cTot,pairs.length);
+  r.push("  t-waarde van de correlatie: "+(tv!=null?tv.toFixed(2):"n.v.t.")+
+    "  (|t| boven ~2 is zonder toeval te verklaren; overlappende meetperiodes maken");
+  r.push("  de effectieve steekproef kleiner dan n, dus beschouw dit als een bovengrens)");
   r.push("  gemiddeld rendement hoogste helft: "+hiRet.toFixed(1)+"%");
   r.push("  gemiddeld rendement laagste helft: "+loRet.toFixed(1)+"%");
   r.push("  spread (hoog min laag): "+(hiRet-loRet).toFixed(1)+" procentpunt");
   r.push("");
-  r.push("CORRELATIE PER FACTOR");
-  r.push("  momentum:   "+cM.toFixed(3));
-  r.push("  waardering: "+cV.toFixed(3));
-  r.push("  groei:      "+cG.toFixed(3));
-  r.push("  kwaliteit:  "+cQ.toFixed(3));
+  function factorRegel(naam,veld,c){
+    var n=pairs.filter(function(p){return p[veld]!=null&&!isNaN(p[veld]);}).length;
+    var sr=rangCorr(function(p){return p[veld];});
+    var tt=tWaarde(c,n);
+    return "  "+naam.padEnd(12)+c.toFixed(3)+" (n="+n+")  Spearman "+
+      (sr==null?"n.v.t.":sr.toFixed(3))+"  t="+(tt==null?"n.v.t.":tt.toFixed(2));
+  }
+  r.push("CORRELATIE PER FACTOR (Pearson, Spearman en t-waarde; n = punten waar factor gemeten is)");
+  r.push(factorRegel("momentum","m",cM));
+  r.push(factorRegel("waardering","v",cV));
+  r.push(factorRegel("groei","g",cG));
+  r.push(factorRegel("kwaliteit","q",cQ));
   r.push("");
 
   // spreiding van de scores: bij weinig variatie zegt de correlatie weinig
   var scores=pairs.map(function(p){return p.score;}).sort(function(a,b){return a-b;});
   var rends=pairs.map(function(p){return p.ret;}).sort(function(a,b){return a-b;});
-  var med=function(a){return a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2;};
   r.push("SPREIDING");
   r.push("  scores: laagste "+scores[0]+", mediaan "+med(scores)+", hoogste "+scores[scores.length-1]);
   r.push("  rendementen: laagste "+rends[0].toFixed(1)+"%, mediaan "+med(rends).toFixed(1)+
          "%, hoogste "+rends[rends.length-1].toFixed(1)+"%");
+  r.push("");
+
+  // Score in kwartielen en vaste buckets: correlaties op één hoop verbergen vaak dat de
+  // score alleen aan de uiteinden onderscheid maakt (of alleen in het midden mist).
+  var srt=pairs.slice().sort(function(a,b){return a.score-b.score;});
+  var q=Math.floor(srt.length/4);
+  if(q>=2){
+    r.push("RENDEMENT PER SCORE-BUCKET (oplopend gesorteerd op score)");
+    [["Q1 laagste 25%",0],["Q2",1],["Q3",2],["Q4 hoogste 25%",3]].forEach(function(bl){
+      var stuk=srt.slice(bl[1]*q,(bl[1]+1)*q);
+      var rets=stuk.map(function(p){return p.ret;});
+      var overs=stuk.map(function(p){return p.over;});
+      r.push("  "+bl[0].padEnd(17)+"n="+String(stuk.length).padStart(3)+
+        "  gem "+(rets.reduce(function(s,v){return s+v;},0)/rets.length).toFixed(1)+"%"+
+        "  overrend "+(overs.reduce(function(s,v){return s+v;},0)/overs.length).toFixed(1)+"pp");
+    });
+    r.push("");
+  }
+  var buckets=[["<40",-Infinity,40],["40-55",40,55],["55-65",55,65],["65-75",65,75],[">75",75,Infinity]];
+  var bRegels=buckets.map(function(b){
+    var stuk=pairs.filter(function(p){return p.score>=b[1]&&p.score<b[2];});
+    if(!stuk.length)return null;
+    return {lbl:b[0],n:stuk.length,
+      ret:stuk.reduce(function(s,p){return s+p.ret;},0)/stuk.length,
+      over:stuk.reduce(function(s,p){return s+(p.over||0);},0)/stuk.length,
+      win:Math.round(100*stuk.filter(function(p){return p.over>=0;}).length/stuk.length)};
+  }).filter(Boolean);
+  if(bRegels.length>1){
+    r.push("SCORE-BUCKETS");
+    r.push("  bucket   n    gem.rend   overrend   %>=mediaan");
+    bRegels.forEach(function(b){
+      r.push("  "+b.lbl.padEnd(6)+String(b.n).padStart(4)+
+        "   "+(b.ret>=0?"+":"")+b.ret.toFixed(1)+"%"+
+        "    "+(b.over>=0?"+":"")+b.over.toFixed(1)+"pp"+
+        "      "+b.win+"%");
+    });
+    r.push("  (%>=mediaan = aandeel van de bucket dat het universum-mediaan rendement versloeg)");
+    r.push("");
+  }
+
+  // Slagingspercentage: een spread kan op één uitschieter rusten; dit laat zien hoe breed
+  // het effect is. Boven 55% is consistent, onder 45% wijst op tegenwerkend effect.
+  var srtOv=pairs.slice().sort(function(a,b){return b.score-a.score;});
+  var hOv=Math.max(2,Math.floor(srtOv.length/2));
+  var pctHoog=slagingsPct(srtOv.slice(0,hOv)),pctLaag=slagingsPct(srtOv.slice(-hOv));
+  r.push("SLAGINGSPERCENTAGE (% dat de universe-mediaan versloeg)");
+  r.push("  hoogste score-helft: "+pctHoog+"%   laagste score-helft: "+pctLaag+"%");
   r.push("");
 
   // ---- Overrendement: wat de score toevoegt bóven de markt ----
@@ -7374,6 +7475,33 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
          ", groei "+(corrOver('g')||0).toFixed(3)+
          ", kwaliteit "+(corrOver('q')||0).toFixed(3));
   r.push("");
+
+  // Consistentie per momentopname: \u00e9\u00e9n grote spread in \u00e9\u00e9n periode zegt minder
+  // dan dezelfde richting in elke periode apart. Wisselt het teken per opname, dan
+  // zit het effect in \u00e9\u00e9n uitzonderlijke periode en niet in de score zelf.
+  var perSnapPairs={};
+  pairs.forEach(function(p){ (perSnapPairs[p.snapTs]=perSnapPairs[p.snapTs]||[]).push(p); });
+  var snapRegels=Object.keys(perSnapPairs).map(function(ts){
+    var lijst=perSnapPairs[ts];
+    if(lijst.length<6)return null;
+    var s2=lijst.slice().sort(function(a,b){return b.score-a.score;});
+    var h2=Math.floor(s2.length/2);
+    if(h2<2)return null;
+    var hi2=gemOver(s2.slice(0,h2)),lo2=gemOver(s2.slice(-h2));
+    return {ts:+ts,d:new Date(+ts),n:lijst.length,sp:hi2-lo2,pct:slagingsPct(s2.slice(0,h2))};
+  }).filter(Boolean).sort(function(a,b){return a.ts-b.ts;});
+  if(snapRegels.length>=2){
+    r.push("CONSISTENTIE PER MOMENTOPNAME (spread in overrendement, hoog- min laagscore-helft)");
+    snapRegels.forEach(function(x){
+      r.push("  "+x.d.toLocaleDateString('nl-BE')+"  n="+String(x.n).padStart(3)+
+        "   spread "+(x.sp>=0?"+":"")+x.sp.toFixed(1)+"pp   "+
+        "winrate hoog-helft "+x.pct+"%");
+    });
+    var pos=snapRegels.filter(function(x){return x.sp>0;}).length;
+    r.push("  \u2192 "+pos+" van "+snapRegels.length+" momentopnamen positief. Bij 3-4 opnamen is dit nog geen");
+    r.push("    bewijs; kijk of de richting aanhoudt naarmate er meer opnamen bijkomen.");
+    r.push("");
+  }
 
   // ---- Uitsplitsingen die patronen blootleggen ----
   function groepeer(sleutelFn,lbl){
@@ -7428,14 +7556,26 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
            (p.verrassing>0?"licht boven verwachting":
            (p.verrassing>-2?"licht onder verwachting":"winst >2% onder verwachting"));
   },"HANGT HET SAMEN MET DE WINSTVERRASSING? (indien opgehaald)");
+  // Toetst de valstrik-detectie zelf: sloegen de posities die destijds als riskant
+  // waren gemarkeerd (trap 1/2) het universum minder vaak? Zo ja, dan verdient de
+  // huidige valstrik-penalty (factor 0,90/0,75 in de score) juist de aanwezige data.
+  groepeer(function(p){
+    return p.trap===2?"valstrik-niveau 2 (bestraft)":
+           (p.trap===1?"valstrik-niveau 1 (waarschuwing)":
+           (p.trap===0?"geen valstrik gemeten":"valstrik onbekend"));
+  },"WERKT DE VALSTRIK-DETECTIE? (rendement per destijds gemarkeerd niveau)");
 
   r.push("RUWE DATAPUNTEN");
-  r.push("  score; mom; waard; groei; kwal; rend%; overrend%; sector; mcap(mln); P/E; K/B; ROE; omzetgr; winstgr");
+  r.push("  sym; score; mom; waard; groei; kwal; rend%; overrend%; dagen; sector; mcap(mln); "+
+         "P/E; K/B; PEG; ROE; omzetgr; winstgr; Piotroski; AltmanZ; divYld%; vol%; valstrik");
   pairs.slice().sort(function(a,b){return b.score-a.score;}).forEach(function(p){
-    r.push("  "+[p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1),p.over.toFixed(1),
-                 p.sector||"?",p.mcap!=null?p.mcap:"",
-                 p.pe!=null?p.pe:"",p.pb!=null?p.pb:"",p.roe!=null?p.roe:"",
-                 p.revG!=null?p.revG:"",p.epsG!=null?p.epsG:""].join("; "));
+    r.push("  "+[p.sym||"?",p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1),p.over.toFixed(1),
+                 p.holdD,p.sector||"?",p.mcap!=null?p.mcap:"",
+                 p.pe!=null?p.pe:"",p.pb!=null?p.pb:"",p.peg!=null?p.peg:"",
+                 p.roe!=null?p.roe:"",p.revG!=null?p.revG:"",p.epsG!=null?p.epsG:"",
+                 p.piotroski!=null?p.piotroski:"",p.altmanZ!=null?p.altmanZ:"",
+                 p.divYield!=null?p.divYield:"",p.vol!=null?p.vol:"",
+                 p.trap!=null?p.trap:""].join("; "));
   });
   r.push("");
 
@@ -7447,8 +7587,8 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     " dagen): factorpremies zijn gemeten over jaren, niet weken.");
   if(snaps.length<4)bezwaren.push("Weinig momentopnamen ("+snaps.length+
     "): metingen uit dezelfde periode zijn onderling afhankelijk, wat de correlatie opblaast.");
-  var uniek={}; pairs.forEach(function(p){uniek[p.score]=1;});
-  if(Object.keys(uniek).length<pairs.length*0.6)
+  var uniekeScores={}; pairs.forEach(function(p){uniekeScores[p.score]=1;});
+  if(Object.keys(uniekeScores).length<pairs.length*0.6)
     bezwaren.push("Veel dezelfde scores: weinig onderscheid tussen posities beperkt wat de correlatie kan aantonen.");
   if(metDiv<pairs.length*0.5)bezwaren.push("Bij "+(pairs.length-metDiv)+" van de "+pairs.length+
     " datapunten is het dividendrendement onbekend, dus daar is alleen het koersrendement gemeten. "+
@@ -7463,7 +7603,9 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     "of lage scores ook werkelijk slechter presteren, en wordt de correlatie systematisch "+
     "onderschat (bereikbeperking). Leg het volledige universum vast, niet alleen de top.");
   if(uniek<pairs.length*0.5)bezwaren.push("Van de "+pairs.length+" datapunten komen er veel van dezelfde effecten ("+
-    uniek+" unieke). Overlappende meetperiodes maken waarnemingen afhankelijk; de effectieve steekproef is kleiner dan het aantal regels suggereert.");
+    uniek+" unieke). Overlappende meetperiodes maken waarnemingen afhankelijk; de effectieve "+
+    "steekproef is kleiner dan het aantal regels suggereert, dus de correlatie en t-waarde "+
+    "zijn te optimistisch.");
   var gemRend=pairs.reduce(function(s,p){return s+p.ret;},0)/pairs.length;
   if(Math.abs(gemRend)>3)bezwaren.push("Het gemiddelde rendement over alle posities is "+gemRend.toFixed(1)+
     "%. In een sterk stijgende of dalende markt bewegen alle koersen dezelfde kant op, wat de meting kleurt naar één marktregime.");
@@ -7481,9 +7623,12 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   r.push("  automatisch beter.");
   r.push("");
   r.push("  Let bij het beoordelen vooral op het OVERRENDEMENT, niet op het ruwe rendement:");
-  r.push("  dat eerste corrigeert voor marktbrede bewegingen. En de ruwe cijfers per aandeel");
-  r.push("  (P/E, ROE, groei) staan erbij, dus alternatieve scoreformules zijn te toetsen");
-  r.push("  zonder nieuwe data \u2014 niet alleen andere wegingen van dezelfde vier factoren.");
+  r.push("  dat eerste corrigeert voor marktbrede bewegingen. Toets ook de robuustheid: draait de");
+  r.push("  conclusie op \u00e9\u00e9n uitschieter of \u00e9\u00e9n periode (zie SLAGINGSPERCENTAGE en CONSISTENTIE PER");
+  r.push("  MOMENTOPNAME), of houdt de richting over de buckets en periodes stand? En werkt de");
+  r.push("  valstrik-markering discriminerend (zie de valstrik-uitsplitsing)? De ruwe cijfers per");
+  r.push("  aandeel (P/E, PEG, ROE, groei, Piotroski) staan erbij, dus alternatieve scoreformules");
+  r.push("  zijn te toetsen zonder nieuwe data \u2014 niet alleen andere wegingen van dezelfde vier factoren.");
   return r.join("\n");
 }
 
