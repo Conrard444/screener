@@ -1051,7 +1051,8 @@ var BRON={
          border-radius:var(--radius);margin:14px 0 10px;gap:8px">
       <span class="inline-lbl">Portefeuille</span>
       <span id="nwKiezer" style="display:flex;gap:6px;flex-wrap:wrap"></span>
-      <button class="btn-go" id="nwOphalen" style="margin-left:auto">Nieuws ophalen</button>
+      <button class="btn-go" id="nwOphalen" style="margin-left:auto">Nieuws + signalen</button>
+      <button class="btn-ghost" id="nwAccuratesse" title="Vergelijkt eerder bewaarde signaal-scores met het koersrendement sinds die meting. Meet wekelijks voor een betrouwbaar beeld.">Accuratesse meten</button>
     </div>
     <div id="nwStatus" class="status"></div>
     <div id="nwLijst"></div>
@@ -2362,6 +2363,146 @@ function nieuwsRelevantie(artikel,symbol,naam){
 }
 function isUsTicker(sym){ return sym && !/\./.test(sym) && !ISIN_RE.test(sym); }
 
+// ---- Signaal-factoren (Finnhub): sentiment, insiders, analisten, prijs-target ----
+// Vier aparte factoren die geen onderdeel zijn van de klassieke fundamentals, maar
+// historisch wél samengaan met toekomstig rendement. Ze worden hier alleen opgehaald en
+// als score getoond; de eigenaar toetst ze zelf terug via de snapshot-module hieronder
+// voordat ze eventueel in totalScore worden opgenomen (AGENTS.md regel 6).
+var SIGNAL_HISTORY_KEY='signaalGeschiedenis';
+function signaalSnapshotLezen(){
+  var r=localStorage.getItem('kompas_'+SIGNAL_HISTORY_KEY);
+  if(!r)return {};
+  try{ return JSON.parse(r)||{}; }catch(e){ return {}; }
+}
+function signaalSnapshotBewaren(h){
+  try{ localStorage.setItem('kompas_'+SIGNAL_HISTORY_KEY,JSON.stringify(h)); }catch(e){}
+}
+
+function sentimentScore(data){
+  if(!data||typeof data.buzz!=='object'||data.buzz.buzz==null)return null;
+  if(data.bearishPercent==null||data.bullishPercent==null)return null;
+  var buzz=data.buzz.buzz, bear=+data.bearishPercent, bull=+data.bullishPercent;
+  var basis=bull/(bull+bear||1)*100;
+  var buzzFactor=Math.min(1,(buzz||0)/10);
+  return Math.max(0,Math.min(100,basis*(0.5+buzzFactor/2)));
+}
+function insiderScore(data){
+  if(!Array.isArray(data)||!data.length)return null;
+  var opties=0;
+  data.forEach(function(d){
+    var n=+d.share||0;
+    if(!n)return;
+    var m=(d.transactionCode||'').toUpperCase();
+    if(m==='P'||m==='A'||m==='M')opties+=n;
+  });
+  return Math.max(0,Math.min(100,50+opties*0.5));
+}
+function aanbevelingScore(data){
+  if(!Array.isArray(data)||!data.length)return null;
+  var d=data[data.length-1];
+  if(!d)return null;
+  var koop=(d.strongBuy||0)+(d.buy||0), verkoop=(d.strongSell||0)+(d.sell||0), totaal=koop+verkoop+(d.hold||0);
+  if(!totaal)return null;
+  return Math.max(0,Math.min(100,koop/totaal*100));
+}
+function targetScore(data){
+  if(!data||!data.targetMean||!data.targetMedian)return null;
+  var t=+data.targetMean;
+  if(!t)return null;
+  // relatieve afstand tot de consensus: laat de koers zelf buiten beschouwing
+  // zodat de score niet dekt wat de momentum-score al meet
+  var laag=+data.targetLow||t*0.8, hoog=+data.targetHigh||t*1.2;
+  var midden=(laag+hoog)/2;
+  var afstand=midden?(t-midden)/midden*100:0;
+  return Math.max(0,Math.min(100,50+afstand));
+}
+
+function haalSignaalFactoren(sym){
+  if(!MULTI_KEYS.finnhub)return Promise.resolve({});
+  var tk=encodeURIComponent(MULTI_KEYS.finnhub);
+  var s=encodeURIComponent(sym);
+  return Promise.all([
+    getJson(FINNHUB_BASE+'/news-sentiment?symbol='+s+'&token='+tk).catch(function(){return null;}),
+    getJson(FINNHUB_BASE+'/stock/insider-transactions?symbol='+s+'&token='+tk).catch(function(){return null;}),
+    getJson(FINNHUB_BASE+'/stock/recommendation?symbol='+s+'&token='+tk).catch(function(){return null;}),
+    getJson(FINNHUB_BASE+'/stock/price-target?symbol='+s+'&token='+tk).catch(function(){return null;})
+  ]).then(function(r){
+    return {sentiment:sentimentScore(r[0]), insider:insiderScore(r[1]),
+            aanbeveling:aanbevelingScore(r[2]), target:targetScore(r[3])};
+  });
+}
+
+// Rendements-meting voor de accuratesse-toets: elke snapshot krijgt de koers van
+// het moment van opname mee. De knop 'Accuratesse meten' haalt daarna de actuele
+// koers op (1 call per positie) en vergelijkt factor-score met gerealiseerd rendement.
+function koersNu(sym){
+  if(!MULTI_KEYS.finnhub)return Promise.resolve(null);
+  return getJson(FINNHUB_BASE+'/quote?symbol='+encodeURIComponent(sym)+'&token='+encodeURIComponent(MULTI_KEYS.finnhub))
+    .then(function(q){ return q&&q.c!=null?q.c:null; })
+    .catch(function(){ return null; });
+}
+function signaalSnapshotOpslaan(sym,scores,koers){
+  var h=signaalSnapshotLezen();
+  h[sym]=h[sym]||[];
+  h[sym].push({datum:todayKey(), scores:scores, koers:koers!=null?+koers.toFixed(4):null});
+  if(h[sym].length>24)h[sym]=h[sym].slice(-24);
+  signaalSnapshotBewaren(h);
+}
+function signaalSnapshotToevoegen(sym,koers){
+  return haalSignaalFactoren(sym).then(function(scores){
+    if(scores.sentiment==null&&scores.insider==null&&scores.aanbeveling==null&&scores.target==null)return;
+    signaalSnapshotOpslaan(sym,scores,koers);
+  });
+}
+function signaalAccuratesseMeten(){
+  var st=$('nwStatus'), lijst=$('nwLijst');
+  var h=signaalSnapshotLezen();
+  var syms=Object.keys(h).filter(function(s){return h[s].length;});
+  if(!syms.length){ st.className="status"; st.innerHTML='Nog geen signaalmomentopnamen. Haal eerst <b>Nieuws + signalen</b> op — dan wordt automatisch een snapshot bewaard.'; return; }
+  if(!MULTI_KEYS.finnhub){ st.className='status err'; st.innerHTML='Accuratesse meten vereist een Finnhub-sleutel.'; return; }
+  st.className="status";
+  st.textContent="Accuratesse meten…";
+  var rijen=[], klaar=0;
+  var seq=Promise.resolve();
+  syms.forEach(function(sym){
+    seq=seq.then(function(){
+      var snap=h[sym][h[sym].length-1];
+      return koersNu(sym).then(function(nu){
+        var rend=snap.koers!=null&&nu?((nu/snap.koers-1)*100):null;
+        ['sentiment','insider','aanbeveling','target'].forEach(function(f){
+          if(snap.scores[f]!=null)rijen.push({sym:sym,factor:f,score:snap.scores[f],rend:rend,datum:snap.datum});
+        });
+        klaar++;
+        st.textContent="Accuratesse meten… "+klaar+"/"+syms.length;
+      });
+    });
+  });
+  seq.then(function(){ lijst.innerHTML=renderSignaalAccuratesse(rijen); st.textContent="Accuratesse gemeten over "+rijen.length+" factor-waarnemingen."; });
+}
+function correlatie(rijen){
+  var xs=rijen.map(function(r){return r.score;}), ys=rijen.map(function(r){return r.rend;});
+  var n=xs.length; if(n<3)return null;
+  var mx=xs.reduce(function(a,b){return a+b;},0)/n, my=ys.reduce(function(a,b){return a+b;},0)/n;
+  var cov=0,vx=0,vy=0;
+  for(var i=0;i<n;i++){ cov+=(xs[i]-mx)*(ys[i]-my); vx+=Math.pow(xs[i]-mx,2); vy+=Math.pow(ys[i]-my,2); }
+  if(!vx||!vy)return null;
+  return cov/Math.sqrt(vx*vy);
+}
+function renderSignaalAccuratesse(rijen){
+  var metRend=rijen.filter(function(r){return r.rend!=null;});
+  var faktorNamen={sentiment:"Nieuws-sentiment",insider:"Insider-transacties",aanbeveling:"Aanbevelingstrend",target:"Prijs-target"};
+  var uit='<div class="snap"><b>Accuratesse van de signaalfactoren</b><div style="font-size:12px;color:var(--muted);margin-top:6px">Vergelijkt de factor-score op het moment van de momentopname met het gerealiseerde koersrendement sindsdien. Positieve correlatie = hogere score hing samen met hoger rendement. N<3 of ontbrekende koers wordt apart gemeld; dit is een indicatie, geen bewijs.</div>';
+  Object.keys(faktorNamen).forEach(function(f){
+    var rs=metRend.filter(function(r){return r.factor===f;});
+    var c=correlatie(rs);
+    var corr=c==null?'te weinig data':c.toFixed(2);
+    var kleur=c==null?'var(--muted)':(c>0.2?'#1a7f37':(c<-0.2?'#c0392b':'var(--muted)'));
+    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;display:flex;justify-content:space-between"><span>'+faktorNamen[f]+'</span><span style="font-family:var(--mono,monospace)"><b style="color:'+kleur+'">'+corr+'</b> <span style="color:var(--muted)">(n='+rs.length+')</span></span></div>';
+  });
+  uit+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Meet vaker (bijv. wekelijks) voor een betrouwbaarder beeld: correlaties onder n=10 zijn ruis.</div></div>';
+  return uit;
+}
+
 function nieuwsOphalen(){
   var st=$('nwStatus'), lijst=$('nwLijst');
   if(!MULTI_KEYS.finnhub){
@@ -2397,7 +2538,12 @@ function nieuwsOphalen(){
   var seq=Promise.resolve();
   taken.forEach(function(t){
     seq=seq.then(function(){
-      return haalNieuws(t.sym,MULTI_KEYS.finnhub,7).then(function(items){
+      return Promise.all([
+        haalNieuws(t.sym,MULTI_KEYS.finnhub,7),
+        haalSignaalFactoren(t.sym),
+        koersNu(t.sym)
+      ]).then(function(results){
+        var items=results[0], scores=results[1], koers=results[2];
         var naam=NAAM.vol(t.pos);
         var relevant=items.map(function(a){
           return {a:a, rel:nieuwsRelevantie(a,t.sym,naam)};
@@ -2406,8 +2552,12 @@ function nieuwsOphalen(){
           .slice(0,6);
         if(relevant.length){
           if(!resultaat[t.pf])resultaat[t.pf]=[];
-          resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:relevant.map(function(x){return x.a;})});
+          resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:relevant.map(function(x){return x.a;}), scores:scores});
+        } else if(scores.sentiment!=null||scores.insider!=null||scores.aanbeveling!=null||scores.target!=null){
+          if(!resultaat[t.pf])resultaat[t.pf]=[];
+          resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:[], scores:scores});
         }
+        signaalSnapshotToevoegen(t.sym,koers);
         klaar++;
         if(klaar%3===0)st.textContent="Nieuws ophalen\u2026 "+klaar+"/"+taken.length;
       });
@@ -2446,6 +2596,26 @@ function renderEuropeseLinks(ids){
   return uit;
 }
 
+function renderSignaalScores(s){
+  var defs=[
+    ['sentiment','Nieuws-sentiment','Toon van het nieuws over dit bedrijf (Finnhub /news-sentiment), gewogen naar nieuwsdrukte (buzz). 50 = neutraal, hoger = positiever.'],
+    ['insider','Insiders','Netto-aankopen door directie en bestuur (Finnhub /stock/insider-transactions). Boven 50 = insiders kochten netto, onder 50 = netto verkocht.'],
+    ['aanbeveling','Aanbevelingstrend','Aandeel koop-/sterke-koopaanbevelingen onder analisten (Finnhub /stock/recommendation). 100 = alle analisten koop/sterke koop.'],
+    ['target','Prijs-target','Waar het consensus-doelkoers zit binnen het bandbreedte van analisten (Finnhub /stock/price-target). Hoog = target zit aan de bovenkant van het band: analisten zijn zelfverzekerd.']
+  ];
+  var uit='';
+  defs.forEach(function(d){
+    if(s[d[0]]==null)return;
+    var v=Math.round(s[d[0]]);
+    var kleur=v>=60?'#1a7f37':(v<=40?'#c0392b':'var(--muted)');
+    uit+='<span title="'+d[2].replace(/"/g,'&quot;')+'" style="display:inline-block;margin:0 8px 8px 0;padding:3px 8px;'+
+      'border:1px solid var(--line);border-radius:6px;font-size:11px;cursor:help">'+
+      d[1]+' <b style="color:'+kleur+'">'+v+'</b></span>';
+  });
+  if(!uit)return '';
+  return '<div style="margin-bottom:8px">'+uit+'</div>';
+}
+
 function renderNieuws(resultaat,ids){
   var uit="";
   ids.forEach(function(id){
@@ -2454,11 +2624,15 @@ function renderNieuws(resultaat,ids){
     if(!groepen||!groepen.length)return;
     uit+='<div style="margin:14px 0 8px;font-size:13px;font-weight:600;color:var(--muted);'+
          'letter-spacing:.04em;text-transform:uppercase">'+pf.naam+'</div>';
-    groepen.sort(function(a,b){return b.items[0].datetime-a.items[0].datetime;});
+    groepen.sort(function(a,b){
+      var ta=(a.items[0]&&a.items[0].datetime)||0, tb=(b.items[0]&&b.items[0].datetime)||0;
+      return tb-ta;
+    });
     groepen.forEach(function(g){
       uit+='<div class="snap" style="margin-bottom:8px">'+
         '<div style="font-weight:600;margin-bottom:6px">'+g.naam+
         ' <span style="color:var(--muted);font-weight:400;font-size:11px">'+g.pos.symbol+'</span></div>'+
+        (g.scores?renderSignaalScores(g.scores):'')+
         g.items.map(function(a){
           var wanneer=archiefLeeftijd(a.datetime*1000);
           return '<div style="padding:5px 0;border-top:1px solid var(--line)">'+
@@ -6764,6 +6938,7 @@ $('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
 
 // nieuwstabblad
 if($('nwOphalen'))$('nwOphalen').onclick=nieuwsOphalen;
+if($('nwAccuratesse'))$('nwAccuratesse').onclick=signaalAccuratesseMeten;
 document.querySelectorAll('.tab').forEach(function(t){
   if(t.dataset.tab==='nieuws')t.addEventListener('click',function(){
     if(typeof renderNwKiezer==="function")renderNwKiezer();
