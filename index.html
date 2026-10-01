@@ -71,6 +71,7 @@
 // Winstverrassingen en analistenramingen ophalen: 1 tot 2 extra calls per aandeel.
 // Standaard uit, want het is aanvullende analysedata en geen onderdeel van de score.
 var WINST_VERRASSING=false;
+var DATA_CACHE_AAN=true;      // opgehaalde cijfers 12u hergebruiken (browser + Firestore)
 var EULER_METRICS=true;       // 40+ ratio's in één call (vervangt profile+aaqs)
 var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling (+1 call)
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
@@ -1003,6 +1004,13 @@ var BRON={
       </div>
       <div class="control-row compact">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="dataCache" checked style="width:auto">
+          <span>Cijfers hergebruiken die minder dan 12 uur geleden zijn opgehaald (browser + cloud).
+            Bespaart <b style="color:var(--green)">de meeste calls</b> bij herhaalde runs op dezelfde dag; koersen blijven vers.</span>
+        </label>
+      </div>
+      <div class="control-row compact">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted)">
           <input type="checkbox" id="eulerMetrics" checked style="width:auto">
           <span>Volledige cijferset voor Europese aandelen: P/E, koers/boekwaarde, ROIC, marges, groei
             en een genormaliseerde P/E over 5 jaar. <b style="color:var(--green)">1 call per aandeel</b></span>
@@ -1086,6 +1094,7 @@ var BRON={
     <p><b>Financial Modeling Prep</b>: <code>financialmodelingprep.com</code> &mdash; gratis tier beperkt de symbolen (veel aandelen geven "not available") en heeft een dag-limiet; de tool slaat geblokkeerde aandelen over.</p>
     <p><b>EODHD</b>: <code>eodhd.com</code> &mdash; gratis tier geeft maar 20 calls/dag en fundamentals vereisen een betaald pakket; in de praktijk beperkt bruikbaar.</p>
     <p><b>Grote universa &amp; vooranalyse:</b> bij universa groter dan 60 aandelen (S&amp;P 500, VS+EU alles) gebruikt de tool automatisch een twee-traps trechter: eerst een goedkope scan van het dagmomentum (1 call per aandeel), waarna alleen de top-kandidaten (3x je toonlimiet) de volledige vier-factor analyse krijgen. Zo screen je ~200 aandelen voor ~350 calls i.p.v. dat elke analyse op alles draait. Met Finnhub-throttling duurt de S&amp;P-run zo'n 6-7 minuten; laat het tabblad open. Let op: de vooranalyse selecteert op dagstijging, dus dalers vallen af v&oacute;&oacute;r de factoranalyse \u2014 het is een momentum-trechter, geen volledige rangschikking.</p>
+    <p><b>Snelheid:</b> de tool haalt meerdere aandelen tegelijk op en hergebruikt cijfers die minder dan 12 uur geleden zijn opgehaald (uit te zetten bij Instellingen). De snelheidslimiet van de bron blijft gewoon gehandhaafd &mdash; paralleliteit en cache besparen tijd en calls, niet je limiet. Koersen worden altijd vers opgehaald.</p>
     <p><b>Scandinavi&euml;:</b> tickers van OMX/Oslo/Helsinki (.ST, .CO, .OL, .HE). Eerlijke verwachting: op Finnhub's gratis tier zijn niet-VS-aandelen vaak geblokkeerd en worden ze overgeslagen; FMP/EODHD gratis dekken ze ook wisselend. Volledige Scandinavische dekking vereist realistisch een betaald plan.</p>
     <p><b>China / Hongkong:</b> dekt grote namen via Amerikaanse ADR (bv. BABA, JD, PDD) of HK-notering (.HK) &mdash; <u>niet</u> de binnenlandse A-aandelenmarkt van Shanghai/Shenzhen, die achter gespecialiseerde databronnen zit. Namen met een <span class="trap warn" style="font-size:9px">VIE</span>-label gebruiken een Variable Interest Entity-structuur: je koopt dan een contractuele aanspraak op de winst, geen direct eigendom van het onderliggende bedrijf &mdash; een juridisch/politiek risico dat losstaat van de vier factoren en niet in de score verwerkt zit.</p>
     <p style="color:var(--accent)">Eerlijk: brede, gratis fundamentele data is overal beperkt. Finnhub komt voor de VS-markt het verst op gratis. Het ingebouwde universum is een vaste lijst grote namen, niet de hele markt; lege velden tonen als "&mdash;". Niets verlaat je browser behalve de directe calls naar de gekozen bron.</p>
@@ -3160,6 +3169,73 @@ function getJson(url){
   })]);
 }
 
+// ---- Datacache: hergebruik opgehaalde cijfers, spaart API-calls en wachttijd ----
+// Fundamentals veranderen per kwartaal; 12 uur cache is ruim veilig. De cache zit in de
+// browseropslag en wordt gespiegeld naar Firestore, zodat je andere apparaten er ook van
+// profiteren. Quotes (koers/dagverandering) worden nooit uit de cache geserveerd: die
+// moeten vers zijn voor de score.
+var DATA_CACHE_TTL=12*60*60*1000;
+var DATA_CACHE= {};
+function dataCacheKey(sym){ return (sym||"").toUpperCase().replace(/[^A-Z0-9.:]/g,""); }
+function dataCacheLoad(){
+  return LS.get('dataCache').then(function(r){
+    var lokaal={};
+    if(r&&r.value){ try{ lokaal=JSON.parse(r.value)||{}; }catch(e){} }
+    if(typeof FB!="undefined"&&FB.user&&FB.ready){
+      return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+        var cloud=(doc.exists?doc.data().dataCache:null)||{};
+        var merger={};
+        Object.keys(cloud).forEach(function(k){
+          if(!merger[k]||(cloud[k].ts||0)>(merger[k].ts||0))merger[k]=cloud[k];
+        });
+        Object.keys(lokaal).forEach(function(k){
+          if(!merger[k]||(lokaal[k].ts||0)>(merger[k].ts||0))merger[k]=lokaal[k];
+        });
+        DATA_CACHE=merger;
+        return merger;
+      }).catch(function(){ DATA_CACHE=lokaal; return lokaal; });
+    }
+    DATA_CACHE=lokaal; return lokaal;
+  }).catch(function(){ DATA_CACHE={}; return {}; });
+}
+var dataCacheSaveTimer=null;
+function dataCacheSave(){
+  if(dataCacheSaveTimer)return;
+  dataCacheSaveTimer=setTimeout(function(){
+    dataCacheSaveTimer=null;
+    dataCacheSaveNu();
+  },1500);
+}
+function dataCacheSaveNu(){
+  var nu=Date.now();
+  var opschoon={};
+  Object.keys(DATA_CACHE).forEach(function(k){
+    if(nu-(DATA_CACHE[k].ts||0)<7*24*60*60*1000)opschoon[k]=DATA_CACHE[k];
+  });
+  DATA_CACHE=opschoon;
+  try{ LS.set('dataCache',JSON.stringify(opschoon)).catch(function(){}); }catch(e){}
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid).set({dataCache:opschoon},{merge:true}).catch(function(){});
+  }
+}
+function dataCacheGet(sym){
+  if(!DATA_CACHE_AAN)return null;
+  var k=dataCacheKey(sym);
+  var e=DATA_CACHE[k];
+  if(!e||!e.d)return null;
+  if(Date.now()-(e.ts||0)>DATA_CACHE_TTL)return null;
+  var kopie=Object.assign({},e.d);
+  kopie._uitCache=true; kopie._cacheTijd=e.ts;
+  return kopie;
+}
+function dataCachePut(sym,d){
+  if(!d)return;
+  var k=dataCacheKey(sym);
+  if(!k)return;
+  DATA_CACHE[k]={ts:Date.now(),d:d};
+  dataCacheSave();
+}
+
 // dispatcher: kiest de juiste bron
 // ---- Laatste screening bewaren en terugladen ----
 // Zo hoef je bij het opstarten niet meteen opnieuw API-calls te verbruiken om iets te zien.
@@ -3594,15 +3670,30 @@ function fillPriceFrom(d,symbol,order,skipIndex){
 }
 
 function enrich(symbol,key){
+  // cache eerst: fundamentals uit de cache, alleen de koers vers ophalen (1 call)
+  var uit=dataCacheGet(symbol);
+  if(uit){
+    // koers blijft vers: 1 goedkope quote-call, fundamentals komen uit de cache
+    return quoteOnlyCached(symbol,key).then(function(q){
+      if(q){ uit.price=q.price; uit.chg=q.chg; uit._uitCache=true; }
+      return uit;
+    }).catch(function(){ return uit; });
+  }
+  function bewaar(d){
+    if(d&&d.symbol)dataCachePut(symbol,d);
+    return d;
+  }
+  var p;
   // ISIN's gaan altijd naar Eulerpool, ook als de automatische bronkeuze uitstaat
   if(ISIN_RE.test(symbol)){
     if(!MULTI_KEYS.eulerpool)return Promise.reject({kind:"config",msg:"ISIN vereist een Eulerpool-sleutel (Instellingen)"});
-    return enrichEulerpool(symbol,MULTI_KEYS.eulerpool);
+    p=enrichEulerpool(symbol,MULTI_KEYS.eulerpool);
+  }else if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp||MULTI_KEYS.eulerpool)){
+    p=enrichMulti(symbol);
+  }else{
+    p=enrichSingle(symbol,key);
   }
-  if(multiEnabled() && (MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.fmp||MULTI_KEYS.eulerpool)){
-    return enrichMulti(symbol);
-  }
-  return enrichSingle(symbol,key);
+  return p.then(bewaar);
 }
 function enrichSingle(symbol,key){
   var src=currentSource();
@@ -3636,6 +3727,18 @@ function quoteOnly(symbol,key){
       if(q.price==null) throw {kind:"api",msg:"geen data"};
       return {symbol:symbol,price:+(+q.price).toFixed(2),chg:q.changePercentage!=null?+(+q.changePercentage).toFixed(2):null,dd:(q.yearHigh!=null&&q.yearHigh>0)?+(((q.price-q.yearHigh)/q.yearHigh)*100).toFixed(1):null};
     });
+}
+
+// koers ophalen zonder de call-telling van de volledige analyse: 1 call, elke bron
+function quoteOnlyCached(symbol,key){
+  var src=currentSource();
+  if(src==="finnhub"&&MULTI_KEYS.finnhub)return quoteOnly(symbol,MULTI_KEYS.finnhub);
+  if(src==="eodhd"&&MULTI_KEYS.eodhd)return quoteOnly(symbol,MULTI_KEYS.eodhd);
+  if((src==="fmp"||!MULTI_KEYS.finnhub)&&MULTI_KEYS.fmp)return quoteOnly(symbol,MULTI_KEYS.fmp);
+  if(MULTI_KEYS.finnhub)return quoteOnly(symbol,MULTI_KEYS.finnhub);
+  var los=$('apikey')?$('apikey').value.trim():"";
+  if(los)return quoteOnly(symbol,los);
+  return Promise.reject({kind:"config",msg:"geen bron voor een verse koers"});
 }
 
 // --- Finnhub: 2 calls (quote + basic financials). VS-symbolen zonder suffix. ---
@@ -3848,6 +3951,7 @@ function run(){
     return;
   }
   // bron en kosten bepalen via de centrale BRON-module, niet via het verborgen source-veld
+  var cacheKlaar=dataCacheLoad();
   var throttle=BRON.throttle(universe);
   var CALLS_FULL=Math.max.apply(null,universe.slice(0,20).map(function(s){return BRON.kosten(s);}).concat([2]));
   var MAX_CALLS_PER_MIN=55;
@@ -3908,61 +4012,70 @@ function run(){
   }
 
   function runQueue(symbols,callsPer,fetchFn,label){
-    var seq=Promise.resolve([]);
-    symbols.forEach(function(sym,i){
-      seq=seq.then(function(acc){
-        if(state.dayLimit)return acc;
-        var pre=Promise.resolve();
-        if(throttle){
-          var wacht=wachttijdNodig(callsPer);
-          if(wacht>0)pre=countdown(wacht,"Snelheidslimiet nadert");
-        }
-        return pre.then(function(){
-          return fetchFn(sym,key).then(function(e){
-            acc.push(e);
-            var nu=Date.now();
-            for(var c=0;c<callsPer;c++)state.stempels.push(nu);
-            if(i%4===0)st.textContent=label+"\u2026 "+(i+1)+"/"+symbols.length;
-            return acc;
-          }).catch(function(err){
-            var msg=(err&&err.msg)||"";
-            if(throttle && /429|rate limit|too many/i.test(msg)){
-              // limiet werkelijk geraakt: het venster leegmaken en een volle minuut wachten
-              return countdown(61,"Snelheidslimiet geraakt").then(function(){
-                state.stempels=[];
-                return fetchFn(sym,key).then(function(e){
-                    acc.push(e);
-                    var nu2=Date.now();
-                    for(var c2=0;c2<callsPer;c2++)state.stempels.push(nu2);
-                    return acc;
-                  })
-                  .catch(function(err2){
-                    var m2=(err2&&err2.msg)||"";
-                    if(/limit|exceed|monthly|reached/i.test(m2))state.dayLimit=m2;
-                    else {
-                      state.skipped.push(sym);
-                      if(!state.redenen)state.redenen={};
-                      var k2=m2?String(m2).slice(0,70):"onbekende fout";
-                      state.redenen[k2]=(state.redenen[k2]||0)+1;
-                    }
-                    return acc;
-                  });
+    // Parallelle worker-pool: N aandelen tegelijk, latentie overlapt elkaar.
+    // De snelheidslimiet blijft gehandhaafd via het schuivende venster hieronder:
+    // MAX_CALLS_PER_MIN begrenst het werkelijke verbruik, paralleliteit verbruikt niets extra.
+    var PARALLEL=throttle?5:8;
+    var results=new Array(symbols.length);
+    var volgende=0, klaar=0, daglimietGeraakt=false;
+    function worker(){
+      if(state.dayLimit||daglimietGeraakt)return Promise.resolve();
+      var i=volgende++;
+      if(i>=symbols.length)return Promise.resolve();
+      var pre=Promise.resolve();
+      if(throttle){
+        var wacht=wachttijdNodig(callsPer);
+        if(wacht>0)pre=countdown(wacht,"Snelheidslimiet nadert");
+      }
+      return pre.then(function(){
+        return fetchFn(symbols[i],key).then(function(e){
+          results[i]=e;
+          var nu=Date.now();
+          for(var c=0;c<callsPer;c++)state.stempels.push(nu);
+        }).catch(function(err){
+          var msg=(err&&err.msg)||"";
+          if(throttle && /429|rate limit|too many/i.test(msg)){
+            // limiet werkelijk geraakt: het venster leegmaken en een volle minuut wachten
+            return countdown(61,"Snelheidslimiet geraakt").then(function(){
+              state.stempels=[];
+              return fetchFn(symbols[i],key).then(function(e){
+                results[i]=e;
+                var nu2=Date.now();
+                for(var c2=0;c2<callsPer;c2++)state.stempels.push(nu2);
+              }).catch(function(err2){
+                var m2=(err2&&err2.msg)||"";
+                if(/limit|exceed|monthly|reached/i.test(m2))state.dayLimit=m2;
+                else {
+                  state.skipped.push(symbols[i]);
+                  if(!state.redenen)state.redenen={};
+                  var k2=m2?String(m2).slice(0,70):"onbekende fout";
+                  state.redenen[k2]=(state.redenen[k2]||0)+1;
+                }
               });
-            }
-            if(/limit reached|daily|monthly|exceed|429/i.test(msg))state.dayLimit=msg;
-            else {
-              state.skipped.push(sym);
-              // de échte reden bewaren: "tier-beperking" is vaak niet wat er speelt
-              if(!state.redenen)state.redenen={};
-              var kort=msg?String(msg).slice(0,70):"onbekende fout";
-              state.redenen[kort]=(state.redenen[kort]||0)+1;
-            }
-            return acc;
-          });
+            });
+          }
+          if(/limit reached|daily|monthly|exceed|429/i.test(msg)){state.dayLimit=msg;daglimietGeraakt=true;}
+          else {
+            state.skipped.push(symbols[i]);
+            // de échte reden bewaren: "tier-beperking" is vaak niet wat er speelt
+            if(!state.redenen)state.redenen={};
+            var kort=msg?String(msg).slice(0,70):"onbekende fout";
+            state.redenen[kort]=(state.redenen[kort]||0)+1;
+          }
         });
+      }).then(function(){
+        klaar++;
+        if(klaar%4===0||klaar===symbols.length)st.textContent=label+"\u2026 "+klaar+"/"+symbols.length;
+        return worker();
       });
+    }
+    var workers=[];
+    for(var w=0;w<Math.min(PARALLEL,symbols.length);w++)workers.push(worker());
+    return Promise.all(workers).then(function(){
+      var acc=[];
+      for(var r=0;r<results.length;r++)if(results[r]!==undefined)acc.push(results[r]);
+      return acc;
     });
-    return seq;
   }
 
   // Twee-traps trechter bij grote universa: trap 1 = goedkope vooranalyse (1 call), trap 2 = volledige analyse
@@ -3995,7 +4108,11 @@ function run(){
 
   stage1.then(function(symbols){
     if(state.dayLimit)return [];
-    return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
+    // cache eerst inlezen (browser + cloud) voordat de keten calls gaat doen;
+    // cache-hits kosten geen calls en geen wachttijd
+    return cacheKlaar.then(function(){
+      return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
+    });
   }).then(function(all){
     // Mislukte aanroepen leveren undefined op. Zonder deze filter struikelt de verwerking
     // daarover: passesFilters leest d._mcap, wat op undefined een fout geeft die de hele
@@ -4357,6 +4474,14 @@ if($('eulerCharting'))$('eulerCharting').onchange=function(){
 };
 LS.get('eulerChart').then(function(r){
   if(r&&r.value==="0"){EULER_CHARTING=false;var e=$('eulerCharting');if(e)e.checked=false;}
+}).catch(function(){});
+if($('dataCache'))$('dataCache').onchange=function(){
+  DATA_CACHE_AAN=this.checked;
+  LS.set('dataCacheAan',this.checked?"1":"0");
+  if(typeof showCostEstimate==="function")showCostEstimate();
+};
+LS.get('dataCacheAan').then(function(r){
+  if(r&&r.value==="0"){DATA_CACHE_AAN=false;var e=$('dataCache');if(e)e.checked=false;}
 }).catch(function(){});
 if($('eulerMetrics'))$('eulerMetrics').onchange=function(){
   EULER_METRICS=this.checked;
