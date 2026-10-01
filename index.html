@@ -2103,6 +2103,30 @@ function rawScore(d){
 function totalScore(d){
   return dampedScore(d,rawScore(d));
 }
+// ---- Centrale sorteer- en herstelhelpers ----
+// Sorteren op totaalscore stond op zes plekken identiek gekopieerd; een toekomstige
+// wijziging (bijv. een andere scorefunctie of secundaire sortering) moest dan overal
+// met de hand worden nagebouwd. Eén centrale functie voorkomt dat de plekken uit
+// synchronisatie raken.
+function sorteerOpScore(lijst){
+  return (lijst||[]).slice().sort(function(a,b){return totalScore(b)-totalScore(a);});
+}
+//parameters die bij een bewaarde/cloud-screening horen en teruggezet moeten worden in de UI
+var RUN_PARAM_VELDEN=['exchange','limit','mode','horizon','mcap','pemax'];
+// skipVelden: velden die de aanroeper zelf al heeft gezet (bijv. exchange direct na
+// een gebruikerskeuze) en dus niet vanuit de opgeslagen run mogen worden overschreven
+function herstelRunParams(params,skipVelden){
+  if(!params)return;
+  var skip=skipVelden||[];
+  RUN_PARAM_VELDEN.forEach(function(k){
+    if(skip.indexOf(k)>-1)return;
+    var el=$(k); if(el&&params[k]!=null)el.value=params[k];
+  });
+  if(typeof syncWeightUI==="function")syncWeightUI();
+}
+function runLimit(run){
+  return parseInt((run&&run.params&&run.params.limit)||25,10);
+}
 function valueTrap(d){
   var r=[],lvl=0;
   var cheap=(d.pe!=null&&d.pe<15)||(d.peg!=null&&d.peg<1)||(d.pb!=null&&d.pb<1.5);
@@ -3941,7 +3965,7 @@ function run(){
     }
     SCORESET=uitArchief.slice();
     buildPeers(SCORESET);
-    CURRENT=uitArchief.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,limit);
+    CURRENT=sorteerOpScore(uitArchief).slice(0,limit);
     render();
     var oudste=Math.min.apply(null,uitArchief.map(function(d){return d._opgehaald||Date.now();}));
     st.className="status";
@@ -4249,7 +4273,7 @@ function run(){
       if(typeof ALLE_ANALYSES!=="undefined"&&ALLE_ANALYSES.length){
         SCORESET=ALLE_ANALYSES.filter(passesFilters);
         buildPeers(SCORESET);
-        CURRENT=SCORESET.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,limit);
+        CURRENT=sorteerOpScore(SCORESET).slice(0,limit);
         render();
       }
     }catch(e){ console.error("Kompas: ook het tonen mislukte",e); }
@@ -4670,6 +4694,10 @@ function getEtfCategory(d) {
 }
 
 // Categorie-specifieke wegingen toepassen
+// Eén plek voor de standaardweeging: de HTML-slider-defaults, de categorie-standaard
+// en de check "heeft de gebruiker iets gewijzigd?" moeten hetzelfde getal lezen, anders
+// geldt een sliderwijziging al snel als "custom" terwijl de defaults zelf verschoven zijn.
+var ETF_STANDAARD_WEGING={wc:0.40,wd:0.25,wl:0.20,wt:0.15};
 function getEtfCategoryWeights(category) {
   // Obligaties: meer gewicht op kosten en liquiditeit, minder op groei/track record
   if(category === "obligaties") {
@@ -4679,8 +4707,8 @@ function getEtfCategoryWeights(category) {
   if(category === "grondstoffen") {
     return {wc: 0.30, wd: 0.20, wl: 0.30, wt: 0.20};
   }
-  // Aandelen: standaard weging (gelijk aan de slider-standaard 40/25/20/15)
-  return {wc: 0.40, wd: 0.25, wl: 0.20, wt: 0.15};
+  // Aandelen: standaard weging
+  return Object.assign({},ETF_STANDAARD_WEGING);
 }
 
 function etfWeights(){
@@ -4694,8 +4722,9 @@ function etfTotalScore(d){
   
   // Gebruik categorie-specifieke wegingen als de gebruikersinstellingen op standaard staan
   var w = etfWeights();
-  var useCustomWeights = (w.wc !== 0.40 || w.wd !== 0.25 || w.wl !== 0.20 || w.wt !== 0.15);
-  
+  var st=ETF_STANDAARD_WEGING;
+  var useCustomWeights = Object.keys(st).some(function(k){return Math.abs(w[k]-st[k])>1e-9;});
+
   if(!useCustomWeights) {
     w = catWeights;
   }
@@ -5414,6 +5443,16 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
 };
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
+// Slider-defaults staan in de HTML, maar de score-logica leest ETF_STANDAARD_WEGING.
+// Deze synchronisatie houdt beide gelijk zonder handmatige dubbele wijziging.
+(function syncEtfSliderDefaults(){
+  var pct=[ETF_STANDAARD_WEGING.wc,ETF_STANDAARD_WEGING.wd,ETF_STANDAARD_WEGING.wl,ETF_STANDAARD_WEGING.wt];
+  ['ewc','ewd','ewl','ewt'].forEach(function(id,i){
+    var el=$(id); if(!el)return;
+    var v=Math.round(pct[i]*100);
+    if(+el.value!==v){el.value=v;var lab=$(id+'-v');if(lab)lab.textContent=v;}
+  });
+})();
 ETF_CURRENT=[];
 function showLastEtfRun(silent){
   return loadLastRun('etfs').then(function(run){
@@ -8394,14 +8433,9 @@ function loadCloud(){
           }
           if(kind==='stocks'){
             SCORESET=cloudRun.data.slice(); buildPeers(SCORESET);
-            var lim=parseInt((cloudRun.params&&cloudRun.params.limit)||25,10);
-            CURRENT=cloudRun.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
-            if(cloudRun.params){
-              ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
-                var el=$(k); if(el&&cloudRun.params[k]!=null)el.value=cloudRun.params[k];
-              });
-              if(typeof syncWeightUI==="function")syncWeightUI();
-            }
+            var lim=runLimit(cloudRun);
+            CURRENT=sorteerOpScore(cloudRun.data).slice(0,lim);
+            herstelRunParams(cloudRun.params);
             render();
             $('status').className="status";
             $('status').innerHTML='\u2601\ufe0f Laatste screening uit je account \u2014 '+describeRun(cloudRun)+
@@ -8488,14 +8522,9 @@ function showLastRunFor(exchange){
     }
     SCORESET=run.data.slice();
     buildPeers(SCORESET);
-    var lim=parseInt((run.params&&run.params.limit)||25,10);
-    CURRENT=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
-    if(run.params){
-      ['limit','mode','horizon','mcap','pemax'].forEach(function(k){
-        var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
-      });
-      if(typeof syncWeightUI==="function")syncWeightUI();
-    }
+    var lim=runLimit(run);
+    CURRENT=sorteerOpScore(run.data).slice(0,lim);
+    herstelRunParams(run.params,['exchange']);
 
     render();
     $('status').className="status";
@@ -8518,15 +8547,10 @@ function showLastRun(silent){
       return false;
     }
     SCORESET=run.data.slice();
-    var lim=parseInt((run.params&&run.params.limit)||25,10);
+    var lim=runLimit(run);
     buildPeers(SCORESET);
-    CURRENT=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
-    if(run.params){
-      ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
-        var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
-      });
-      if(typeof syncWeightUI==="function")syncWeightUI();
-    }
+    CURRENT=sorteerOpScore(run.data).slice(0,lim);
+    herstelRunParams(run.params);
     render();
     $('status').className="status";
     $('status').innerHTML='\ud83d\udcbe Laatste screening \u2014 '+describeRun(run)+
@@ -8542,17 +8566,10 @@ if($('loadLast'))$('loadLast').onclick=function(){showLastRun(false);};
 loadLastRun('stocks').then(function(run){
   if(!run||!run.data||!run.data.length)return;
   SCORESET=run.data.slice();
-  var lim=parseInt((run.params&&run.params.limit)||25,10);
+  var lim=runLimit(run);
   buildPeers(SCORESET);
-  var sorted=run.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);});
-  CURRENT=sorted.slice(0,lim);
-  // instellingen herstellen zoals ze bij die run waren
-  if(run.params){
-    ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
-      var el=$(k); if(el&&run.params[k]!=null)el.value=run.params[k];
-    });
-    if(typeof syncWeightUI==="function")syncWeightUI();
-  }
+  CURRENT=sorteerOpScore(run.data).slice(0,lim);
+  herstelRunParams(run.params);
   render();
   $('status').className="status";
   $('status').innerHTML='\ud83d\udcbe Laatste screening geladen \u2014 '+describeRun(run)+
