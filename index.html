@@ -2201,11 +2201,11 @@ var COL_PRESETS={
   kwaliteit: ["symbol","sector","revG","epsG","qual","trap","score"],
   alles:     null
 };
-function applyColumnPreset(){
+function applyColumnPreset(containerSel,presetKey){
   var sel=document.getElementById('colPreset');
-  var preset=sel?sel.value:"alles";
+  var preset=presetKey!=null?presetKey:(sel?sel.value:"alles");
   var keep=COL_PRESETS[preset];
-  var table=document.querySelector('#tab-screener table');
+  var table=document.querySelector(containerSel||'#tab-screener table');
   if(!table)return;
   var heads=table.querySelectorAll('thead th');
   var visible=[];
@@ -5536,10 +5536,9 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
   if(!custom){
     var n=etfCatalogTickers(this.value).length;
     var isEU=this.value.indexOf("eu_")===0;
-    $('etfStatus').className=(isEU&&!MULTI_KEYS.eulerpool)?"status err":"status";
-    $('etfStatus').innerHTML=(isEU&&!MULTI_KEYS.eulerpool)
+    setStatus('etfStatus',(isEU&&!MULTI_KEYS.eulerpool)
       ? "Europese fondsen vereisen een <b>Eulerpool</b>-sleutel \u2014 vul die in bij Instellingen."
-      : n+" fondsen geselecteerd \u2014 klik 'Vergelijk ETF's' om op te halen.";
+      : n+" fondsen geselecteerd \u2014 klik 'Vergelijk ETF's' om op te halen.",(isEU&&!MULTI_KEYS.eulerpool));
   }
 };
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
