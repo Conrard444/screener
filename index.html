@@ -3755,7 +3755,7 @@ function enrichMultiFallback(symbol){
       else if(typeof e==="string")raw=e;
       else if(e)raw="onverwacht: "+(JSON.stringify(e)||String(e)).slice(0,60);
       else raw="onbekende fout (geen details)";
-      var short=/CORS|netwerkfout/i.test(raw) ? "geen browsertoegang"
+      var short=/CORS|netwerkfout/i.test(raw) ? "netwerkfout/CORS \u2014 check je verbinding of adblocker (API-domein geblokkeerd?)"
               : /403|access denied|don't have access/i.test(raw) ? "geen toegang op je tier"
               : /404|not found/i.test(raw) ? "niet gevonden"
               : /limit|429/i.test(raw) ? "limiet bereikt"
