@@ -1279,6 +1279,62 @@ function sectorNeutraal(){
 // Percentielen gebruiken we dus bij korte horizon óf wanneer sectorneutraal aanstaat.
 function gebruikPercentielen(){ return !isLong() || sectorNeutraal(); }
 
+// ---- Centrale scoremethodiek ----
+// Eén plek die vastlegt hoe elke score in deze tool tot stand komt, onafhankelijk van
+// welke databron (SecuritiesDB, Finnhub, Eulerpool) de cijfers leverde. De regels:
+// - elke score zit op dezelfde schaal 0-100, met neutraal midden rond 50;
+// - klemmen gebeurt uitsluitend via clampScore, nergens inline;
+// - ontbrekende data telt nooit mee als 0: bij aandelen herverdeelt rawScore het
+//   gewicht over de factoren die er wél zijn, bij fondsen vult een factor 50 in;
+// - voor ETF's geldt een eigen factorenset (kosten, spreiding, liquiditeit, staat
+//   van dienst, volatiliteit, Sharpe) omdat bedrijfsfundamentals daar niet gelden;
+// - dekkingX() is de graadmeter: hoeveel procent van de weging met echte gegevens
+//   gevuld kon worden. Elke tabel toont die via dekkingBadge naast de score,
+//   zodat je altijd ziet hoe stevig een cijfer onderbouwd is.
+function clampScore(v){
+  if(v==null||isNaN(v))return null;
+  return Math.max(0,Math.min(100,Math.round(v)));
+}
+function dekkingAandeel(d){
+  if(!d)return null;
+  var heeftMom=(d.chg!=null&&!isNaN(d.chg))||(d.mom1m!=null&&!isNaN(d.mom1m))||(d.mom3m!=null)||(d.mom6m!=null);
+  var heeftVal=(d.pe!=null)||(d.peNorm!=null)||(d.pb!=null)||(d.peg!=null)||(d.peVsHist!=null);
+  var heeftGro=(d.revG!=null)||(d.epsG!=null)||(d.epsG5Y!=null);
+  var heeftKwa=(d.roe!=null)||(d.aaqs!=null)||(d.piotroski!=null)||(d.roce!=null)||(d.margin!=null)||(d.profitContinuity!=null);
+  var ontbrekend=[], aanwezig=0, totaal=0;
+  function deel(naam,heeft,gewicht){totaal+=gewicht; if(heeft){aanwezig+=gewicht;}else{ontbrekend.push(naam);}}
+  if(currentMode()==='herstel'){
+    deel('terugvaldiepte',d.dd!=null,0.30);
+    deel('kwaliteit',heeftKwa,0.35);
+    deel('waardering',heeftVal,0.35);
+  }else{
+    var w=weights();
+    deel('momentum',heeftMom,w.wm);
+    deel('waardering',heeftVal,w.wv);
+    deel('groei',heeftGro,w.wg);
+    deel('kwaliteit',heeftKwa,w.wq);
+  }
+  return {pct:totaal?Math.round(aanwezig/totaal*100):null, ontbrekend:ontbrekend};
+}
+function dekkingEtf(d){
+  if(!d)return null;
+  var ontbrekend=[], aanwezig=0, totaal=0;
+  function deel(naam,heeft,gewicht){totaal+=gewicht; if(heeft){aanwezig+=gewicht;}else{ontbrekend.push(naam);}}
+  deel('kosten',d.ter!=null,0.40);
+  deel('spreiding',(d.holdings!=null||d.top10!=null),0.25);
+  deel('liquiditeit',d.aum!=null,0.20);
+  deel('staat van dienst',(d.return5Y!=null||d.return3Y!=null||d.inceptionDate!=null),0.15);
+  deel('volatiliteit',d.vol!=null,0.075);
+  deel('sharpe',d.sharpe!=null,0.075);
+  return {pct:Math.round(aanwezig/totaal*100), ontbrekend:ontbrekend};
+}
+function dekkingBadge(dek){
+  if(!dek||dek.pct==null||isNaN(dek.pct)||dek.pct>=100)return '';
+  var tip='Score berekend op '+dek.pct+'% van de factoren';
+  tip+=(dek.ontbrekend&&dek.ontbrekend.length)?' \u2014 ontbreekt: '+dek.ontbrekend.join(', ')
+                                                :' \u2014 niet alle gegevens beschikbaar';
+  return '<span style="font-size:9px;color:var(--muted)" title="'+tip.replace(/"/g,'&quot;')+'"> \u00b7'+dek.pct+'%</span>';
+}
 // null = geen momentumdata beschikbaar (bv. Europese aandelen via Eulerpool, dat geen koersen levert).
 // Dat is iets anders dan "slecht momentum" en mag de totaalscore niet omlaag trekken.
 // Ondersteunt nu ook 3-maand (mom3m) en 6-maand (mom6m) momentum voor betere langetermijnvoorspelling.
@@ -2953,7 +3009,7 @@ function render(){
     var o=portfolioOverlapFor(d);
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
   });
-  var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason});});
+  var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_trap:t.level,_trapR:t.reason,_dek:dekkingAandeel(d)});});
   var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
@@ -3023,7 +3079,7 @@ function render(){
       })()+
       '<td>'+trap+'</td>'+
       opgehaaldCel(d._opgehaald,true)+
-      scoreCel(d._s,badge)+
+      scoreCel(d._s,badge,dekkingBadge(d._dek))+
     '</tr>';
   }).join("");
   renderHoldingsNote();
@@ -4836,7 +4892,7 @@ function etfTotalScore(d){
   
   var s = Math.round(baseScore + riskAdjScore);
   if(d.isLeveraged||d.isInverse) s=Math.round(s*0.5); // ongeschikt om lang aan te houden
-  return Math.max(0,Math.min(100,s));
+  return clampScore(s);
 }
 var ETF_CURRENT=[];
 function etfCloseRisk(d){
@@ -4973,8 +5029,7 @@ function renderEtf(){
       '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+num(d.vol,function(v){return v.toFixed(1)+"%";})+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+num(d.chg,function(v){return (v>0?"+":"")+v.toFixed(1)+"%";})+'</td>'+
       opgehaaldCel(d._opgehaald,false)+
-      scoreCel(d._s,badge,
-        (d._dek!=null&&d._dek<100?'<span style="font-size:9px;color:var(--muted)" title="Score berekend over '+d._dek+'% van de factoren \u2014 niet alle gegevens beschikbaar"> \u00b7'+d._dek+'%</span>':''))+
+      scoreCel(d._s,badge,dekkingBadge({pct:d._dek}))+
     '</tr>';
   }).join("");
 }
@@ -6073,7 +6128,7 @@ function etfPortfolioScore(e){
   // harde afstraffing voor constructies die ongeschikt zijn om lang aan te houden
   if(e.isLeveraged||e.isInverse) score=Math.round(score*0.5);
 
-  detail.score=Math.max(0,Math.min(100,score));
+  detail.score=clampScore(score);
   detail.basedOn=Math.round(sum*100); // hoeveel procent van de weging we konden invullen
   return detail;
 }
@@ -6966,26 +7021,26 @@ function beperkteMeting(p){
   if(!p || p._fresh)return null;
   var onderdelen=[];
   if(p._alarm && p._alarm.text && p._alarm.text.indexOf('nog niet gecheckt')>=0)return null;
-  var clamp=function(sc){return Math.max(0,Math.min(100,Math.round(sc)));};
   var r=positieRendement(p);
   if(r!=null){
-    onderdelen.push({naam:'rendement',waarde:(r.v>=0?'+':'')+r.v.toFixed(1)+'%',score:clamp(50+r.v/2),reden:'rendement volgens '+r.bron});
+    onderdelen.push({naam:'rendement',waarde:(r.v>=0?'+':'')+r.v.toFixed(1)+'%',score:clampScore(50+r.v/2),reden:'rendement volgens '+r.bron});
   }
   if(p.baseline && p.baseline.score!=null){
     var lft=archiefLeeftijd(p.baseline.ts);
-    onderdelen.push({naam:'baseline',waarde:String(p.baseline.score),score:clamp(p.baseline.score),reden:'laatst geslaagde meting'+(lft?' ('+lft+' geleden)':'')});
+    onderdelen.push({naam:'baseline',waarde:String(p.baseline.score),score:clampScore(p.baseline.score),reden:'laatst geslaagde meting'+(lft?' ('+lft+' geleden)':'')});
   }
   if(p.brokerPrice!=null && p.buyPrice){
     var afst=(p.brokerPrice-p.buyPrice)/p.buyPrice*100;
     if(afst>=-100 && afst<=2000){
-      onderdelen.push({naam:'koers vs aankoop',waarde:(afst>=0?'+':'')+afst.toFixed(1)+'%',score:clamp(50+afst/2),reden:'brokerkoers versus aankoopprijs'});
+      onderdelen.push({naam:'koers vs aankoop',waarde:(afst>=0?'+':'')+afst.toFixed(1)+'%',score:clampScore(50+afst/2),reden:'brokerkoers versus aankoopprijs'});
     }
   }
   if(!onderdelen.length)return null;
   var tot=0; for(var i=0;i<onderdelen.length;i++)tot+=onderdelen[i].score;
-  var score=clamp(tot/onderdelen.length);
+  var score=clampScore(tot/onderdelen.length);
   var bronnen=onderdelen.map(function(o){return o.naam;}).join(' + ');
-  return {score:score, gebaseerdOp:bronnen, onderdelen:onderdelen};
+  return {score:score, gebaseerdOp:bronnen, onderdelen:onderdelen,
+          dekking:Math.round(onderdelen.length/3*100)};
 }
 
 var PF_TABEL_SORT=null;
@@ -7069,6 +7124,10 @@ function renderPortfolioTabel(lijst){
     }else{
       sc=f.score; m=f.m; v=f.v; g=f.g; q=f.q;
     }
+    var dek=f.isEtf?dekkingEtf(f.etf)
+          :(heeftRuw?dekkingAandeel(d)
+          :(f.completeness?{pct:(f.completeness.level==="full"?100:(f.completeness.level==="partial"?60:10)),
+                            ontbrekend:f.completeness.missing||[]}:null));
     var cel=function(x){return '<td class="num">'+(x==null?"\u2014":x)+'</td>';};
     var rijStijl=p._alarm&&p._alarm.level==="red" ? ' style="background:rgba(224,99,95,.06)"'
                : (f.isEtf ? ' style="background:rgba(90,150,220,.05)"' : '');
@@ -7085,7 +7144,7 @@ function renderPortfolioTabel(lijst){
       cel(waarde!=null?Math.round(waarde):null)+
       '<td class="num '+(pl>=0?"pos":"neg")+'">'+(pl!=null?(pl>=0?"+":"")+pl.toFixed(1)+"%":"\u2014")+'</td>'+
       cel(m)+cel(v)+cel(g)+cel(q)+
-      scoreCel(sc)+
+      scoreCel(sc,null,dekkingBadge(dek))+
     '</tr>';
   }).join("");
 
@@ -7109,7 +7168,7 @@ function renderPortfolioTabel(lijst){
       '<td class="l" colspan="9" style="font-size:11px;color:var(--muted)">'+
         '<span title="'+String(reden).replace(/"/g,'&quot;')+'">'+reden+'</span>'+
         (bm
-          ?' \u2014 beperkte score <b>'+bm.score+'</b>/100 op basis van '+bm.gebaseerdOp+
+          ?' \u2014 beperkte score <b>'+bm.score+'</b>/100 op basis van '+bm.gebaseerdOp+dekkingBadge({pct:bm.dekking})+
            ' <span style="opacity:.8">(geen fundamentals, momentum of waardering; hercheck zodra de verbinding het weer doet)</span><br>'+badges
           :((p._alarm&&p._alarm.text)?'':' \u2014 klik \u201cAlles checken\u201d om cijfers op te halen'))+
       '</td>'+
