@@ -6955,6 +6955,39 @@ function spreidingsAnalyse(){
 // Portefeuille als tabel, met dezelfde kolommen en dezelfde weegregelaars als de screener.
 // Hergebruikt totalScore() en de losse factorscores, dus een wijziging aan de weging werkt
 // hier meteen door - geen aparte berekening die uit de pas kan lopen.
+// ---- Beperkte meting bij mislukte ophaling ----
+// Als geen enkele databron cijfers leverde, heeft een positie geen _fresh en dus geen
+// normale totaalscore (die fundamentals vereist). Toch is er vaak lokaal bewijs: het
+// rendement uit de broker-import, de laatste geslaagde meting (baseline) en de
+// brokerkoers versus de aankoopprijs. Deze functie bouwt daaruit een beperkte score,
+// expliciet afgebakend van de normale totaalscore, volgens de scoremethodiek:
+// 0-100, neutraal rond 50, ontbrekende onderdelen vallen weg i.p.v. naar 0 te trekken.
+function beperkteMeting(p){
+  if(!p || p._fresh)return null;
+  var onderdelen=[];
+  if(p._alarm && p._alarm.text && p._alarm.text.indexOf('nog niet gecheckt')>=0)return null;
+  var clamp=function(sc){return Math.max(0,Math.min(100,Math.round(sc)));};
+  var r=positieRendement(p);
+  if(r!=null){
+    onderdelen.push({naam:'rendement',waarde:(r.v>=0?'+':'')+r.v.toFixed(1)+'%',score:clamp(50+r.v/2),reden:'rendement volgens '+r.bron});
+  }
+  if(p.baseline && p.baseline.score!=null){
+    var lft=archiefLeeftijd(p.baseline.ts);
+    onderdelen.push({naam:'baseline',waarde:String(p.baseline.score),score:clamp(p.baseline.score),reden:'laatst geslaagde meting'+(lft?' ('+lft+' geleden)':'')});
+  }
+  if(p.brokerPrice!=null && p.buyPrice){
+    var afst=(p.brokerPrice-p.buyPrice)/p.buyPrice*100;
+    if(afst>=-100 && afst<=2000){
+      onderdelen.push({naam:'koers vs aankoop',waarde:(afst>=0?'+':'')+afst.toFixed(1)+'%',score:clamp(50+afst/2),reden:'brokerkoers versus aankoopprijs'});
+    }
+  }
+  if(!onderdelen.length)return null;
+  var tot=0; for(var i=0;i<onderdelen.length;i++)tot+=onderdelen[i].score;
+  var score=clamp(tot/onderdelen.length);
+  var bronnen=onderdelen.map(function(o){return o.naam;}).join(' + ');
+  return {score:score, gebaseerdOp:bronnen, onderdelen:onderdelen};
+}
+
 var PF_TABEL_SORT=null;
 function pfTabelSorteerWaarde(p,k){
   var f=p._fresh||{};
@@ -7059,16 +7092,26 @@ function renderPortfolioTabel(lijst){
   var storingHtml=storingen.map(function(p){
     var reden=(p._alarm&&p._alarm.text)?p._alarm.text:'nog niet gecheckt';
     var naam=NAAM.toon({symbol:p.symbol,isin:p.isin,naam:p.naam})||p.symbol;
+    var bm=beperkteMeting(p);
+    var label=(p._alarm&&p._alarm.text)?(bm?'BEPERKT':'MISLUKT'):'NIET GEHECKT';
+    var badges=(bm&&bm.onderdelen.map(function(o){
+      return '<span title="'+o.naam+': '+o.waarde+' \u2192 '+o.score+'/100 ('+o.reden+')" '+
+        'style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:8px;'+
+        'font-size:9px;background:rgba(255,255,255,.06)">'+o.naam+' '+o.score+'</span>';
+    }).join(''))||'';
     return '<tr style="background:rgba(240,180,60,.05)">'+
       '<td class="l">'+
         '<span style="color:var(--accent);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">'+
-        ((p._alarm&&p._alarm.text)?'MISLUKT':'NIET GEHECKT')+'</span>'+
+        label+'</span>'+
         '<span class="tk">'+naam+'</span>'+
         '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span>'+
       '</td>'+
       '<td class="l" colspan="9" style="font-size:11px;color:var(--muted)">'+
         '<span title="'+String(reden).replace(/"/g,'&quot;')+'">'+reden+'</span>'+
-        ((p._alarm&&p._alarm.text)?'':' \u2014 klik \u201cAlles checken\u201d om cijfers op te halen')+
+        (bm
+          ?' \u2014 beperkte score <b>'+bm.score+'</b>/100 op basis van '+bm.gebaseerdOp+
+           ' <span style="opacity:.8">(geen fundamentals, momentum of waardering; hercheck zodra de verbinding het weer doet)</span><br>'+badges
+          :((p._alarm&&p._alarm.text)?'':' \u2014 klik \u201cAlles checken\u201d om cijfers op te halen'))+
       '</td>'+
     '</tr>';
   }).join("");
