@@ -863,6 +863,7 @@ var BRON={
         <button class="btn-ghost" id="pfImportBtn" title="Importeer een export van Saxo (CSV) of Bolero (XLSX) — het formaat wordt automatisch herkend">Importeren</button>
         <input type="file" id="pfBoleroFile" accept=".csv,.xlsx" style="display:none">
         <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">Overlap meten</button>
+        <button class="btn-ghost" id="pfVerkoopBtn" title="Combineert je alarmen met nieuws-sentiment, insider-transacties en analistenadviezen (Finnhub) tot een verkooprapport per positie">Verkoopsignalen</button>
         <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
       </div>
     </div>
@@ -874,6 +875,7 @@ var BRON={
     <div id="importHint"></div>
     <div id="spreidingWrap"></div>
     <div id="overlapWrap"></div>
+    <div id="verkoopWrap"></div>
 
     <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px">
       <span class="inline-lbl">Sorteren</span>
@@ -6185,6 +6187,144 @@ function classifyAlarm(pos,fresh){
   return sig(level, kort.join(" \u00b7 "), wat.join(" "), waarom.join(" "), actie.join(" "));
 }
 
+// ---- Verkoopsignalen: diepte-analyse per positie ----
+// Combineert drie lagen: (1) de fundamentele alarmen uit classifyAlarm/classifyEtfAlarm,
+// (2) de Finhub-signaalfactoren (sentiment, insiders, analisten, prijs-target) en
+// (3) recente nieuwsitems. Elke bevinding krijgt wat/waarom/actie, net als classifyAlarm,
+// zodat een signaal nooit een kale kleur is.
+function verkoopBevinding(niveau,kort,wat,waarom,actie){
+  return {niveau:niveau,kort:kort,wat:wat,waarom:waarom,actie:actie};
+}
+function verkoopUitSignaalFactoren(scores){
+  var uit=[];
+  if(!scores)return uit;
+  if(scores.sentiment!=null&&scores.sentiment<35)
+    uit.push(verkoopBevinding("red","negatief nieuwsentiment ("+Math.round(scores.sentiment)+"/100)",
+      "Het nieuwsentiment over dit bedrijf is duidelijk negatief.",
+      "Aanhoudend negatieve berichtgeving loopt vaak vooruit op fundamentals: problemen komen zelden uit het niets.",
+      "Lees de artikelen hieronder; is het bedrijf-specifiek of sector-breed?"));
+  if(scores.insider!=null&&scores.insider<35)
+    uit.push(insiderVerkoopBevinding(scores.insider));
+  if(scores.aanbeveling!=null&&scores.aanbeveling<40)
+    uit.push(verkoopBevinding("orange","analisten terughoudend ("+Math.round(scores.aanbeveling)+"% koop)",
+      "Minder dan 40% van de analisten heeft een koop- of sterke-koopaanbeveling.",
+      "Consensus-adviezen zijn geen heilige graal, maar een brede omslag van koop naar houd/verkoop betekent dat professionele analyse de cijfers niet meer vertrouwt.",
+      "Vergelijk met je eigen aankoopreden: is die nog geldig?"));
+  if(scores.target!=null&&scores.target<40)
+    uit.push(verkoopBevinding("orange","prijstarget aan de onderkant ("+Math.round(scores.target)+"/100)",
+      "De consensus-doelkoers zit aan de onderkant van het analystenband.",
+      "Analisten die hun target richting het bodemprijs bereiken verwachten weinig meerwaarde boven de huidige koers.",
+      "Bekijk het detailpaneel voor de volledige target-range."));
+  return uit;
+}
+function insiderVerkoopBevinding(v){
+  return verkoopBevinding("red","insiders verkopen netto ("+Math.round(v)+"/100)",
+    "Directie en bestuur zijn netto verkopers van hun eigen aandelen.",
+    "Insiders kennen het bedrijf het best. Structurele verkoop door meerdere insiders is één van de betere leading indicators — al kan het ook planmatige (voorgenomen) verkoop zijn.",
+    "Controleer of het planmatige verkoop betrof (calendar/jaarwisseling) of ad-hoc.");
+}
+function verkoopUitAlarm(p){
+  var uit=[], a=p._alarm;
+  if(!a||a.level==="green")return uit;
+  var n=a.level==="red"?"red":"orange";
+  uit.push(verkoopBevinding(n,a.text||a.kort,
+    a.wat||("Alarm: "+a.text),
+    a.waarom||"",
+    a.actie||""));
+  return uit;
+}
+function verkoopUitNieuws(items,sym,naam){
+  var uit=[];
+  if(!items||!items.length)return uit;
+  var relevantieCheck=items.length;
+  if(!relevantieCheck)return uit;
+  var relevant=items.filter(function(a){
+    var t=(a.headline||"").toLowerCase();
+    return /verkoop|afwaard|onderzoek|rechtszaak|fraude|terugroep|omaatregel|cut|faill|waarschuwt|daalt|verliest/.test(t);
+  });
+  if(relevant.length>=2)
+    uit.push(verkoopBevinding("orange",relevant.length+" alarmerende koppen in het nieuws",
+      "Meerdere recente artikelen noemen verkoop, afwaardering, onderzoek of rechtszaken.",
+      "De marktprijs verwerkt nieuws snel, maar de impact op fundamentals (winst, schulden) wordt pas maanden later zichtbaar in de cijfers.",
+      "Open de artikelen hieronder en toets of het jouw aankoopreden raakt."));
+  return uit;
+}
+function verkoopScan(){
+  var el=$('verkoopWrap'); if(!el)return;
+  var st=$('pfStatus');
+  if(!PORTFOLIO.length){pfStat("Voeg eerst posities toe.",true);return;}
+  var pos=PORTFOLIO.filter(function(p){return p._fresh;});
+  if(!pos.length){pfStat("Check eerst je posities (\u201cAlles checken\u201d) \u2014 zonder meting geen signaal.",true);return;}
+  if(!MULTI_KEYS.finnhub){
+    setStatus(st,"Nieuws- en analistensignalen vereisen een <b>Finnhub</b>-sleutel \u2014 vul die in bij Instellingen. De fundamentele alarmen hieronder blijven beschikbaar.",true);
+  }
+  setStatus(st,"Verkoopsignalen analyseren voor "+pos.length+" posities\u2026");
+  var rapport=[], klaar=0;
+  var seq=Promise.resolve();
+  pos.forEach(function(p){
+    var sym=(p.symbol||"").replace(/:.*$/,"");
+    var isUs=isUsTicker(sym);
+    seq=seq.then(function(){
+      var taak=isUs&&MULTI_KEYS.finnhub
+        ? Promise.all([haalSignaalFactoren(sym),haalNieuws(sym,MULTI_KEYS.finnhub,7).catch(function(){return [];})])
+        : Promise.resolve([null,[]]);
+      return taak.then(function(r){
+        var scores=r[0], nieuws=(r[1]||[]).filter(function(a){
+          return nieuwsRelevantie(a,sym,NAAM.vol(p)||sym)===2;
+        });
+        var naam=NAAM.vol(p)||sym;
+        var bevindingen=verkoopUitAlarm(p).concat(verkoopUitSignaalFactoren(scores)).concat(verkoopUitNieuws(nieuws,sym,naam));
+        if(bevindingen.length){
+          rapport.push({pos:p,naam:naam,sym:sym,isUs:isUs,scores:scores||{},nieuws:(nieuws||[]).slice(0,4),bevindingen:bevindingen});
+        }
+        klaar++;
+        if(klaar%4===0)setStatus(st,"Verkoopsignalen\u2026 "+klaar+"/"+pos.length);
+      });
+    });
+  });
+  seq.then(function(){
+    el.innerHTML=renderVerkoopRapport(rapport,pos.length);
+    setStatus(st,"Klaar \u2014 <b>"+rapport.length+"</b> van "+pos.length+" posities met verkoopsignalen"+
+      (MULTI_KEYS.finnhub?"":" \u00b7 zonder Finnhub-sleutel zijn alleen fundamentele alarmen meegenomen")+".");
+  });
+}
+function renderVerkoopRapport(rap,totaal){
+  if(!rap.length)return '<div class="snap" style="border-left:3px solid var(--green);margin:10px 0;font-size:12.5px">'+
+    '\u2713 Geen verkoopsignalen \u2014 geen van je '+totaal+' gecheckte posities geeft reden tot heroverweging.</div>';
+  var rang={red:0,orange:1};
+  rap.sort(function(a,b){
+    var ra=Math.min.apply(null,a.bevindingen.map(function(x){return rang[x.niveau]!=null?rang[x.niveau]:2;})),
+        rb=Math.min.apply(null,b.bevindingen.map(function(x){return rang[x.niveau]!=null?rang[x.niveau]:2;}));
+    return ra-rb;
+  });
+  var uit='<div style="margin:14px 0 8px;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase">'+
+    'Verkoopsignalen \u2014 '+rap.length+' van '+totaal+' posities</div>';
+  rap.forEach(function(r){
+    var erg=r.bevindingen.some(function(b){return b.niveau==="red";});
+    uit+='<div class="snap" style="border-left:3px solid '+(erg?'var(--red)':'var(--accent)')+';margin-bottom:8px">'+
+      '<div style="font-weight:600">'+r.naam+
+      ' <span style="color:var(--muted);font-weight:400;font-size:11px">'+r.sym+'</span>'+
+      (r.pos._fresh&&r.pos._fresh.score!=null?' <span style="font-size:11px;color:var(--muted)">\u00b7 score '+r.pos._fresh.score+'</span>':'')+'</div>';
+    if(r.scores&&Object.keys(r.scores).length)uit+=renderSignaalScores(r.scores);
+    r.bevindingen.forEach(function(b){
+      uit+='<div style="padding:6px 0;border-top:1px solid var(--line)">'+
+        '<div style="font-size:12px"><b style="color:'+(b.niveau==="red"?'var(--red)':'var(--accent)')+'">'+b.kort+'</b></div>'+
+        (b.wat?'<div style="font-size:11.5px;color:var(--ink);margin-top:2px">'+b.wat+'</div>':'')+
+        (b.waarom?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+b.waarom+'</div>':'')+
+        (b.actie?'<div style="font-size:11px;margin-top:3px">\u2192 '+b.actie+'</div>':'')+
+      '</div>';
+    });
+    if(!r.isUs)uit+='<div style="font-size:10.5px;color:var(--muted);padding-top:4px">Europese positie \u2014 nieuws- en analistensignalen via Finnhub zijn hier niet beschikbaar; gebruik de onderzoekslinks in het detailpaneel.</div>';
+    (r.nieuws||[]).forEach(function(a){
+      uit+='<div style="padding:4px 0;border-top:1px solid var(--line)">'+
+        '<a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:none;font-size:12px">'+
+        (a.headline||"").replace(/</g,"&lt;")+'</a>'+
+        '<div style="font-size:10px;color:var(--muted)">'+(a.source||"")+'</div></div>';
+    });
+    uit+='</div>';
+  });
+  return uit;
+}
 function updateSourceBar(){
   var el=$('pfSourceName'); if(!el)return;
   var names={finnhub:"Finnhub",fmp:"Financial Modeling Prep",eodhd:"EODHD"};
@@ -7339,6 +7479,7 @@ function leesBoleroBestand(f){
   lezer.readAsArrayBuffer(f);
 }
 if($('pfOverlapBtn'))$('pfOverlapBtn').onclick=verifyOverlapReal;
+if($('pfVerkoopBtn'))$('pfVerkoopBtn').onclick=verkoopScan;
 $('pfImportFile').onchange=function(e){if(e.target.files[0])importSaxoCsv(e.target.files[0]);};
 
 loadPortfolioLocal();
