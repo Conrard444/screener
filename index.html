@@ -2926,7 +2926,7 @@ function tabelSortInit(cfg){
       var k=th.getAttribute("data-k");
       if(!k)return;
       var st=cfg.staat();
-      if(st&&st.k===k)st.dir*=-1;
+      if(st&&st.k===k)cfg.zet(k,st.dir*-1);
       else cfg.zet(k,(cfg.tekst||[]).indexOf(k)>-1?1:-1);
       cfg.herlaad();
     };
@@ -6309,6 +6309,12 @@ function renderPortfolio(){
   // tabelweergave gekozen? dan die renderen in plaats van kaarten
   var weergave=$('pfWeergave')?$('pfWeergave').value:"kaart";
   if(weergave==="tabel"){
+    if(PF_TABEL_SORT&&PF_TABEL_SORT.k){
+      var st=PF_TABEL_SORT;
+      list=list.slice().sort(function(a,b){
+        return tabelSortVergelijk(pfTabelSorteerWaarde(a,st.k),pfTabelSorteerWaarde(b,st.k),st.dir);
+      });
+    }
     el.innerHTML=renderPortfolioTabel(list);
     bindPfTabelSort(list);
     renderOverlap();
@@ -7363,6 +7369,7 @@ if($('mode'))$('mode').onchange=function(){syncWeightUI();if(CURRENT.length)rend
 syncWeightUI();
 tabelSortInit(SCREENER_SORT_CFG);
 tabelSortInit(ETF_SORT_CFG);
+tabelSortPijl(document.querySelector('#tab-screener table'),{k:sortKey,dir:sortDir});
 
 render();
 </script>
