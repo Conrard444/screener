@@ -5726,7 +5726,18 @@ window.pfOpschonen=pfOpschonen;
 window.pfWissel=pfWissel; window.pfNieuwPrompt=pfNieuwPrompt;
 window.pfHernoemPrompt=pfHernoemPrompt; window.pfVerwijderPrompt=pfVerwijderPrompt;
 
-function pfStat(msg,err){var s=$('pfStatus');s.className=err?"status err":"status";s.textContent=msg;}
+function pfStat(msg,err,voortgang){
+  var s=$('pfStatus'); if(!s)return;
+  s.className=err?"status err":"status";
+  if(voortgang!=null){
+    var klaar=voortgang.klaar||0, totaal=voortgang.totaal||0;
+    var pct=totaal?Math.round(klaar/totaal*100):0;
+    s.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'+
+      '<span>'+msg+'</span>'+
+      '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+klaar+' / '+totaal+(voortgang.fouten?' \u00b7 '+voortgang.fouten+' mislukt':'')+'</span></div>'+
+      '<div class="bar" style="margin-top:4px;height:4px"><i style="width:'+pct+'%"></i></div>';
+  } else s.textContent=msg;
+}
 
 // Eén aanroep na elke wijziging aan de portefeuille: lokaal bewaren, naar de cloud
 // schrijven en de weergave verversen. Voorheen stonden die drie los verspreid over
@@ -7164,10 +7175,17 @@ function checkAllPositions(){
     pfStat("Geen sleutel gevonden \u2014 vul er minstens \u00e9\u00e9n in bij het Instellingen-tabblad.",true);return;
   }
   if(!PORTFOLIO.length){pfStat("Nog geen posities om te checken.",true);return;}
-  pfStat("Actuele cijfers ophalen voor "+PORTFOLIO.length+" posities\u2026");
+  var voortgang={klaar:0,totaal:PORTFOLIO.length,fouten:0};
+  function pfVoortgang(){
+    var volgende=PORTFOLIO[voortgang.klaar];
+    pfStat("Posities ophalen\u2026 <b>"+(voortgang.klaar+1)+"</b>/"+voortgang.totaal+
+      " \u2014 <span style=\"font-family:'IBM Plex Mono'\">"+(volgende?volgende.symbol:"")+"</span>",false,voortgang);
+  }
+  pfVoortgang();
   var seq=Promise.resolve();
   PORTFOLIO.forEach(function(pos){
     seq=seq.then(function(){
+      pfVoortgang();
       // ETF's/ETP's krijgen een eigen route: fondskenmerken via SecuritiesDB i.p.v. bedrijfsfundamentals.
       // We proberen SecuritiesDB voor elke ticker die géén bekend aandeel is - blijkt het geen fonds,
       // dan valt hij door naar de gewone aandelenroute. Zo hoeven we geen tickerlijst bij te houden.
@@ -7193,6 +7211,7 @@ function checkAllPositions(){
             completeness:{level:"full",missing:[]}};
           pos._alarm=classifyEtfAlarm(pos,pos._fresh);
           if(!pos.baseline) pos.baseline={score:pos._fresh.score,ts:Date.now(),isEtf:true};
+          voortgang.klaar++;
         }).catch(function(){
           // geen fonds (of niet gedekt) -> onthouden en doorvallen naar de aandelenroute
           ETF_NOT_FUND[pos.symbol]=true;
@@ -7220,10 +7239,12 @@ function checkAllPositions(){
         pos._raw=d;            // ruwe cijfers bewaren voor de tabelweergave
         pos._alarm=classifyAlarm(pos,fresh);
         if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
+        voortgang.klaar++;
       }).catch(function(e){
         var msg=(e&&e.msg)?e.msg:(e&&e.message)?e.message:"onbekende fout ("+String(e).slice(0,80)+")";
         var srcName={finnhub:"Finnhub",fmp:"FMP",eodhd:"EODHD"}[currentSource()]||"databron";
         pos._fresh=null; pos._alarm={level:"orange",text:"["+srcName+"] Kon niet ophalen: "+msg};
+        voortgang.fouten++; voortgang.klaar++;
       });
   }
 
@@ -7242,7 +7263,9 @@ function checkAllPositions(){
       pfStat("\u26a0\ufe0f "+onderGrens.length+" positie(s) onder je ingestelde grens: "+namen,true);
       notifyBrowser("Kompas: "+onderGrens.length+" positie(s) onder je grens", namen);
     } else {
-      pfStat("Klaar \u2014 "+PORTFOLIO.length+" posities gecheckt.");
+      var mislukt=PORTFOLIO.filter(function(p){return !p._fresh;}).length;
+      pfStat("Klaar \u2014 "+(PORTFOLIO.length-mislukt)+" van "+PORTFOLIO.length+" posities gecheckt"+
+        (mislukt?" \u00b7 "+mislukt+" mislukt (rijen hieronder tonen de reden)":" \u2713"));
     }
     savePortfolioLocal();savePortfolioCloud();
     renderPortfolio();
