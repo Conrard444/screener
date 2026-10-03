@@ -2178,6 +2178,26 @@ function scoreBadge(sc){
   if(sc==null)return '';
   return sc>=65?'<span class="badge strong">sterk</span>':sc>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
 }
+function trapBadge(niveau,tekst,title,attrs){
+  return '<span class="trap '+niveau+'"'+(title?' title="'+title+'"':'')+(attrs||'')+'>'+tekst+'</span>';
+}
+function opgehaaldCel(t,metKleur){
+  if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
+  if(metKleur){
+    var uren=(Date.now()-t)/3600000;
+    var kl=uren>168?"neg":(uren>48?"":"pos");
+    return '<td class="num '+kl+'" style="font-size:10.5px" title="'+new Date(t).toLocaleString()+'">'+archiefLeeftijd(t)+'</td>';
+  }
+  return '<td class="num" style="font-size:10.5px;color:var(--muted)" title="'+new Date(t).toLocaleString()+'">'+archiefLeeftijd(t)+'</td>';
+}
+function scoreCel(sc,badge,extra){
+  var breedte=sc||0;
+  return '<td class="num"><div class="scorecell">'+(sc==null?"\u2014":sc)+' '+(badge||'')+(extra||'')+'</div>'+
+    '<div class="bar"><i style="width:'+breedte+'%"></i></div></td>';
+}
+function kpi(lbl,val,sub,cls){
+  return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';
+}
 function setStatus(el,html,err){
   var e=typeof el==="string"?$(el):el;
   if(!e)return;
@@ -2365,7 +2385,7 @@ function brokersFor(d){
 function brokerBadge(d){
   var r=brokersFor(d);
   if(!r.brokers.length){
-    return '<span class="trap" title="Deze markt zit niet in de standaarddekking van Bolero, Saxo of MeDirect \u2014 controleer bij je broker." style="margin-left:6px;opacity:.7">? broker</span>';
+    return trapBadge("","? broker","Deze markt zit niet in de standaarddekking van Bolero, Saxo of MeDirect \u2014 controleer bij je broker.",' style="margin-left:6px;opacity:.7"');
   }
   var namen=r.brokers.map(function(b){return b.label+(b.mode==="telefonisch"?" (telefonisch)":"");}).join(", ");
   var kort=r.brokers.map(function(b){return b.label.charAt(0)+(b.mode==="telefonisch"?"\u260e":"");}).join("");
@@ -2937,7 +2957,7 @@ function render(){
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
     var badge=scoreBadge(d._s);
-    var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
+    var trap=d._trap===2?trapBadge("danger","val-trap",d._trapR):d._trap===1?trapBadge("warn","let op",d._trapR):trapBadge("ok","consistent",d._trapR);
     return '<tr>'+
       (function(){
         var toon=NAAM.toon(d), sub=NAAM.sub(d);
@@ -2945,11 +2965,11 @@ function render(){
                (sub?'<span style="display:block;font-size:9.5px;color:var(--muted);font-family:\'IBM Plex Mono\'">'+sub+'</span>':'')+
                effectPaneel(d);
       })()+
-      (VIE_RISK&&VIE_RISK[d.symbol]?'<span class="trap warn" title="VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings." style="margin-left:6px">VIE</span>':'')+
+      (VIE_RISK&&VIE_RISK[d.symbol]?trapBadge("warn","VIE","VIE-structuur: je koopt een contractuele claim op de winst, niet direct eigendom van het bedrijf. Extra juridisch/politiek risico specifiek voor Chinese ADR\'s en HK-duallistings.",' style="margin-left:6px"'):'')+
       linkMenu(d)+
       brokerBadge(d)+
       overlapBadge(d)+
-      (isHolding(d)?'<span class="trap ok" title="Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal." style="margin-left:6px">holding</span>':
+      (isHolding(d)?trapBadge("ok","holding","Holding/investeringsmaatschappij: gescoord op koers/boekwaarde (NAV-proxy) i.p.v. P/E of groei, want die zijn hier vertekend door portefeuille-herwaarderingen. Een korting van 10-15% onder boekwaarde is normaal (conglomeraatkorting), geen automatisch koopsignaal.",' style="margin-left:6px"'):
         (function(){var sug=suggestsHolding(d);return sug?'<span class="trap warn" style="margin-left:6px;cursor:pointer" title="Cijferpatroon lijkt op een holding: '+sug.reasons.join(", ")+'. Klik om te bevestigen en met NAV-scoring te herrekenen." onclick="confirmHoldingSuggestion(\''+d.symbol+'\')">holding?</span>':'';})())+
       '</td>'+
       (function(){
@@ -3000,15 +3020,8 @@ function render(){
         return '<td class="num '+cls+'"'+(tip?' title="'+tip.replace(/"/g,"&quot;")+'" style="cursor:help"':'')+'>'+txt+'</td>';
       })()+
       '<td>'+trap+'</td>'+
-      (function(){
-        var t=d._opgehaald;
-        if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
-        var uren=(Date.now()-t)/3600000;
-        var kl=uren>168?"neg":(uren>48?"":"pos");
-        return '<td class="num '+kl+'" style="font-size:10.5px" title="'+new Date(t).toLocaleString()+'">'+
-               archiefLeeftijd(t)+'</td>';
-      })()+
-      '<td class="num"><div class="scorecell">'+d._s+' '+badge+'</div><div class="bar"><i style="width:'+d._s+'%"></i></div></td>'+
+      opgehaaldCel(d._opgehaald,true)+
+      scoreCel(d._s,badge)+
     '</tr>';
   }).join("");
   renderHoldingsNote();
@@ -4939,9 +4952,9 @@ function renderEtf(){
   $('etfBody').innerHTML=rows.map(function(d){
     var badge=scoreBadge(d._s);
     var risk=etfCloseRisk(d);
-    var riskBadge=risk?('<span class="trap '+(risk.level===2?"danger":"warn")+'" title="'+risk.text+'" style="margin-left:6px">'+(risk.level===2?"sluitingsrisico":"let op")+'</span>'):'';
-    if(d.isLeveraged)riskBadge+='<span class="trap danger" title="Hefboomfonds: versterkt zowel winst als verlies, en is door dagelijkse herbalancering ongeschikt om lang aan te houden." style="margin-left:4px">hefboom</span>';
-    if(d.isInverse)riskBadge+='<span class="trap danger" title="Invers fonds: beweegt tegengesteld aan de index. Door dagelijkse herbalancering ongeschikt voor lange termijn." style="margin-left:4px">invers</span>';
+    var riskBadge=risk?trapBadge(risk.level===2?"danger":"warn",risk.level===2?"sluitingsrisico":"let op",risk.text,' style="margin-left:6px"'):'';
+    if(d.isLeveraged)riskBadge+=trapBadge("danger","hefboom","Hefboomfonds: versterkt zowel winst als verlies, en is door dagelijkse herbalancering ongeschikt om lang aan te houden.",' style="margin-left:4px"');
+    if(d.isInverse)riskBadge+=trapBadge("danger","invers","Invers fonds: beweegt tegengesteld aan de index. Door dagelijkse herbalancering ongeschikt voor lange termijn.",' style="margin-left:4px"');
     return '<tr>'+
       '<td class="l"><span class="tk">'+d.symbol+'</span>'+linkMenu(d)+brokerBadge(d)+riskBadge+overlapBadge(d)+
       '<span class="nm"'+(d.trackingIndex?' title="Volgt: '+d.trackingIndex+(d.domicile?" \u00b7 domicilie: "+d.domicile:"")+(d.etfCompany?" \u00b7 "+d.etfCompany:"")+'"':'')+'>'+NAAM.toon(d,30)+'</span></td>'+
@@ -4957,15 +4970,9 @@ function renderEtf(){
       '<td class="num">'+num(d.weightedPe,function(v){return v.toFixed(1);})+'</td>'+
       '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+num(d.vol,function(v){return v.toFixed(1)+"%";})+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+num(d.chg,function(v){return (v>0?"+":"")+v.toFixed(1)+"%";})+'</td>'+
-      (function(){
-        var t=d._opgehaald;
-        if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
-        return '<td class="num" style="font-size:10.5px;color:var(--muted)" title="'+new Date(t).toLocaleString()+'">'+
-               archiefLeeftijd(t)+'</td>';
-      })()+
-      '<td class="num"><div class="scorecell">'+(d._s==null?"\u2014":d._s)+' '+badge+
-        (d._dek!=null&&d._dek<100?'<span style="font-size:9px;color:var(--muted)" title="Score berekend over '+d._dek+'% van de factoren \u2014 niet alle gegevens beschikbaar"> \u00b7'+d._dek+'%</span>':'')+
-        '</div><div class="bar"><i style="width:'+(d._s||0)+'%"></i></div></td>'+
+      opgehaaldCel(d._opgehaald,false)+
+      scoreCel(d._s,badge,
+        (d._dek!=null&&d._dek<100?'<span style="font-size:9px;color:var(--muted)" title="Score berekend over '+d._dek+'% van de factoren \u2014 niet alle gegevens beschikbaar"> \u00b7'+d._dek+'%</span>':''))+
     '</tr>';
   }).join("");
 }
@@ -6252,7 +6259,7 @@ function renderPortfolio(){
   var avgScore=scorable.length?Math.round(scorable.reduce(function(s,p){return s+p._fresh.score;},0)/scorable.length):null;
   var incomplete=checked.filter(function(p){return p._fresh.completeness&&p._fresh.completeness.level!=="full";}).length;
 
-  function kpi(lbl,val,sub,cls){return '<div class="kpi"><div class="lbl">'+lbl+'</div><div class="val'+(cls?" "+cls:"")+'">'+val+'</div><div class="sub2">'+sub+'</div></div>';}
+
   // Wat vraagt vandaag je aandacht? Dat is nuttiger bovenaan dan een reeks losse cijfers.
   var aandacht=[];
   PORTFOLIO.forEach(function(p){
@@ -6887,8 +6894,7 @@ function renderPortfolioTabel(lijst){
       cel(waarde!=null?Math.round(waarde):null)+
       '<td class="num '+(pl>=0?"pos":"neg")+'">'+(pl!=null?(pl>=0?"+":"")+pl.toFixed(1)+"%":"\u2014")+'</td>'+
       cel(m)+cel(v)+cel(g)+cel(q)+
-      '<td class="num"><div class="scorecell">'+(sc!=null?sc:"\u2014")+'</div>'+
-        '<div class="bar"><i style="width:'+(sc||0)+'%"></i></div></td>'+
+      scoreCel(sc)+
     '</tr>';
   }).join("");
 
