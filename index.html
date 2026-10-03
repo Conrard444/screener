@@ -6979,7 +6979,8 @@ function bindPfTabelSort(list){
 }
 function renderPortfolioTabel(lijst){
   var rijen=lijst.filter(function(p){return p._fresh;});
-  if(!rijen.length)return '<div class="empty">Nog geen gecheckte posities. Klik op \u201cAlles checken\u201d.</div>';
+  var storingen=lijst.filter(function(p){return !p._fresh;});
+  if(!rijen.length&&!storingen.length)return '<div class="empty">Nog geen posities.</div>';
 
   // de opgeslagen ruwe data terughalen zodat de scorefuncties hun werk kunnen doen
   var data=rijen.map(function(p){
@@ -7044,8 +7045,26 @@ function renderPortfolioTabel(lijst){
     '</tr>';
   }).join("");
 
+  var storingHtml=storingen.map(function(p){
+    var reden=(p._alarm&&p._alarm.text)?p._alarm.text:'nog niet gecheckt';
+    var naam=NAAM.toon({symbol:p.symbol,isin:p.isin,naam:p.naam})||p.symbol;
+    return '<tr style="background:rgba(240,180,60,.05)">'+
+      '<td class="l">'+
+        '<span style="color:var(--accent);font-size:10px;letter-spacing:.08em;display:block;margin-bottom:1px">'+
+        ((p._alarm&&p._alarm.text)?'MISLUKT':'NIET GEHECKT')+'</span>'+
+        '<span class="tk">'+naam+'</span>'+
+        '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span>'+
+      '</td>'+
+      '<td class="l" colspan="9" style="font-size:11px;color:var(--muted)">'+
+        '<span title="'+String(reden).replace(/"/g,'&quot;')+'">'+reden+'</span>'+
+        ((p._alarm&&p._alarm.text)?'':' \u2014 klik \u201cAlles checken\u201d om cijfers op te halen')+
+      '</td>'+
+    '</tr>';
+  }).join("");
   return '<div class="scrollhint">\u2194 veeg horizontaal voor alle kolommen</div>'+
-    '<div class="panel-card"><table><thead>'+kop+'</thead><tbody>'+body+'</tbody></table></div>'+
+    (storingen.length?'<div style="font-size:11px;color:var(--accent);margin:6px 0">'+
+      storingen.length+' positie(s) zonder meting'+(rijen.length?' \u2014 onderaan de tabel':'')+'.</div>':'')+
+    '<div class="panel-card"><table><thead>'+kop+'</thead><tbody>'+body+storingHtml+'</tbody></table></div>'+
     '<div style="font-size:11px;color:var(--muted);margin-top:6px">'+
     'De vier factorscores volgen de weegregelaars van het Screener-tabblad; pas die daar aan om de totaalscore te herwegen.</div>';
 }
