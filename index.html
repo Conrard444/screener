@@ -1939,7 +1939,7 @@ function loadIsinCache(){
   }).catch(function(){});
 }
 function saveIsinCache(){
-  try{ LS.set('isinCache',JSON.stringify(ISIN_CACHE)); }catch(e){}
+  lsSafe('isinCache',ISIN_CACHE);
 }
 function lookupIsin(isin,token){
   if(!isin||!token)return Promise.resolve(null);
@@ -2131,6 +2131,12 @@ function herstelRunParams(params,skipVelden){
     if(skip.indexOf(k)>-1)return;
     var el=$(k); if(el&&params[k]!=null)el.value=params[k];
   });
+  if(params&&params.sortKey){
+    sortKey=params.sortKey;
+    sortDir=params.sortDir!=null?params.sortDir:-1;
+    var t=document.querySelector('#tab-screener table');
+    if(t)tabelSortPijl(t,{k:sortKey,dir:sortDir});
+  }
   if(typeof syncWeightUI==="function")syncWeightUI();
 }
 function runLimit(run){
@@ -2168,6 +2174,22 @@ var DEMO_ACTIVE=false; // true zolang de tabel voorbeelddata toont
 function $(id){return document.getElementById(id);}
 var wmEl=$('wm'),wvEl=$('wv'),wgEl=$('wg'),wqEl=$('wq');
 function fmt(v,s){return (v==null||isNaN(v))?"\u2014":(v+(s||""));}
+function scoreBadge(sc){
+  if(sc==null)return '';
+  return sc>=65?'<span class="badge strong">sterk</span>':sc>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
+}
+function setStatus(el,html,err){
+  var e=typeof el==="string"?$(el):el;
+  if(!e)return;
+  e.className=err?"status err":"status";
+  if(html!=null)e.innerHTML=html;
+}
+function num(w,f){
+  return w==null?"\u2014":f(w);
+}
+function lsSafe(key,obj){
+  try{ LS.set(key,JSON.stringify(obj)); }catch(e){}
+}
 function signed(v){return (v==null||isNaN(v))?"\u2014":((v>0?"+":"")+v.toFixed(1)+"%");}
 function cls(v){return v>0?"pos":(v<0?"neg":"");}
 
@@ -2722,7 +2744,7 @@ function notitieBewaar(sleutel,tekst){
   if(!sleutel)return;
   if(tekst&&tekst.trim())EFFECT_NOTITIES[sleutel]={tekst:tekst.trim(),ts:Date.now()};
   else delete EFFECT_NOTITIES[sleutel];
-  try{ LS.set('effectNotities',JSON.stringify(EFFECT_NOTITIES)); }catch(e){}
+  lsSafe('effectNotities',EFFECT_NOTITIES);
   if(typeof FB!=="undefined"&&FB.user&&FB.ready){
     FB.db.collection("users").doc(FB.user.uid).set({effectNotities:EFFECT_NOTITIES},{merge:true}).catch(function(){});
   }
@@ -2914,7 +2936,7 @@ function render(){
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
-    var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
+    var badge=scoreBadge(d._s);
     var trap=d._trap===2?'<span class="trap danger" title="'+d._trapR+'">val-trap</span>':d._trap===1?'<span class="trap warn" title="'+d._trapR+'">let op</span>':'<span class="trap ok" title="'+d._trapR+'">consistent</span>';
     return '<tr>'+
       (function(){
@@ -3397,6 +3419,7 @@ function describeRun(run){
 // huidige screener-instellingen vastleggen bij een run
 function currentRunParams(){
   var ex=$('exchange'), lim=$('limit'), md=$('mode'), hz=$('horizon');
+  var sortZichtbaar=(function(){var t=document.querySelector('#tab-screener table');return !!(t&&t.querySelector('th[data-k="'+sortKey+'"]'));})();
   var label = ex ? (ex.options[ex.selectedIndex]||{}).text : null;
   return {
     universum: label ? label.replace(/\s*\(.*?\)\s*/,"") : null,
@@ -3404,6 +3427,8 @@ function currentRunParams(){
     limit: lim?lim.value:null,
     mode: md?md.value:null,
     horizon: hz?hz.value:null,
+    sortKey: sortZichtbaar?sortKey:null,
+    sortDir: sortZichtbaar?sortDir:null,
     weights: (function(){
       if(typeof weights!=="function"||!(wmEl&&wvEl&&wgEl&&wqEl))return null;
       var w=weights();
@@ -3438,7 +3463,7 @@ function loadCallLog(){
     renderQuota();
   }).catch(function(){renderQuota();});
 }
-function saveCallLog(){ try{ LS.set('callLog',JSON.stringify(CALL_LOG)); }catch(e){} }
+function saveCallLog(){ lsSafe('callLog',CALL_LOG); }
 
 function recordCall(src,n){
   if(!src)return;
@@ -4912,7 +4937,7 @@ function renderEtf(){
     rows.sort(function(a,b){return tabelSortVergelijk(a[kk],b[kk],ETF_SORT.dir||-1);});
   }else rows.sort(function(a,b){return b._s-a._s;});
   $('etfBody').innerHTML=rows.map(function(d){
-    var badge=d._s>=65?'<span class="badge strong">sterk</span>':d._s>=45?'<span class="badge mid">matig</span>':'<span class="badge weak">zwak</span>';
+    var badge=scoreBadge(d._s);
     var risk=etfCloseRisk(d);
     var riskBadge=risk?('<span class="trap '+(risk.level===2?"danger":"warn")+'" title="'+risk.text+'" style="margin-left:6px">'+(risk.level===2?"sluitingsrisico":"let op")+'</span>'):'';
     if(d.isLeveraged)riskBadge+='<span class="trap danger" title="Hefboomfonds: versterkt zowel winst als verlies, en is door dagelijkse herbalancering ongeschikt om lang aan te houden." style="margin-left:4px">hefboom</span>';
@@ -4924,14 +4949,14 @@ function renderEtf(){
         (d.trackingIndex||"\u2014")+'</td>'+
       '<td class="l" style="font-size:11px;font-family:\'IBM Plex Mono\';color:var(--muted)">'+
         (d.isin?'<span style="cursor:pointer" title="Klik om te kopiëren" onclick="copyIsin(\''+d.isin+'\',this)">'+d.isin+'</span>':'\u2014')+'</td>'+
-      '<td class="num">'+(d.aum!=null?"$"+d.aum+"mld":"\u2014")+'</td>'+
-      '<td class="num">'+(d.ter!=null?d.ter.toFixed(2)+"%":"\u2014")+'</td>'+
-      '<td class="num">'+(d.holdings!=null?d.holdings.toLocaleString():"\u2014")+'</td>'+
-      '<td class="num">'+(d.top10!=null?d.top10.toFixed(1)+"%":"\u2014")+'</td>'+
-      '<td class="num">'+(d.yield!=null?d.yield.toFixed(1)+"%":"\u2014")+'</td>'+
-      '<td class="num">'+(d.weightedPe!=null?d.weightedPe.toFixed(1):"\u2014")+'</td>'+
-      '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+(d.vol!=null?d.vol.toFixed(1)+"%":"\u2014")+'</td>'+
-      '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+(d.chg!=null?((d.chg>0?"+":"")+d.chg.toFixed(1)+"%"):"\u2014")+'</td>'+
+      '<td class="num">'+num(d.aum,function(v){return "$"+v+"mld";})+'</td>'+
+      '<td class="num">'+num(d.ter,function(v){return v.toFixed(2)+"%";})+'</td>'+
+      '<td class="num">'+num(d.holdings,function(v){return v.toLocaleString();})+'</td>'+
+      '<td class="num">'+num(d.top10,function(v){return v.toFixed(1)+"%";})+'</td>'+
+      '<td class="num">'+num(d.yield,function(v){return v.toFixed(1)+"%";})+'</td>'+
+      '<td class="num">'+num(d.weightedPe,function(v){return v.toFixed(1);})+'</td>'+
+      '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+num(d.vol,function(v){return v.toFixed(1)+"%";})+'</td>'+
+      '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+num(d.chg,function(v){return (v>0?"+":"")+v.toFixed(1)+"%";})+'</td>'+
       (function(){
         var t=d._opgehaald;
         if(!t)return '<td class="num" style="font-size:10.5px;color:var(--muted)">nu</td>';
@@ -5005,7 +5030,7 @@ var EULER_BASE="https://api.eulerpool.com/api/1";
 // ISIN's voor Amerikaanse aandelen (SecuritiesDB levert die niet mee)
 // aliassen bewaren zodat elk fonds dat je ooit opzocht permanent herkend blijft
 function saveAliases(){
-  try{ LS.set('etfAliases',JSON.stringify(EULER_ETF_ALIASES)); }catch(e){}
+  lsSafe('etfAliases',EULER_ETF_ALIASES);
 }
 function loadAliases(){
   LS.get('etfAliases').then(function(r){
@@ -5492,14 +5517,14 @@ function runEtf(){
     if(typeof saveLastRun==="function"){
       var catEl=$('etfCategory');
       var etfParams={categorie: catEl?(catEl.options[catEl.selectedIndex]||{}).text:null,
-                     categorieId: catEl?catEl.value:null};
+                     categorieId: catEl?catEl.value:null,
+                     etfSort: ETF_SORT};
       saveLastRun('etfs',all,etfParams);
       if(etfParams.categorieId) saveLastRun('etfs_'+etfParams.categorieId,all,etfParams);
     }
-    st.className=failed.length?"status err":"status";
-    st.innerHTML="Klaar \u2014 <b>"+all.length+"</b> fondsen vergeleken"+
+    setStatus(st,"Klaar \u2014 <b>"+all.length+"</b> fondsen vergeleken"+
       (failed.length?'.<br>\u26a0\ufe0f <b>'+failed.length+' niet gevonden</b>: '+failed.join(", ")+
-        ' \u2014 controleer of deze ISIN/ticker klopt, of dat de juiste sleutel is ingesteld.':".");
+        ' \u2014 controleer of deze ISIN/ticker klopt, of dat de juiste sleutel is ingesteld.':"."),failed.length>0);
     renderEtf();
   });
 }
@@ -5543,13 +5568,15 @@ ETF_CURRENT=[];
 function showLastEtfRun(silent){
   return loadLastRun('etfs').then(function(run){
     if(!run||!run.data||!run.data.length){
-      if(!silent){$('etfStatus').className="status";$('etfStatus').innerHTML='Geen bewaarde vergelijking gevonden.';}
+      if(!silent)setStatus('etfStatus','Geen bewaarde vergelijking gevonden.');
       return false;
     }
+    if(run.params&&run.params.etfSort)ETF_SORT=run.params.etfSort;
     ETF_CURRENT=run.data; renderEtf();
-    $('etfStatus').className="status";
-    $('etfStatus').innerHTML='\ud83d\udcbe Laatste vergelijking \u2014 '+describeRun(run)+
-      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
+    setStatus('etfStatus','\ud83d\udcbe Laatste vergelijking \u2014 '+describeRun(run)+
+      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>');
+    var t=document.querySelector('#tab-etf table');
+    if(t&&ETF_SORT&&ETF_SORT.k)tabelSortPijl(t,ETF_SORT);
     return true;
   }).catch(function(){return false;});
 }
@@ -5599,7 +5626,7 @@ function pfHernoem(id,naam){
 }
 function savePortfoliosLocal(){
   pfSync();
-  try{ LS.set('portfolios',JSON.stringify({actief:ACTIEVE_PF,lijsten:PORTFOLIOS})); }catch(e){}
+  lsSafe('portfolios',{actief:ACTIEVE_PF,lijsten:PORTFOLIOS});
 }
 function savePortfoliosCloud(){
   pfSync();
@@ -5707,7 +5734,7 @@ function savePortfolioLocal(){
   // pfSync eerst: bij verwijderen wordt PORTFOLIO vervangen door een nieuwe array,
   // waardoor PORTFOLIOS nog naar de oude wees en de wijziging verloren ging.
   if(typeof pfSync==="function")pfSync();
-  try{ LS.set('portfolio',JSON.stringify(PORTFOLIO)); }catch(e){}
+  lsSafe('portfolio',PORTFOLIO);
   savePortfoliosLocal();
 }
 function loadPortfolioLocal(){
@@ -7062,7 +7089,7 @@ function rebuildHoldingSet(){
   window.HOLDING_SET=HOLDING_SET;
 }
 function saveHoldingsLocal(){
-  try{ LS.set('holdingCustom',JSON.stringify(HOLDING_CUSTOM)); }catch(e){}
+  lsSafe('holdingCustom',HOLDING_CUSTOM);
 }
 function loadHoldingsLocal(){
   try{
