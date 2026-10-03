@@ -790,6 +790,15 @@ var BRON={
         </div>
         <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
         <button class="btn-ghost" id="etfLoadLast" title="Toon de laatste vergelijking opnieuw, zonder API-calls">Laatste tonen</button>
+        <div class="field">
+          <label>Broker</label>
+          <select id="etfBroker" title="Toon alleen fondsen die deze broker volgens de beursdekking waarschijnlijk aanbiedt. Het is een indicatie op basis van de gepubliceerde marktendekking, geen garantie — controleer altijd in je eigen platform.">
+            <option value="">Alle brokers</option>
+            <option value="saxo">SaxoInvestor</option>
+            <option value="bolero">Bolero</option>
+            <option value="medirect">MeDirect</option>
+          </select>
+        </div>
       </div>
       <div class="control-row compact">
         <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging:</span>
@@ -4833,7 +4842,12 @@ function renderIndexVergelijking(){
 function renderEtf(){
   if(typeof renderIndexVergelijking==="function")setTimeout(renderIndexVergelijking,0);
   buildEtfPeers(ETF_CURRENT);
-  var rows=ETF_CURRENT.map(function(d){
+  var brokerFilter=$('etfBroker')?$('etfBroker').value:"";
+  var rows=ETF_CURRENT.filter(function(d){
+    if(!brokerFilter)return true;
+    var r=brokersFor(d);
+    return r.brokers.some(function(b){return b.key===brokerFilter;});
+  }).map(function(d){
     var s=etfTotalScore(d);
     var det=(typeof etfPortfolioScore==="function")?etfPortfolioScore(d):null;
     return Object.assign({},d,{_s:(s==null?null:s),_dek:det?det.basedOn:null});
@@ -5446,6 +5460,16 @@ if($('etfCategory'))$('etfCategory').onchange=function(){
   }
 };
 if($('etfDemo'))$('etfDemo').onclick=function(){ETF_CURRENT=ETF_DEMO;renderEtf();};
+if($('etfBroker'))$('etfBroker').onchange=function(){
+  renderEtf();
+  var f=this.value;
+  if(f&&ETF_CURRENT.length){
+    var zichtbaar=ETF_CURRENT.filter(function(d){return brokersFor(d).brokers.some(function(b){return b.key===f;});}).length;
+    var label=f==='saxo'?'SaxoInvestor':(f==='bolero'?'Bolero':'MeDirect');
+    $('etfStatus').className="status";
+    $('etfStatus').innerHTML='Brokerfilter <b>'+label+'</b>: '+zichtbaar+' van '+ETF_CURRENT.length+      ' fondsen voldoen aan de beursdekking \u2014 indicatie, controleer in je platform.';
+  }
+};
 ['ewc','ewd','ewl','ewt'].forEach(function(id){$(id).oninput=function(e){$(id+'-v').textContent=e.target.value;if(ETF_CURRENT.length)renderEtf();};});
 // Slider-defaults staan in de HTML, maar de score-logica leest ETF_STANDAARD_WEGING.
 // Deze synchronisatie houdt beide gelijk zonder handmatige dubbele wijziging.
