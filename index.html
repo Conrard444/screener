@@ -6219,6 +6219,7 @@ function renderPortfolio(){
   var weergave=$('pfWeergave')?$('pfWeergave').value:"kaart";
   if(weergave==="tabel"){
     el.innerHTML=renderPortfolioTabel(list);
+    bindPfTabelSort(list);
     renderOverlap();
     return;
   }
@@ -6706,6 +6707,42 @@ function spreidingsAnalyse(){
 // Portefeuille als tabel, met dezelfde kolommen en dezelfde weegregelaars als de screener.
 // Hergebruikt totalScore() en de losse factorscores, dus een wijziging aan de weging werkt
 // hier meteen door - geen aparte berekening die uit de pas kan lopen.
+var PF_TABEL_SORT=null;
+function pfTabelSorteerWaarde(p,k){
+  var f=p._fresh||{};
+  if(k==="symbol")return (p.symbol||"").toLowerCase();
+  if(k==="sector")return (f.sector||"").toLowerCase();
+  if(k==="price"){var c=positieKoers(p);return c?c.v:-1e12;}
+  if(k==="value")return valueOf(p);
+  if(k==="pl"){var r=plOf(p);return r==null?-1e12:r;}
+  if(k==="m")return f.m==null?-1e12:f.m;
+  if(k==="v")return f.v==null?-1e12:f.v;
+  if(k==="g")return f.g==null?-1e12:f.g;
+  if(k==="q")return f.q==null?-1e12:f.q;
+  if(k==="score")return f.score==null?-1e12:f.score;
+  return 0;}
+function bindPfTabelSort(list){
+  var el=$('pfList'); if(!el)return;
+  Array.prototype.forEach.call(el.querySelectorAll('th[data-pfk]'),function(th){
+    th.style.cursor="pointer";
+    th.onclick=function(){
+      var k=th.getAttribute("data-pfk");
+      if(!k)return;
+      if(PF_TABEL_SORT&&PF_TABEL_SORT.k===k)PF_TABEL_SORT.dir*=-1;
+      else PF_TABEL_SORT={k:k,dir:(k==="symbol"||k==="sector")?1:-1};
+      var d=PF_TABEL_SORT.dir;
+      var gesorteerd=list.slice().sort(function(a,b){
+        var va=pfTabelSorteerWaarde(a,k), vb=pfTabelSorteerWaarde(b,k);
+        if(typeof va==="string"&&typeof vb==="string")return va.localeCompare(vb)*d;
+        if(typeof va==="string")return -d;
+        if(typeof vb==="string")return d;
+        return (va-vb)*d;
+      });
+      el.innerHTML=renderPortfolioTabel(gesorteerd);
+      bindPfTabelSort(gesorteerd);
+    };
+  });
+}
 function renderPortfolioTabel(lijst){
   var rijen=lijst.filter(function(p){return p._fresh;});
   if(!rijen.length)return '<div class="empty">Nog geen gecheckte posities. Klik op \u201cAlles checken\u201d.</div>';
@@ -6720,8 +6757,20 @@ function renderPortfolioTabel(lijst){
   });
   buildPeers(data);
 
-  var kop='<tr><th class="l">Positie</th><th class="l">Sector</th><th>Koers</th><th>Waarde</th>'+
-    '<th>Rendement</th><th>Mom.</th><th>Waard.</th><th>Groei</th><th>Kwal.</th><th>Score</th></tr>';
+  var pijl=function(k){
+    if(!PF_TABEL_SORT||PF_TABEL_SORT.k!==k)return "";
+    return '<span class="arrow"> '+(PF_TABEL_SORT.dir<0?"\u25be":"\u25b4")+'</span>';
+  };
+  var kop='<tr><th class="l" data-pfk="symbol" title="Klik om op positie te sorteren">Positie'+pijl("symbol")+'</th>'+
+    '<th class="l" data-pfk="sector" title="Klik om op sector te sorteren">Sector'+pijl("sector")+'</th>'+
+    '<th data-pfk="price" title="Klik om op koers te sorteren">Koers'+pijl("price")+'</th>'+
+    '<th data-pfk="value" title="Klik om op waarde te sorteren">Waarde'+pijl("value")+'</th>'+
+    '<th data-pfk="pl" title="Klik om op rendement te sorteren">Rendement'+pijl("pl")+'</th>'+
+    '<th data-pfk="m" title="Klik om op momentum te sorteren">Mom.'+pijl("m")+'</th>'+
+    '<th data-pfk="v" title="Klik om op waardering te sorteren">Waard.'+pijl("v")+'</th>'+
+    '<th data-pfk="g" title="Klik om op groei te sorteren">Groei'+pijl("g")+'</th>'+
+    '<th data-pfk="q" title="Klik om op kwaliteit te sorteren">Kwal.'+pijl("q")+'</th>'+
+    '<th data-pfk="score" title="Klik om op score te sorteren">Score'+pijl("score")+'</th></tr>';
   var body=data.map(function(d){
     var p=d._pos, f=p._fresh;
     var k=positieKoers(p), waarde=positieWaarde(p), r=positieRendement(p);
