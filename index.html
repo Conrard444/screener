@@ -1462,7 +1462,7 @@ var KERNVELDEN=[
   // groei
   'revG','epsG',
   // koers en momentum
-  'price','chg','mom1m','dd','vol','maxTerugval','aandelenAantal','uitgifte','divYield',
+  'price','chg','mom1m','mom3m','mom6m','dd','vol','maxTerugval','aandelenAantal','uitgifte','divYield',
   // omvang en herkomst
   '_mcap','_src','currency',
   // winstverrassing (alleen aanwezig als de optie aanstaat)
@@ -1487,7 +1487,7 @@ function herrekenbaarheid(item){
   var waardering=(item.pe!=null||item.peNorm!=null||item.pb!=null||item.peVsHist!=null);
   var groei=(item.revG!=null||item.epsG!=null);
   var kwaliteit=(item.roe!=null||item.aaqs!=null||item.piotroski!=null||item.roce!=null);
-  var momentum=(item.mom1m!=null||item.chg!=null);
+  var momentum=(item.mom1m!=null||item.mom3m!=null||item.mom6m!=null||item.chg!=null);
   var n=[waardering,groei,kwaliteit,momentum].filter(Boolean).length;
   return {niveau:n===4?"volledig":(n>=2?"gedeeltelijk":"geen"), factoren:n,
           waardering:waardering,groei:groei,kwaliteit:kwaliteit,momentum:momentum};
@@ -3351,7 +3351,11 @@ function currentRunParams(){
     limit: lim?lim.value:null,
     mode: md?md.value:null,
     horizon: hz?hz.value:null,
-    weights: (wmEl&&wvEl&&wgEl&&wqEl) ? ("M"+wmEl.value+"/W"+wvEl.value+"/G"+wgEl.value+"/K"+wqEl.value) : null,
+    weights: (function(){
+      if(typeof weights!=="function"||!(wmEl&&wvEl&&wgEl&&wqEl))return null;
+      var w=weights();
+      return "M"+Math.round(w.wm*100)+"/W"+Math.round(w.wv*100)+"/G"+Math.round(w.wg*100)+"/K"+Math.round(w.wq*100);
+    })(),
     mcap: $('mcap')?$('mcap').value:null,
     pemax: $('pemax')?$('pemax').value:null
   };
@@ -7184,6 +7188,15 @@ function syncWeightUI(){
     var note=document.getElementById('wnote');
     if(note)note.textContent=lang?' (vast op fundamenten in langetermijn)':herstel?' (vast in herstel-modus)':'';
   }
+  // Toon de effectieve weging in de labels: bij lange termijn of herstel gelden vaste
+  // verhoudingen, niet de sliderwaarden. Zo zie je wat er daadwerkelijk in de score zit.
+  var eff=herstel?{wm:30,wv:35,wg:0,wq:35}:(lang?{wm:10,wv:30,wg:15,wq:45}:null);
+  ['wm','wv','wg','wq'].forEach(function(id){
+    var el=document.getElementById(id+'-v');
+    if(!el)return;
+    if(dim&&eff){el.textContent=eff[id];el.parentNode.style.color='var(--accent)';}
+    else{el.textContent=document.getElementById(id).value;el.parentNode.style.color='';}
+  });
 }
 if($('horizon'))$('horizon').onchange=function(){syncWeightUI();if(CURRENT.length)render();};
 if($('mode'))$('mode').onchange=function(){syncWeightUI();if(CURRENT.length)render();};
@@ -7249,7 +7262,17 @@ function takeSnapshot(){
                   geen:dekking.filter(function(x){return x.niveau==="geen";}).length},
     universum:$('exchange')?$('exchange').options[$('exchange').selectedIndex].text:null,
     getoond:CURRENT.length,
-    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+($('wq')?$('wq').value:30)},
+    // Effectieve weging opslaan, niet de sliderwaarden: bij langetermijn/herstel
+    // gelden vaste verhoudingen en de sliders liegen over wat er echt in de score zat.
+    horizon:(typeof currentHorizon==="function")?currentHorizon():null,
+    modus:(typeof currentMode==="function")?currentMode():null,
+    weights:(function(){
+      if(typeof weights!=="function")return null;
+      var w=weights();
+      return {wm:Math.round(w.wm*100),wv:Math.round(w.wv*100),
+              wg:Math.round(w.wg*100),wq:Math.round(w.wq*100)};
+    })(),
+    sliders:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+($('wq')?$('wq').value:30)},
     items:items});
   var zonderKoers=items.filter(function(it){return it.price==null;}).length;
   var waarschuwing = zonderKoers
