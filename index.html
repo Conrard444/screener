@@ -1311,6 +1311,7 @@ details[open] > summary{margin-bottom:4px}
 //   13. ETF-catalogus & ETF-databronnen (SecuritiesDB, Eulerpool)  [ETF-catalogus: voorgeprogrammeerde selecties van grote Amerikaanse fondsen]
 //   14. ETF-beoordeling: compleetheid, fiscale last, index-groepering, efficiëntie  [Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score?]
 //   15. Portefeuille-analyse: alarms, verkoopsignalen, overlap-analyse, rendement, imports, spreiding  [Fiscale efficiëntie van een fonds]
+//   16. Firebase-cloud-sync: inloggen, centrale cloud-lezer (loadCloud), instellingen- en sleutelopslag  [Firebase cloud-sync]
 <script>
 const DEMO=[
   {symbol:"NVDA", name:"NVIDIA Corp.",     market:"US",sector:"Technologie",roe:91.9,margin:55.0,de:0.41,dd:-5.2,price:128.7,chg:5.4,mom1m:18.9,pe:54.8,peg:1.1,pb:46.1,revG:78.0,epsG:88.0},
@@ -2888,7 +2889,92 @@ function signaalAccuratesseMeten(){
       });
     });
   });
-  seq.then(function(){ lijst.innerHTML=renderSignaalAccuratesse(rijen); st.textContent="Accuratesse gemeten over "+rijen.length+" factor-waarnemingen."; });
+  seq.then(function(){
+    lijst.innerHTML=renderSignaalAccuratesse(rijen);
+    st.textContent="Accuratesse gemeten over "+rijen.length+" factor-waarnemingen.";
+    var rap=accuratesseRapportMaken(rijen);
+    if(rap){ accuratesseRapportOpslaan(rap); lijst.innerHTML+=renderAccuratesseHistorie(); }
+  });
+}
+// ---- Accuratesse-rapporten apart bewaren ----
+// Elke meting wordt als volledig rapport opgeslagen (correlaties per factor + alle
+// waarnemingsrijen), zodat je de scoremethodiek later opnieuw kunt aftoetsen tegen
+// wat er sindsdien met de koersen gebeurde. Zelfde patroon als de rest van de
+// opslaglaag: localStorage eerst (werkt zonder login), Firestore erna ( sync tussen apparaten).
+var ACC_RAPPORTEN_KEY='accuratesseRapporten';
+var ACC_RAPPORTEN_MAX=40;
+function accuratesseRapportMaken(rijen){
+  if(!rijen||!rijen.length)return null;
+  var factoren=['sentiment','insider','aanbeveling','target'];
+  var perFactor={};
+  factoren.forEach(function(f){
+    var rs=rijen.filter(function(r){return r.factor===f&&r.rend!=null;});
+    var c=correlatie(rs);
+    perFactor[f]={corr:c==null?null:+c.toFixed(3), n:rs.length};
+  });
+  return {
+    ts:Date.now(), datum:todayKey(),
+    n:rijen.length,
+    perFactor:perFactor,
+    rijen:rijen.map(function(r){
+      return {sym:r.sym,factor:r.factor,score:r.score,rend:r.rend,datum:r.datum};
+    })
+  };
+}
+function accuratesseRapportenLezen(){
+  var r=localStorage.getItem('kompas_'+ACC_RAPPORTEN_KEY);
+  if(!r)return [];
+  try{ var d=JSON.parse(r); return Array.isArray(d)?d:[]; }catch(e){ return []; }
+}
+function accuratesseRapportenBewaren(lijstRap){
+  try{ localStorage.setItem('kompas_'+ACC_RAPPORTEN_KEY,JSON.stringify(lijstRap)); }catch(e){}
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    var upd={}; upd[ACC_RAPPORTEN_KEY]=lijstRap;
+    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true})
+      .catch(function(e){ console.warn('Kompas: accuratesse-rapporten naar cloud mislukt',e&&e.message); });
+  }
+}
+function accuratesseRapportOpslaan(rap){
+  var lijstRap=accuratesseRapportenLezen();
+  lijstRap.push(rap);
+  if(lijstRap.length>ACC_RAPPORTEN_MAX)lijstRap=lijstRap.slice(-ACC_RAPPORTEN_MAX);
+  accuratesseRapportenBewaren(lijstRap);
+}
+// cloud-versie inladen als die meer of nieuwere rapporten heeft dan lokaal
+function accuratesseRapportenCloudMergen(){
+  if(typeof FB==="undefined"||!FB.user||!FB.ready)return Promise.resolve();
+  return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var cloud=doc.exists?doc.data()[ACC_RAPPORTEN_KEY]:null;
+    if(!Array.isArray(cloud)||!cloud.length)return;
+    var lokaal=accuratesseRapportenLezen();
+    if(cloud.length<=lokaal.length)return;
+    try{ localStorage.setItem('kompas_'+ACC_RAPPORTEN_KEY,JSON.stringify(cloud)); }catch(e){}
+  }).catch(function(){
+  });
+}
+function renderAccuratesseHistorie(){
+  var lijstRap=accuratesseRapportenLezen();
+  if(!lijstRap.length)return '';
+  var faktorNamen={sentiment:"Sentiment",insider:"Insider",aanbeveling:"Aanbeveling",target:"Target"};
+  var uit='<div class="snap" style="margin-top:10px"><details><summary class="sub-kop">Bewaarde accuratesse-rapporten ('+lijstRap.length+')</summary>'+
+    '<div style="font-size:12px;color:var(--muted);margin-top:6px">Elke meting wordt als rapport bewaard (laatste '+ACC_RAPPORTEN_MAX+'), lokaal en in je account. Gebruik de geschiedenis om de weging van de signaalfactoren over langere periode te toetsen: één meting is ruis, een reeks metingen over maanden is een trend.</div>';
+  lijstRap.slice().reverse().forEach(function(rap){
+    var d=new Date(rap.ts);
+    var datum=d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px">'+
+      '<b>'+datum+'</b> <span class="muted-tekst">(n='+rap.n+' waarnemingen)</span>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:3px">';
+    ['sentiment','insider','aanbeveling','target'].forEach(function(f){
+      var p=rap.perFactor&&rap.perFactor[f];
+      if(!p)return;
+      var corr=p.corr==null?'\u2014':((p.corr>0?'+':'')+p.corr.toFixed(2));
+      var kleur=p.corr==null?'var(--muted)':(p.corr>0.2?'#1a7f37':(p.corr<-0.2?'#c0392b':'var(--muted)'));
+      uit+='<span>'+faktorNamen[f]+': <b style="color:'+kleur+'">'+corr+'</b> <span class="muted-tekst">(n='+p.n+')</span></span>';
+    });
+    uit+='</div></div>';
+  });
+  uit+='</details></div>';
+  return uit;
 }
 function correlatie(rijen){
   var xs=rijen.map(function(r){return r.score;}), ys=rijen.map(function(r){return r.rend;});
@@ -7794,6 +7880,11 @@ $('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
 // nieuwstabblad
 if($('nwOphalen'))$('nwOphalen').onclick=nieuwsOphalen;
 if($('nwAccuratesse'))$('nwAccuratesse').onclick=signaalAccuratesseMeten;
+// bewaarde accuratesse-rapporten al bij binnenkomst tonen, niet alleen na een meting
+if(typeof renderAccuratesseHistorie==="function"){
+  var accHv=$('nwLijst');
+  if(accHv&&!accHv.innerHTML.trim())accHv.innerHTML=renderAccuratesseHistorie();
+}
 // tab-navigatie: één centrale luisteraar die het actieve tabblad en -paneel wisselt,
 // plus de per-tabblad-haken (nieuws: portefeuillekiezer vullen).
 document.querySelectorAll('.tab').forEach(function(t){
@@ -7901,6 +7992,192 @@ tabelSortInit(ETF_SORT_CFG);
 tabelSortPijl(document.querySelector('#tab-screener table'),{k:sortKey,dir:sortDir});
 
 render();
+
+// ============================================================================
+// 16. Firebase-cloud-sync: inloggen, laden en opslaan
+// ============================================================================
+// ---- Firebase cloud-sync ----
+// Init-blok (FB-object, initializeApp, auth-listener, login-knoppen) was verloren
+// gegaan bij een eerdere upload-herstructurering: alle schrijf-calls hierboven staan
+// achter typeof FB!=="undefined"-controles en vielen daardoor stilzwijgend weg -
+// inloggen en cloud-opslag deden niets meer. Dit blok is het vaste anker: één plek
+// waar FB bestaat en auth verloopt; alle andere lagen lezen FB alleen.
+var FB={app:null,auth:null,db:null,user:null,ready:false};
+function syncMsg(t){
+  var e=$('syncStatus');
+  if(e)e.innerHTML=t;
+  var k=$('cloudKopStatus');
+  if(k)k.innerHTML=String(t).replace(/Cloud-sync:\s*/,"").replace(/\s*\u2014 log in om.*$/,"");
+}
+function toonInlogStatus(ingelogd){
+  [['loginBtn','logoutBtn'],['cloudKopLogin','cloudKopLogout']].forEach(function(p){
+    var aan=$(p[0]), uit=$(p[1]);
+    if(aan)aan.style.display=ingelogd?"none":"";
+    if(uit)uit.style.display=ingelogd?"":"none";
+  });
+}
+(function initFirebase(){
+  if(typeof firebase==="undefined"||!window.FIREBASE_CONFIG){
+    syncMsg("\u2601\ufe0f Cloud-sync niet beschikbaar (Firebase niet geladen \u2014 werkt alleen op de online versie).");
+    return;
+  }
+  try{
+    FB.app=firebase.initializeApp(FIREBASE_CONFIG);
+    FB.auth=firebase.auth();
+    FB.db=firebase.firestore();
+    FB.ready=true;
+    FB.auth.onAuthStateChanged(function(user){
+      FB.user=user;
+      if(user){
+        toonInlogStatus(true);
+        syncMsg("\u2601\ufe0f Ingelogd als <b>"+(user.displayName||user.email)+"</b> \u2014 synchroniseren\u2026");
+        loadCloud();
+      }else{
+        toonInlogStatus(false);
+        syncMsg("\u2601\ufe0f Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.");
+      }
+    });
+  }catch(e){
+    syncMsg("\u2601\ufe0f Cloud-sync kon niet starten: "+(e&&e.message||e));
+  }
+})();
+if($('loginBtn'))$('loginBtn').onclick=function(){
+  if(!FB.ready){syncMsg("Cloud-sync werkt alleen op de online (https) versie van de pagina.");return;}
+  var prov=new firebase.auth.GoogleAuthProvider();
+  FB.auth.signInWithPopup(prov).catch(function(e){syncMsg("Inloggen mislukt: "+(e&&e.message||e));});
+};
+if($('logoutBtn'))$('logoutBtn').onclick=function(){if(FB.auth)FB.auth.signOut();};
+if($('cloudKopLogin'))$('cloudKopLogin').onclick=function(){$('loginBtn').click();};
+if($('cloudKopLogout'))$('cloudKopLogout').onclick=function(){if(FB.auth)FB.auth.signOut();};
+if($('saveSettingsBtn'))$('saveSettingsBtn').onclick=function(){if(typeof saveSettingsCloud==="function")saveSettingsCloud();};
+if($('syncKeys'))$('syncKeys').onchange=function(){
+  if(!FB.user){syncMsg("Log eerst in om sleutels te synchroniseren.");$('syncKeys').checked=false;return;}
+  saveKeysCloud();
+  syncMsg($('syncKeys').checked
+    ? "\u2601\ufe0f Sleutels worden nu meegesynchroniseerd. Bewaar hier g\u00e9\u00e9n betaalde sleutels."
+    : "\u2601\ufe0f Sleutel-sync uit \u2014 sleutels uit de cloud verwijderd. Lokale sleutels blijven op dit apparaat.");
+};
+// centrale cloud-lezer: haalt het user-document \u00e9\u00e9n keer op en verdeelt de velden
+// over de modules (sleutels, portefeuilles, notities, holdings, instellingen,
+// laatste screenings, accuratesse-rapporten)
+function loadCloud(){
+  if(!FB.user||!FB.ready)return;
+  FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var data=doc.exists?doc.data():{};
+    var gotKeys=0;
+    if(data.keys){
+      if($('syncKeys'))$('syncKeys').checked=true;
+      ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){
+        if(data.keys[src]){
+          KEYCACHE[src]=data.keys[src];
+          MULTI_KEYS[src]=data.keys[src];
+          gotKeys++;
+          LS.set(keyStorageId(src),data.keys[src]);
+          var f=$('key_'+src);
+          if(f)f.value=data.keys[src];
+          if(typeof setKeyStatus==="function")setKeyStatus(src,"ok","ingesteld");
+        }
+      });
+      if(typeof updateSourceIndicator==="function")updateSourceIndicator();
+    }
+    if(data.portfolios&&data.portfolios.lijsten&&typeof PORTFOLIOS!=="undefined"){
+      var cloudLijsten=data.portfolios.lijsten;
+      var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
+        return !(PORTFOLIOS[k].posities||[]).length;
+      });
+      if(lokaalLeeg){
+        PORTFOLIOS=cloudLijsten;
+        if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
+        ACTIEVE_PF=(data.portfolios.actief&&PORTFOLIOS[data.portfolios.actief])?data.portfolios.actief:"eigen";
+        if(typeof savePortfoliosLocal==="function")savePortfoliosLocal();
+        if(typeof renderPfKiezer=="function")renderPfKiezer();
+        if(typeof renderPortfolio=="function")renderPortfolio();
+      }else if(typeof savePortfoliosCloud=="function"){
+        savePortfoliosCloud();
+        if(typeof renderPfKiezer=="function")renderPfKiezer();
+      }
+    }
+    if(data.effectNotities&&typeof EFFECT_NOTITIES!=="undefined"){
+      Object.keys(data.effectNotities).forEach(function(k){
+        var cloud=data.effectNotities[k], lokaal=EFFECT_NOTITIES[k];
+        if(!lokaal||(cloud.ts||0)>(lokaal.ts||0))EFFECT_NOTITIES[k]=cloud;
+      });
+      try{ LS.set('effectNotities',JSON.stringify(EFFECT_NOTITIES)); }catch(e){}
+    }
+    if(data.holdingCustom&&typeof HOLDING_CUSTOM!=="undefined"){
+      var merged={}; HOLDING_CUSTOM.concat(data.holdingCustom).forEach(function(s){merged[s]=1;});
+      HOLDING_CUSTOM=Object.keys(merged);
+      if(typeof rebuildHoldingSet=="function"){rebuildHoldingSet();renderHoldingList();if(CURRENT&&CURRENT.length)render();}
+    }
+    if(typeof accuratesseRapportenCloudMergen=="function")accuratesseRapportenCloudMergen();
+    ['stocks','etfs'].forEach(function(kind){
+      var cloudRun=data['lastRun_'+kind];
+      if(!cloudRun||!cloudRun.data||!cloudRun.data.length)return;
+      LS.get('lastRun_'+kind).then(function(r){
+        var localTs=0;
+        if(r&&r.value){ try{ localTs=(JSON.parse(r.value)||{}).ts||0; }catch(e){} }
+        if(cloudRun.ts>localTs){
+          LS.set('lastRun_'+kind,JSON.stringify(cloudRun));
+          if(kind==='etfs'&&typeof ETF_CURRENT!=="undefined"&&typeof renderEtf=="function"){
+            ETF_CURRENT=cloudRun.data; renderEtf();
+            setStatus($('etfStatus'),'\u2601\ufe0f Laatste vergelijking uit je account \u2014 '+describeRun(cloudRun)+' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>',false);
+          }
+          if(kind==='stocks'){
+            SCORESET=cloudRun.data.slice();
+            if(typeof buildPeers=="function")buildPeers(SCORESET);
+            var lim=parseInt((cloudRun.params&&cloudRun.params.limit)||25,10);
+            CURRENT=cloudRun.data.slice().sort(function(a,b){return totalScore(b)-totalScore(a);}).slice(0,lim);
+            if(cloudRun.params){
+              ['exchange','limit','mode','horizon','mcap','pemax'].forEach(function(k){
+                var el=$(k); if(el&&cloudRun.params[k]!=null)el.value=cloudRun.params[k];
+              });
+              syncWeightUI();
+            }
+            render();
+            setStatus($('status'),'\u2601\ufe0f Laatste screening uit je account \u2014 '+describeRun(cloudRun)+' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>',false);
+          }
+        }
+      }).catch(function(){});
+    });
+    syncMsg("\u2601\ufe0f Gesynchroniseerd als <b>"+(FB.user.displayName||FB.user.email)+"</b>"+
+      (gotKeys?" \u2014 "+gotKeys+" sleutel(s) opgehaald":"")+".");
+  }).catch(function(e){
+    var v=(typeof foutVolledig==="function")?foutVolledig(e):null;
+    syncMsg("Ophalen uit cloud mislukt: "+(v?v.kort:(e&&e.message||e)));
+  });
+}
+// screener-instellingen (universum, weging, horizon, modus) bewaren/herstellen
+function currentSettings(){
+  return {
+    exchange:$('exchange')?$('exchange').value:null,
+    limit:$('limit')?$('limit').value:null,
+    mcap:$('mcap')?$('mcap').value:null,
+    pemax:$('pemax')?$('pemax').value:null,
+    mode:$('mode')?$('mode').value:null,
+    horizon:$('horizon')?$('horizon').value:null,
+    wm:$('wm')?$('wm').value:null, wv:$('wv')?$('wv').value:null,
+    wg:$('wg')?$('wg').value:null, wq:$('wq')?$('wq').value:null,
+    source:$('source')?$('source').value:null
+  };
+}
+function saveSettingsCloud(){
+  if(!FB.user||!FB.ready){syncMsg("Log eerst in om instellingen te bewaren.");return;}
+  FB.db.collection("users").doc(FB.user.uid).set({settings:currentSettings()},{merge:true}).then(function(){
+    syncMsg("\u2601\ufe0f Screener-instellingen bewaard in de cloud.");
+  }).catch(function(e){syncMsg("Bewaren mislukt: "+(e&&e.message||e));});
+}
+// sleutels apart naar cloud schrijven, alleen als de opt-in checkbox aanstaat
+function saveKeysCloud(){
+  if(!FB.user||!FB.ready)return;
+  var on=$('syncKeys')&&$('syncKeys').checked;
+  if(on){
+    var keys={};
+    ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){if(KEYCACHE[src])keys[src]=KEYCACHE[src];});
+    FB.db.collection("users").doc(FB.user.uid).set({keys:keys},{merge:true}).catch(function(){});
+  }else{
+    FB.db.collection("users").doc(FB.user.uid).set({keys:firebase.firestore.FieldValue.delete()},{merge:true}).catch(function(){});
+  }
+}
 </script>
 </body>
 </html>
