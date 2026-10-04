@@ -7808,11 +7808,87 @@ historyLaden().then(function(){
 // Herrekenen (toonHerberekenVenster) en rapport-kopi\u00ebren (kopieerAnalyse) zijn nog niet
 // opnieuw aangesloten: die draaiden op dezelfde snapshot-structuur maar met eigen weergaven;
 // de knoppen geven tot zolang een duidelijke melding in plaats van niets te doen.
+// Herrekenen past de huidige scoremethodiek (weging + momentum-demping) toe op de
+// bewaarde deelscores van oude momentopnamen. De ruwe deelscores (m/v/g/q) blijven
+// onaangeroerd; alleen de totaalscore wordt opnieuw afgeleid. Eerst een voorbeeld met
+// de verschillen per momentopname, daarna pas toepassen - en altijd terug te draaien
+// via de bewaarde oorspronkelijke score (scoreOud).
+function herberekendeScore(it,w){
+  var som=w.wm+w.wv+w.wg+w.wq||1;
+  var wm=w.wm/som,wv=w.wv/som,wg=w.wg/som,wq=w.wq/som;
+  var m=it.m,val=it.v,gro=it.g,qual=it.q;
+  if(m==null){ var rest=wv+wg+wq; return Math.round((val*wv+gro*wg+qual*wq)/(rest||1)); }
+  var fundament=(val+qual)/2;
+  if(fundament<40&&m>70){ var demping=0.5+(fundament/40)*0.5; m=Math.round(qual*0.3+m*demping*0.7); }
+  return clampScore(m*wm+val*wv+gro*wg+qual*wq);
+}
+function herrekeneWeging(){
+  if(isLong())return {wm:10,wv:30,wg:15,wq:45};
+  return {wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+wqEl.value};
+}
 function toonHerberekenVenster(){
-  tStat("Herrekenen is nog niet opnieuw aangesloten op de herbouwde momentopname-module.",true);
+  var ven=$('herrekenVenster'); if(!ven)return;
+  if(!HISTORY.length){ tStat("Geen momentopnamen om te herberekenen.",true); ven.style.display="none"; return; }
+  var w=herrekeneWeging();
+  var rows=HISTORY.map(function(s){
+    var items=s.items||[]; var verschil=0; var movers=[];
+    items.forEach(function(it){
+      var oud=it.score!=null?it.score:null;
+      var nieuw=herberekendeScore(it,w);
+      if(oud!=null)verschil+=nieuw-oud;
+      movers.push({symbol:it.symbol,oud:oud,nieuw:nieuw,d:nieuw-(oud!=null?oud:0)});
+    });
+    movers.sort(function(a,b){ return b.d-a.d; });
+    var gem=Math.round(verschil/(items.length||1));
+    var top=movers.slice(0,3).filter(function(mv){return mv.d!==0;}).map(function(mv){ return mv.symbol+' '+(mv.d>0?'+':'')+mv.d; }).join(', ');
+    var flop=movers.slice(-3).reverse().filter(function(mv){return mv.d!==0;}).map(function(mv){ return mv.symbol+' '+(mv.d>0?'+':'')+mv.d; }).join(', ');
+    return '<tr><td>'+new Date(s.ts||s.date).toLocaleDateString('nl-NL')+'</td><td>'+items.length+'</td><td>'+(gem>0?'+':'')+gem+'</td><td>'+top+'</td><td>'+flop+'</td></tr>';
+  }).join('');
+  ven.innerHTML=
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Voorbeeld: elke momentopname opnieuw doorgerekend met de huidige weging '+
+    'M'+w.wm+'/W'+w.wv+'/G'+w.wg+'/K'+w.wq+' en de actuele momentum-demping. De bewaarde deelscores (m/v/g/q) blijven ongewijzigd.</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<tr style="color:var(--muted)"><th align="left">Datum</th><th>#</th><th>\u0394 gem.</th><th align="left">Sterkste stijgers</th><th align="left">Sterkste dalers</th></tr>'+rows+'</table>'+
+    '<div style="margin-top:8px"><button class="btn-save" id="herrekenToepassen">Toepassen op geschiedenis</button> '+
+    '<button class="btn-ghost" id="herrekenTerug">Terugdraaien</button></div>';
+  ven.style.display="";
+  $('herrekenToepassen').onclick=function(){
+    HISTORY.forEach(function(s){ (s.items||[]).forEach(function(it){
+      if(it.scoreOud==null)it.scoreOud=it.score;
+      it.score=herberekendeScore(it,w);
+    }); });
+    historyBewaren(); renderSnapList();
+    tStat("Herrekend: "+HISTORY.length+" momentopnamen opnieuw gescoord met de huidige methodiek. Terug te draaien via Terugdraaien.");
+  };
+  $('herrekenTerug').onclick=function(){
+    var n=0;
+    HISTORY.forEach(function(s){ (s.items||[]).forEach(function(it){
+      if(it.scoreOud!=null){ it.score=it.scoreOud; delete it.scoreOud; n++; }
+    }); });
+    historyBewaren(); renderSnapList();
+    tStat(n?"Teruggedraaid: "+n+" scores teruggezet naar de oorspronkelijke waarde.":"Niets terug te draaien - nog niet herrekend.",!n);
+  };
+  tStat("Voorbeeld getoond - niets gewijzigd tot je op Toepassen klikt.");
 }
 function kopieerAnalyse(){
-  tStat("Rapport kopi\u00ebren is nog niet opnieuw aangesloten op de herbouwde momentopname-module.",true);
+  var ven=$('analyseVenster'); if(!ven)return;
+  if(!HISTORY.length){ tStat("Niets te rapporteren - leg eerst een momentopname vast.",true); return; }
+  var s=HISTORY[HISTORY.length-1];
+  var w=herrekeneWeging();
+  var rapport="Kompas-scoremethode - meting "+new Date(s.ts||s.date).toLocaleDateString('nl-NL')+"\n"+
+    "Weging: M"+w.wm+"/W"+w.wv+"/G"+w.wg+"/K"+w.wq+(isLong()?" (langetermijn-profiel)":"")+"\n"+
+    (s.demo?"Let op: gemeten op demodata.\n":"")+
+    "\nsymbol;naam;score;momentum;waardering;groei;kwaliteit;koers\n"+
+    (s.items||[]).map(function(it){
+      return [it.symbol,'"'+(it.name||'')+'"',it.score!=null?it.score:'',it.m!=null?it.m:'',it.v!=null?it.v:'',it.g!=null?it.g:'',it.q!=null?it.q:'',it.price!=null?it.price:''].join(';');
+    }).join("\n")+
+    "\n\nVoorbehoud: de totaalscore is berekend met de weging van het moment van vastleggen (bewaard: M"+
+    (s.weights&&s.weights.wm!=null?s.weights.wm:'?')+"/W"+(s.weights&&s.weights.wv!=null?s.weights.wv:'?')+
+    "/G"+(s.weights&&s.weights.wg!=null?s.weights.wg:'?')+"/K"+(s.weights&&s.weights.wq!=null?s.weights.wq:'?')+").";
+  var ta=ven.querySelector('textarea');
+  if(ta)ta.value=rapport;
+  ven.style.display="";
+  tStat("Rapport klaargezet in het venster - selecteer en kopieer.");
 }
 
 // ---- Zelfbediening: eigen holdings toevoegen/verwijderen, lokaal + cloud bewaard ----
