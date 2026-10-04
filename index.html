@@ -805,11 +805,11 @@ details[open] > summary{margin-bottom:4px}
     </div>
     <div class="control-row compact" id="wegingRow">
       <span class="inline-lbl" style="color:var(--ink);font-weight:600">Weging<span id="wnote" style="color:var(--accent);font-weight:400"></span>:</span>
-      <span class="wgrp"><span class="wlabel inline-lbl">Momentum <b id="wm-v">30</b>%</span><input type="range" id="wm" min="0" max="100" value="30"></span>
-      <span class="wgrp"><span class="wlabel inline-lbl">Waardering <b id="wv-v">25</b>%</span><input type="range" id="wv" min="0" max="100" value="25"></span>
-      <span class="wgrp"><span class="wlabel inline-lbl">Groei <b id="wg-v">15</b>%</span><input type="range" id="wg" min="0" max="100" value="15"></span>
-      <span class="wgrp"><span class="wlabel inline-lbl">Kwaliteit <b id="wq-v">30</b>%</span><input type="range" id="wq" min="0" max="100" value="30"></span>
-      <button class="btn-ghost" id="wReset" title="Zet de weging terug op de standaardverdeling (30/25/15/30)"
+      <span class="wgrp"><span class="wlabel inline-lbl">Momentum <b id="wm-v">10</b>%</span><input type="range" id="wm" min="0" max="100" value="10"></span>
+      <span class="wgrp"><span class="wlabel inline-lbl">Waardering <b id="wv-v">0</b>%</span><input type="range" id="wv" min="0" max="100" value="0"></span>
+      <span class="wgrp"><span class="wlabel inline-lbl">Groei <b id="wg-v">30</b>%</span><input type="range" id="wg" min="0" max="100" value="30"></span>
+      <span class="wgrp"><span class="wlabel inline-lbl">Kwaliteit <b id="wq-v">60</b>%</span><input type="range" id="wq" min="0" max="100" value="60"></span>
+      <button class="btn-ghost" id="wReset" title="Zet de weging terug op de standaardverdeling (10/0/30/60)"
         style="height:26px;padding:0 10px;font-size:11px;margin-left:6px">herstel</button>
     </div>
   </div>
@@ -1942,7 +1942,7 @@ function qualityScore(d){
 }
 function weights(){
   // lange termijn: vaste weging op trage fundamenten, momentum laag
-  if(isLong()) return {wm:0.10,wv:0.30,wg:0.15,wq:0.45};
+  if(isLong()) return {wm:0.10,wv:0.00,wg:0.30,wq:0.60};
   var wm=+wmEl.value,wv=+wvEl.value,wg=+wgEl.value,wq=+wqEl.value;var s=wm+wv+wg+wq||1;
   return {wm:wm/s,wv:wv/s,wg:wg/s,wq:wq/s};
 }
@@ -4380,6 +4380,8 @@ function enrichFMP(symbol,key){
     var roe=(ra.netIncomePerShareTTM!=null&&ra.bookValuePerShareTTM!=null&&ra.bookValuePerShareTTM>0)
       ? (ra.netIncomePerShareTTM/ra.bookValuePerShareTTM*100) : null;
     var ddF=(q.price!=null&&q.yearHigh!=null&&q.yearHigh>0)?+(((q.price-q.yearHigh)/q.yearHigh)*100).toFixed(1):null;
+    var divF=ra.dividendYieldTTM;
+    var divYieldF=(divF!=null&&!isNaN(divF)&&divF>=0&&divF<25)?+((q.price!=null&&q.price>0&&divF<1)?divF*100:divF).toFixed(2):null;
     return {
       symbol:symbol,name:q.name||symbol,market:symbol.indexOf(".")>-1?"EU":"US",
       sector:sectorOf(symbol),
@@ -4395,7 +4397,8 @@ function enrichFMP(symbol,key){
       roe:roe!=null?+roe.toFixed(1):null,
       margin:margin!=null?+margin.toFixed(1):null,
       de:de!=null?+de.toFixed(2):null,
-      dd:ddF
+      dd:ddF,
+      divYield:divYieldF, _divBron:divYieldF!=null?'ratios-ttm':null
     };
   });
 }
@@ -4428,7 +4431,14 @@ function enrichEODHD(symbol,key){
       roe:H.ReturnOnEquityTTM!=null&&H.ReturnOnEquityTTM!==""?+(+H.ReturnOnEquityTTM*100).toFixed(1):null,
       margin:H.ProfitMargin!=null&&H.ProfitMargin!==""?+(+H.ProfitMargin*100).toFixed(1):null,
       de:null,
-      dd:ddE
+      dd:ddE,
+      divYield:(function(){
+        var dY=H.DividendYield;
+        if(dY!=null&&dY!==""&&!isNaN(+dY)){ var v=+dY; if(v>=0&&v<25)return +((v<1&&price>0)?v*100:v).toFixed(2); }
+        if(H.DividendShare!=null&&H.DividendShare!==""&&price>0){ var uit=(+H.DividendShare/price)*100; if(uit>=0&&uit<25)return +uit.toFixed(2); }
+        return null;
+      })(),
+      _divBron:(H.DividendYield!=null&&H.DividendYield!=="")?'highlights':null
     };
   });
 }
@@ -6952,7 +6962,7 @@ LS.get('winstVerrassing').then(function(r){
 // Weging terugzetten op de standaard. Op een aanraakscherm verschuift een regelaar
 // makkelijk per ongeluk; zonder herstelknop is de oorspronkelijke verdeling lastig terug
 // te vinden.
-var WEGING_STANDAARD={wm:30,wv:25,wg:15,wq:30};
+var WEGING_STANDAARD={wm:10,wv:0,wg:30,wq:60};
 var ETF_WEGING_STANDAARD={ewc:40,ewd:25,ewl:20,ewt:15};
 if($('ewReset'))$('ewReset').onclick=function(){
   Object.keys(ETF_WEGING_STANDAARD).forEach(function(k){
@@ -8606,7 +8616,7 @@ function syncWeightUI(){
   }
   // Toon de effectieve weging in de labels: bij lange termijn of herstel gelden vaste
   // verhoudingen, niet de sliderwaarden. Zo zie je wat er daadwerkelijk in de score zit.
-  var eff=herstel?{wm:30,wv:35,wg:0,wq:35}:(lang?{wm:10,wv:30,wg:15,wq:45}:null);
+  var eff=herstel?{wm:30,wv:35,wg:0,wq:35}:(lang?{wm:10,wv:0,wg:30,wq:60}:null);
   ['wm','wv','wg','wq'].forEach(function(id){
     var el=document.getElementById(id+'-v');
     if(!el)return;
