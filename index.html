@@ -1047,8 +1047,6 @@ details[open] > summary{margin-bottom:4px}
       <div class="control-row compact">
         <button class="btn-save" id="snapshot">Vastleggen</button>
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
-        <button class="btn-ghost" onclick="toonHerberekenVenster()"
-          title="Herrekent bewaarde momentopnamen met de huidige scoremethodiek. Toont eerst wat er verandert; terug te draaien.">Herrekenen</button>
         <button class="btn-ghost verborgen" id="analyseKnop" onclick="kopieerAnalyse()"
           title="Kopieert de meting inclusief ruwe data en voorbehouden, klaar om in een gesprek met Claude te plakken">
           Rapport kopi&euml;ren</button>
@@ -1062,7 +1060,7 @@ details[open] > summary{margin-bottom:4px}
 
     <div id="kpiWrap"></div>
     <div id="factorWrap"></div>
-    <div id="herrekenVenster" style="display:none;margin:12px 0"></div>
+    
     <div id="analyseVenster" style="display:none;margin:12px 0">
       <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
         Selecteer en kopieer deze tekst, en plak hem in een gesprek met Claude:</div>
@@ -1944,17 +1942,6 @@ function drawdownScore(d){
 }
 function currentMode(){var el=document.getElementById('mode');return el?el.value:'stijgers';}
 // demping: middel de ruwe score met eerdere opgeslagen metingen van hetzelfde aandeel (alleen langetermijn)
-function dampedScore(d,raw){
-  if(!isLong()||typeof HISTORY==="undefined"||!HISTORY.length) return raw;
-  var prev=[];
-  HISTORY.forEach(function(s){if(s.items)s.items.forEach(function(it){if(it.symbol===d.symbol&&it.score!=null)prev.push(it.score);});});
-  if(!prev.length) return raw;
-  // voortschrijdend gemiddelde: nieuwe meting weegt mee met de laatste paar (max 4) opgeslagen
-  var recent=prev.slice(-4);
-  var all=recent.concat([raw]);
-  var avg=all.reduce(function(a,b){return a+b;},0)/all.length;
-  return Math.round(avg);
-}
 // ruwe (ongedempte) totaalscore
 var SECTOR={
   // US Tech & Communication
@@ -2366,9 +2353,10 @@ function rawScore(d){
   var penalty=t.level===2?0.75:(t.level===1?0.90:1);
   return Math.round(base*penalty);
 }
-// totaalscore: ruwe score, in langetermijn gedempt met opgeslagen metingen
+// totaalscore: de ruwe score. Vroeger gedempt met bewaarde scores; die worden niet
+// meer opgeslagen (scores zijn een afgeleide, geen meting) dus de demping verviel.
 function totalScore(d){
-  return dampedScore(d,rawScore(d));
+  return rawScore(d);
 }
 // ---- Score-uitsplits: welke pijler trok de totaalscore omlaag? ----
 // Vergelijkt de huidige deelscores met de laatst bewaarde meting en rekent per pijler
@@ -7700,13 +7688,42 @@ function checkAllPositions(){
 $('pfCheck').onclick=checkAllPositions;
 
 // ---- Tracking & momentopnamen: vastleggen, terugzien, op accuratesse toetsen ----
-// Momentopnamen bewaren de ruwe deelscores per aandeel, zodat je later kunt zien of
-// de scoremethodiek toen w\u00e9l de goede kant op wees. Opslag dubbel: lokaal (werkt zonder
-// login) \u00e9n in Firestore onder users/{uid}.history \u2014 hetzelfde veld dat de eerdere versie
-// van deze module gebruikte, dus oude cloud-momentopnamen komen vanzelf terug.
+// Momentopnamen bewaren uitsluitend de opgehaalde kerndata per aandeel (geen scores,
+// geen wegingen): een score is een afgeleide van een methodiek die wijzigt, de meting
+// niet. Van hieruit is elke toekomstige scoreformule op de historische data te toetsen.
+// Opslag dubbel: lokaal (werkt zonder login) \u00e9n in Firestore onder users/{uid}.history.
 var HISTORY=[];
 var HISTORY_KEY='history';
 function tStat(msg,err){ setStatus($('trackStatus'),msg,err); }
+// Sanering van bestaande momentopnamen: scores, deelscores, wegingen en methodiek-
+// labels zijn afgeleiden van een wijzigende scoremethodiek en worden niet meer
+// bewaard. Deze functie stroopt ze eruit bij het laden (lokaal, cloud en import),
+// zodat de opslag vanzelf uitsluitend kerndata bevat. Gestroopte items met geen
+// enkel kernveld meer verdwijnen helemaal - zonder kerndata is er niets te toetsen.
+var KERNVELDEN_STRIP=['score','m','v','g','q','trap','scoreOud','_origScore','_origM','_origV','_origG','_origQ','_herrekend','methodiek','weights','herrekenbaar'];
+function sanitizeSnapshot(s){
+  if(!s||typeof s!=="object")return null;
+  var items=Array.isArray(s.items)?s.items:[];
+  var schoon=items.map(function(it){
+    if(!it||typeof it!=="object")return null;
+    KERNVELDEN_STRIP.forEach(function(k){ delete it[k]; });
+    var heeftKern=KERNVELDEN.some(function(k){ return k!=='symbol'&&k!=='name'&&k!=='ticker'&&k!=='queriedAs'&&k!=='sector'&&k!=='industry'&&k!=='isin'&&k!=='currency'&&k!=='_src'&&it[k]!=null; });
+    return heeftKern?it:null;
+  }).filter(Boolean);
+  if(!schoon.length)return null;
+  s.items=schoon;
+  delete s.weights; delete s.methodiek; delete s.herrekenbaar;
+  return s;
+}
+function sanitizeHistory(lijst){
+  if(!Array.isArray(lijst))return [];
+  var uit=[];
+  lijst.forEach(function(s){
+    var ss=sanitizeSnapshot(s);
+    if(ss)uit.push(ss);
+  });
+  return uit;
+}
 function historyBewaren(){
   try{ lsSafe(HISTORY_KEY,HISTORY); }catch(e){}
   if(typeof FB!=="undefined"&&FB.user&&FB.ready){
@@ -7716,14 +7733,22 @@ function historyBewaren(){
 }
 function historyLaden(){
   return LS.get(HISTORY_KEY).then(function(r){
-    if(r&&r.value){ try{ var d=JSON.parse(r.value); if(Array.isArray(d))HISTORY=d; }catch(e){} }
+    if(r&&r.value){
+      try{
+        var d=JSON.parse(r.value);
+        if(Array.isArray(d)){
+          HISTORY=sanitizeHistory(d);
+          if(HISTORY.length!==d.length||JSON.stringify(HISTORY)!==JSON.stringify(d))historyBewaren();
+        }
+      }catch(e){}
+    }
   }).catch(function(){});
 }
 // cloud-momentopnamen samenvoegen (dedupe op ts), daarna pas de lijst tonen
 function historyCloudMergen(){
   if(typeof FB==="undefined"||!FB.user||!FB.ready)return Promise.resolve(0);
   return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
-    var cloud=(doc.exists&&doc.data().history)||[];
+    var cloud=sanitizeHistory((doc.exists&&doc.data().history)||[]);
     if(!Array.isArray(cloud)||!cloud.length)return 0;
     var seen={}; HISTORY.forEach(function(s){ if(s.ts)seen[s.ts]=1; });
     var voor=HISTORY.length;
@@ -7739,37 +7764,25 @@ function takeSnapshot(){
   // hoogscoorders bewaren introduceert bereikbeperking: achteraf kun je dan niet meer
   // meten of l\u00e1g scores ook werkelijk slechter presteerden.
   var bron=(typeof ALLE_ANALYSES!=="undefined"&&ALLE_ANALYSES.length)?ALLE_ANALYSES:CURRENT;
-  // De kerngegevens (harde data uit Eulerpool/Finnhub/SecuritiesDB) zijn leidend; de
-  // deelscores komen daarboven als verslag van wat de methodiek destijds toonde. Zo is
-  // elke toekomstige scoreformule op oude metingen te herrekenen.
+  // Uitsluitend de opgehaalde kerndata uit de aangesloten bronnen (Eulerpool/Finnhub/
+  // SecuritiesDB) - geen scores en geen wegingen: een score is een afgeleide van een
+  // methodiek die wijzigt, en bewaarde scores zouden de latere formule-optimisatie
+  // sturen in plaats van de data zelf. De meting is leidend.
   var items=bron.map(function(d){
     var kern=kerngegevens(d);
-    var t=valueTrap(d);
-    if(typeof bepaalUitgifte==="function"){
-      var u=bepaalUitgifte(d);
-      if(u!=null)kern.uitgifte=u;
-    }
-    kern.score=rawScore(d);
-    kern.m=momentumScore(d); kern.v=valuationScore(d);
-    kern.g=growthScore(d); kern.q=qualityScore(d);
-    kern.trap=t!=null&&t.level!=null?t.level:null;
+    var u=(typeof bepaalUitgifte==="function")?bepaalUitgifte(d):null;
+    if(u!=null)kern.uitgifte=u;
     return kern;
   });
-  var dekking=items.map(herrekenbaarheid);
   HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:DEMO_ACTIVE,
-    methodiek:"huidige",
-    herrekenbaar:{volledig:dekking.filter(function(x){return x.niveau==="volledig";}).length,
-                  gedeeltelijk:dekking.filter(function(x){return x.niveau==="gedeeltelijk";}).length,
-                  geen:dekking.filter(function(x){return x.niveau==="geen";}).length},
     universum:($('exchange')&&$('exchange').options[$('exchange').selectedIndex])?$('exchange').options[$('exchange').selectedIndex].text:null,
-    getoond:CURRENT.length,
-    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+wqEl.value},items:items});
+    getoond:CURRENT.length,items:items});
   if(HISTORY.length>200)HISTORY=HISTORY.slice(-200);
-  var zonderKoers=items.filter(function(it){return it.price==null;}).length;
+  var zonderKoers=items.filter(function(it){ return it.price==null; }).length;
   var waarschuwing=zonderKoers
     ? " \u26a0\ufe0f "+zonderKoers+" van "+items.length+" zonder koers \u2014 die zijn later niet op rendement te toetsen."
     : "";
-  tStat("Vastgelegd: "+items.length+" waarden (kerngegevens + deelscores) op "+
+  tStat("Vastgelegd: "+items.length+" waarden (alleen kerndata) op "+
     new Date().toLocaleDateString('nl-NL')+(DEMO_ACTIVE?" (let op: demodata)":"")+
     (bron.length>CURRENT.length?" \u2014 inclusief "+(bron.length-CURRENT.length)+" die je filter uitviel":"")+waarschuwing, zonderKoers>0);
   historyBewaren();
@@ -7782,10 +7795,9 @@ function renderSnapList(){
     return;
   }
   el.innerHTML=HISTORY.slice().reverse().map(function(s){
-    var top=(s.items||[]).slice(0,5).map(function(it){ return it.symbol+" ("+(it.score!=null?Math.round(it.score):"\u2014")+")"; }).join(", ");
     var d=new Date(s.ts||s.date);
     return '<div class="snap"><h4>'+d.toLocaleDateString('nl-NL')+(s.demo?' \u2014 <span style="color:var(--accent)">demodata</span>':'')+'</h4>'+
-      '<div class="meta">'+(s.items||[]).length+' aandelen \u00b7 weging M'+(s.weights&&s.weights.wm!=null?s.weights.wm:'?')+'/W'+(s.weights&&s.weights.wv!=null?s.weights.wv:'?')+'/G'+(s.weights&&s.weights.wg!=null?s.weights.wg:'?')+'/K'+(s.weights&&s.weights.wq!=null?s.weights.wq:'?')+' \u00b7 top: '+top+'</div></div>';
+      '<div class="meta">'+(s.items||[]).length+' waarden \u00b7 kerndata'+(s.universum?' \u00b7 '+s.universum:'')+'</div></div>';
   }).join("");
 }
 function exportHistory(){
@@ -7806,7 +7818,7 @@ function importHistory(file){
       var data=JSON.parse(e.target.result);
       if(!Array.isArray(data))throw new Error("verkeerd formaat");
       var seen={}; HISTORY.forEach(function(s){ if(s.ts)seen[s.ts]=1; });
-      data.forEach(function(s){ if(s&&s.ts&&!seen[s.ts]){ HISTORY.push(s); seen[s.ts]=1; } });
+      sanitizeHistory(data).forEach(function(s){ if(s&&s.ts&&!seen[s.ts]){ HISTORY.push(s); seen[s.ts]=1; } });
       HISTORY.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
       tStat("Geschiedenis ge\u00efmporteerd \u2014 nu "+HISTORY.length+" momentopnamen.");
       historyBewaren();
@@ -7838,76 +7850,11 @@ historyLaden().then(function(){
   if($('importFile'))$('importFile').onchange=function(e){ if(e.target.files[0])importHistory(e.target.files[0]); };
   if($('clearHist'))$('clearHist').onclick=wisGeschiedenis;
 });
-// Herrekenen (toonHerberekenVenster) en rapport-kopi\u00ebren (kopieerAnalyse) zijn nog niet
-// opnieuw aangesloten: die draaiden op dezelfde snapshot-structuur maar met eigen weergaven;
-// de knoppen geven tot zolang een duidelijke melding in plaats van niets te doen.
-// Herrekenen past de huidige scoremethodiek (weging + momentum-demping) toe op de
-// bewaarde deelscores van oude momentopnamen. De ruwe deelscores (m/v/g/q) blijven
-// onaangeroerd; alleen de totaalscore wordt opnieuw afgeleid. Eerst een voorbeeld met
-// de verschillen per momentopname, daarna pas toepassen - en altijd terug te draaien
-// via de bewaarde oorspronkelijke score (scoreOud).
-function herberekendeScore(it,w){
-  var som=w.wm+w.wv+w.wg+w.wq||1;
-  var wm=w.wm/som,wv=w.wv/som,wg=w.wg/som,wq=w.wq/som;
-  var m=it.m,val=it.v,gro=it.g,qual=it.q;
-  if(m==null){ var rest=wv+wg+wq; return Math.round((val*wv+gro*wg+qual*wq)/(rest||1)); }
-  var fundament=(val+qual)/2;
-  if(fundament<40&&m>70){ var demping=0.5+(fundament/40)*0.5; m=Math.round(qual*0.3+m*demping*0.7); }
-  return clampScore(m*wm+val*wv+gro*wg+qual*wq);
-}
-function herrekeneWeging(){
-  if(isLong())return {wm:10,wv:30,wg:15,wq:45};
-  return {wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+wqEl.value};
-}
-function toonHerberekenVenster(){
-  var ven=$('herrekenVenster'); if(!ven)return;
-  if(!HISTORY.length){ tStat("Geen momentopnamen om te herberekenen.",true); ven.style.display="none"; return; }
-  var w=herrekeneWeging();
-  var rows=HISTORY.map(function(s){
-    var items=s.items||[]; var verschil=0; var movers=[];
-    items.forEach(function(it){
-      var oud=it.score!=null?it.score:null;
-      var nieuw=herberekendeScore(it,w);
-      if(oud!=null)verschil+=nieuw-oud;
-      movers.push({symbol:it.symbol,oud:oud,nieuw:nieuw,d:nieuw-(oud!=null?oud:0)});
-    });
-    movers.sort(function(a,b){ return b.d-a.d; });
-    var gem=Math.round(verschil/(items.length||1));
-    var top=movers.slice(0,3).filter(function(mv){return mv.d!==0;}).map(function(mv){ return mv.symbol+' '+(mv.d>0?'+':'')+mv.d; }).join(', ');
-    var flop=movers.slice(-3).reverse().filter(function(mv){return mv.d!==0;}).map(function(mv){ return mv.symbol+' '+(mv.d>0?'+':'')+mv.d; }).join(', ');
-    return '<tr><td>'+new Date(s.ts||s.date).toLocaleDateString('nl-NL')+'</td><td>'+items.length+'</td><td>'+(gem>0?'+':'')+gem+'</td><td>'+top+'</td><td>'+flop+'</td></tr>';
-  }).join('');
-  ven.innerHTML=
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Voorbeeld: elke momentopname opnieuw doorgerekend met de huidige weging '+
-    'M'+w.wm+'/W'+w.wv+'/G'+w.wg+'/K'+w.wq+' en de actuele momentum-demping. De bewaarde deelscores (m/v/g/q) blijven ongewijzigd.</div>'+
-    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
-    '<tr style="color:var(--muted)"><th align="left">Datum</th><th>#</th><th>\u0394 gem.</th><th align="left">Sterkste stijgers</th><th align="left">Sterkste dalers</th></tr>'+rows+'</table>'+
-    '<div style="margin-top:8px"><button class="btn-save" id="herrekenToepassen">Toepassen op geschiedenis</button> '+
-    '<button class="btn-ghost" id="herrekenTerug">Terugdraaien</button></div>';
-  ven.style.display="";
-  $('herrekenToepassen').onclick=function(){
-    HISTORY.forEach(function(s){ (s.items||[]).forEach(function(it){
-      if(it.scoreOud==null)it.scoreOud=it.score;
-      it.score=herberekendeScore(it,w);
-    }); });
-    historyBewaren(); renderSnapList();
-    tStat("Herrekend: "+HISTORY.length+" momentopnamen opnieuw gescoord met de huidige methodiek. Terug te draaien via Terugdraaien.");
-  };
-  $('herrekenTerug').onclick=function(){
-    var n=0;
-    HISTORY.forEach(function(s){ (s.items||[]).forEach(function(it){
-      if(it.scoreOud!=null){ it.score=it.scoreOud; delete it.scoreOud; n++; }
-    }); });
-    historyBewaren(); renderSnapList();
-    tStat(n?"Teruggedraaid: "+n+" scores teruggezet naar de oorspronkelijke waarde.":"Niets terug te draaien - nog niet herrekend.",!n);
-  };
-  tStat("Voorbeeld getoond - niets gewijzigd tot je op Toepassen klikt.");
-}
 function kopieerAnalyse(){
   var ven=$('analyseVenster'); if(!ven)return;
-  // De accuratesse-meting is het rapport dat de weging-discussie voedt: het bevat de
-  // factorcorrelaties \u00e9n de ruwe cijfers. Is er nog geen meting, dan valt de knop
-  // terug op de momentopname-uitsnit (bewaarde deelscores van de laatste opname).
+  // Het meetrapport (factorcorrelaties \u00e9n ruwe cijfers) is de input voor de
+  // formule-optimisatie. Is er nog geen meting, dan exporteert de knop de kerndata
+  // van de laatste momentopname - geen scores, want die zijn geen betrouwbare basis.
   if(LAATSTE_METING){
     var ta=ven.querySelector('textarea');
     if(ta)ta.value=LAATSTE_METING;
@@ -7917,30 +7864,24 @@ function kopieerAnalyse(){
   }
   if(!HISTORY.length){ tStat("Niets te rapporteren - leg eerst een momentopname vast.",true); return; }
   var s=HISTORY[HISTORY.length-1];
-  var w=herrekeneWeging();
-  var rapport="Kompas-scoremethode - meting "+new Date(s.ts||s.date).toLocaleDateString('nl-NL')+"\n"+
-    "Weging: M"+w.wm+"/W"+w.wv+"/G"+w.wg+"/K"+w.wq+(isLong()?" (langetermijn-profiel)":"")+"\n"+
+  var velden=(s.items&&s.items.length)?Object.keys(s.items[0]):[];
+  var rapport="Kompas-kerndata - meting "+new Date(s.ts||s.date).toLocaleDateString('nl-NL')+"\n"+
     (s.demo?"Let op: gemeten op demodata.\n":"")+
-    "\nsymbol;naam;score;momentum;waardering;groei;kwaliteit;koers\n"+
+    "\n"+velden.join(";")+"\n"+
     (s.items||[]).map(function(it){
-      return [it.symbol,'"'+(it.name||'')+'"',it.score!=null?it.score:'',it.m!=null?it.m:'',it.v!=null?it.v:'',it.g!=null?it.g:'',it.q!=null?it.q:'',it.price!=null?it.price:''].join(';');
-    }).join("\n")+
-    "\n\nVoorbehoud: de totaalscore is berekend met de weging van het moment van vastleggen (bewaard: M"+
-    (s.weights&&s.weights.wm!=null?s.weights.wm:'?')+"/W"+(s.weights&&s.weights.wv!=null?s.weights.wv:'?')+
-    "/G"+(s.weights&&s.weights.wg!=null?s.weights.wg:'?')+"/K"+(s.weights&&s.weights.wq!=null?s.weights.wq:'?')+").";
+      return velden.map(function(k){ var v=it[k]; return v==null?"":String(v).replace(/;/g,","); }).join(";");
+    }).join("\n");
   var ta=ven.querySelector('textarea');
   if(ta)ta.value=rapport;
   ven.style.display="";
-  tStat("Rapport klaargezet in het venster - selecteer en kopieer.");
+  tStat("Kerndata-uitvoer klaargezet in het venster - selecteer en kopieer.");
 }
-
-// ---- Accuratesse meten: score destijds versus werkelijk rendement nu ----
+// ---- Accuratesse meten: kerndata destijds versus werkelijk rendement nu ----
 // Dit is de terugtoets van de scoremethodiek: haal actuele koersen op voor alles wat
-// in bewaarde (niet-demo) momentopnamen staat, vergelijk de toenmalige score met het
-// gerealiseerde rendement, en toon per factor (momentum/waardering/groei/kwaliteit)
-// hoe voorspellend die was. De output is het raw materiaal om de weging bij te sturen.
-// Nieuwere opnamen bevatten kerngegevens, dus die worden met de huidige methodiek
-// herrekend; oudere opnamen (alleen deelscores) vallen terug op de bewaarde scores.
+// in bewaarde (niet-demo) momentopnamen staat, herrekende scores uit de bewaarde
+// kerndata, en vergelijk ze met het gerealiseerde rendement. De output is het raw
+// materiaal om een optimale scoreformule te bouwen. Scores zelf worden nergens
+// bewaard of hergebruikt: de herrekening gebeurt uitsluitend vanuit de kerndata.
 var LAATSTE_METING=null;
 function meetAccuratesse(){
   var hasKey=(MULTI_KEYS.finnhub||MULTI_KEYS.fmp||MULTI_KEYS.eodhd)||($('apikey')&&$('apikey').value.trim());
@@ -7992,20 +7933,23 @@ function berekenEnToonAccuratesse(snaps,prices){
       var dagen=leeftijdDagen;
       var dividendDeel=(it.divYield!=null&&it.divYield>0&&it.divYield<25)?it.divYield*(dagen/365):0;
       var ret=koersRendement+dividendDeel;
-      var hr=herrekenbaarheid(it),sc=it.score,sm=it.m,sv=it.v,sg=it.g,sq=it.q;
-      if(hr.niveau==="volledig"||hr.niveau==="gedeeltelijk"){
-        var vSet=SCORESET,vPeers=PEERS,vSec=SECTOR_PEERS;
-        SCORESET=herrekenSets[s.ts]||[it];
-        PEERS=herrekenPeers[s.ts]||null; SECTOR_PEERS=herrekenSectorPeers[s.ts]||null;
-        sc=totalScore(it); sm=momentumScore(it); sv=valuationScore(it);
-        sg=growthScore(it); sq=qualityScore(it);
-        SCORESET=vSet; PEERS=vPeers; SECTOR_PEERS=vSec;
-      }
+      // Scores worden niet meer bewaard (afgeleide van een wijzigende methodiek); de
+      // meting herrekent ze uitsluitend uit de kerndata. Ontbreekt die, dan valt het
+      // punt weg - vergelijken met scores uit een oude methodiek geeft een vertrokken
+      // beeld en zou de formule-optimisatie op verkeerde basis sturen.
+      var hr=herrekenbaarheid(it);
+      if(hr.niveau==="geen")return;
+      var vSet=SCORESET,vPeers=PEERS,vSec=SECTOR_PEERS;
+      SCORESET=herrekenSets[s.ts]||[it];
+      PEERS=herrekenPeers[s.ts]||null; SECTOR_PEERS=herrekenSectorPeers[s.ts]||null;
+      var sc=totalScore(it),sm=momentumScore(it),sv=valuationScore(it),
+          sg=growthScore(it),sq=qualityScore(it);
+      SCORESET=vSet; PEERS=vPeers; SECTOR_PEERS=vSec;
       pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
         sym:it.symbol,holdD:+leeftijdDagen.toFixed(0),
         herrekend:hr.niveau,snapTs:s.ts,sector:it.sector||null,mcap:it._mcap!=null?it._mcap:null,
         divYield:it.divYield,koersDeel:+koersRendement.toFixed(1),divDeel:+dividendDeel.toFixed(2),
-        trap:it.trap,volledig:hr.factoren,
+        trap:(typeof valueTrap==="function"&&it.pe!=null)?valueTrap(it).level:null,volledig:hr.factoren,
         pe:it.pe,pb:it.pb,peg:it.peg,roe:it.roe,revG:it.revG,epsG:it.epsG,aaqs:it.aaqs,
         piotroski:it.piotroski,altmanZ:it.altmanZ,
         verrassing:it.verrassing,verrassingConsistentie:it.verrassingConsistentie,
