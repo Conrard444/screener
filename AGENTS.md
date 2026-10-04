@@ -49,16 +49,49 @@ direct als statische pagina (GitHub Pages).
    - schaal 0-100 houden, met neutraal midden rond 50
    - `Math.max(0, Math.min(100, ...))` clamping behouden
    - ontbrekende data => neutrale 50-score, nooit 0
+   - **zo veel mogelijk gebaseerd op de getrokken rapporten**: elke weging, factor of
+     drempel in de score moet herleidbaar zijn tot wat de aangesloten databronnen
+     (Eulerpool, Finnhub, SecuritiesDB) werkelijk leveren — niet op verzonnen aannames.
+     Waar een bron geen onderbouwing geeft, ontbreekt de factor liever dan dat hij op
+     gevoel wordt ingevuld
+   - **wetenschappelijke en historische basis waar mogelijk**: de voorkeur gaat naar
+     factoren die in onderzoek en historische rendementsdata onderbouwd zijn
+     (bv. momentum, kwaliteit, lage kosten bij ETF's). Bij twijfel: leg in het commit-
+     bericht uit welk bewijs een keuze draagt, en toets nieuwe factoren eerst via de
+     accuratesse-meting (Tracking-tab) voordat ze meewegen
 
 7. **UI-wijzigingen**: lichter en cleaner is welkom, maar **nooit informatieverlies**.
    Kolommen, tooltips en uitleg bevatten bewust veel context; verwijder niets zonder
    expliciete opdracht.
 
-8. **Geen comments toevoegen in JS** behalve sectie-headers zoals de bestaande
+8. **Centraal beheer**: frontend én backend worden zo centraal mogelijk aangestuurd,
+   zodat een aanpassing zo weinig mogelijk fouten met zich meebrengt. Concreet:
+   - gewenste gedraging hoort in één centrale functie/module (zoals `setStatus()` voor
+     statusbalken, `clampScore()` voor scoregrenzen, `foutVolledig()` voor
+     foutmeldingen, `OPHAALPOOL` voor aanroepen) — nieuwe code sluit daarop aan in
+     plaats van een eigen kopie te maken
+   - bestaat er nog geen centrale plek, maak die dan (één module) en koppel de bestaande
+     plekken eraan; documenteer de module met een `// ---- naam ----` sectie-headers
+   - gedeelde opmaak hoort in de CSS-klassen (`.verborgen`, `.muted-klein`, etc.),
+     niet in herhaalde inline styles
+   - duplicaat-logica is een bug in wording: bij de derde kopie hoort geabstraheerd te
+     worden
+
+9. **Responsive**: de app moet volledig bedienbaar zijn op smartphone én desktop.
+   - nieuwe UI werkt op een smal scherm (test mentaal tegen ~375px breed): knoppen en
+     filterrijen wrappen (`flex-wrap`), tabellen scrollen horizontaal binnen hun
+     container (bestaande `.scrollhint`-conventie), geen vaste breedtes boven ~200px
+     zonder `max-width`
+   - bestaat een mobiele @media-breakpoint-stijl, breid die uit in plaats van erlangs
+     te werken
+   - interactie-elementen krijgen voldoende tikruimte; informatie verbergen op mobiel
+     kan (uitklappers), informatie weggooien niet (regel 7)
+
+10. **Geen comments toevoegen in JS** behalve sectie-headers zoals de bestaande
    `// ---- naam ----` conventie. Het bestaande commentaar is documentatie voor de
    eigenaar; behoud het.
 
-9. **Commits**: direct naar `main` is de convention van de eigenaar. Push altijd
+11. **Commits**: direct naar `main` is de convention van de eigenaar. Push altijd
    na de commit. Commit-berichten in het Nederlands, beschrijf wat + waarom.
 
 ## Werkwijze bij een bugmelding van de eigenaar
