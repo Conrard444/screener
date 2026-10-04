@@ -7698,6 +7698,123 @@ function checkAllPositions(){
 }
 $('pfCheck').onclick=checkAllPositions;
 
+// ---- Tracking & momentopnamen: vastleggen, terugzien, op accuratesse toetsen ----
+// Momentopnamen bewaren de ruwe deelscores per aandeel, zodat je later kunt zien of
+// de scoremethodiek toen w\u00e9l de goede kant op wees. Opslag dubbel: lokaal (werkt zonder
+// login) \u00e9n in Firestore onder users/{uid}.history \u2014 hetzelfde veld dat de eerdere versie
+// van deze module gebruikte, dus oude cloud-momentopnamen komen vanzelf terug.
+var HISTORY=[];
+var HISTORY_KEY='history';
+function tStat(msg,err){ setStatus($('trackStatus'),msg,err); }
+function historyBewaren(){
+  try{ lsSafe(HISTORY_KEY,HISTORY); }catch(e){}
+  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
+    FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()},{merge:true})
+      .catch(function(e){ console.warn('Kompas: momentopnamen naar cloud mislukt',e&&e.message); });
+  }
+}
+function historyLaden(){
+  return LS.get(HISTORY_KEY).then(function(r){
+    if(r&&r.value){ try{ var d=JSON.parse(r.value); if(Array.isArray(d))HISTORY=d; }catch(e){} }
+  }).catch(function(){});
+}
+// cloud-momentopnamen samenvoegen (dedupe op ts), daarna pas de lijst tonen
+function historyCloudMergen(){
+  if(typeof FB==="undefined"||!FB.user||!FB.ready)return Promise.resolve();
+  return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var cloud=(doc.exists&&doc.data().history)||[];
+    if(!Array.isArray(cloud)||!cloud.length)return;
+    var seen={}; HISTORY.forEach(function(s){ if(s.ts)seen[s.ts]=1; });
+    var voor=HISTORY.length;
+    cloud.forEach(function(s){ if(s&&s.ts&&!seen[s.ts]){ HISTORY.push(s); seen[s.ts]=1; } });
+    HISTORY.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    if(HISTORY.length>voor){ historyBewaren(); renderSnapList(); }
+  }).catch(function(){});
+}
+function takeSnapshot(){
+  if(!CURRENT.length){ tStat("Geen screening om vast te leggen \u2014 draai eerst de screener.",true); return; }
+  var items=CURRENT.map(function(d){
+    return {symbol:d.symbol,name:d.name,score:rawScore(d),m:momentumScore(d),v:valuationScore(d),g:growthScore(d),q:qualityScore(d),price:d.price};
+  });
+  HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),demo:DEMO_ACTIVE,
+    weights:{wm:+wmEl.value,wv:+wvEl.value,wg:+wgEl.value,wq:+wqEl.value},items:items});
+  if(HISTORY.length>200)HISTORY=HISTORY.slice(-200);
+  tStat("Vastgelegd: "+items.length+" aandelen op "+new Date().toLocaleDateString('nl-NL')+(DEMO_ACTIVE?" (let op: demodata)":"")+".");
+  historyBewaren();
+  renderSnapList();
+}
+function renderSnapList(){
+  var el=$('snapList'); if(!el)return;
+  if(!HISTORY.length){
+    el.innerHTML='<div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Vastleggen".</div>';
+    return;
+  }
+  el.innerHTML=HISTORY.slice().reverse().map(function(s){
+    var top=(s.items||[]).slice(0,5).map(function(it){ return it.symbol+" ("+(it.score!=null?Math.round(it.score):"\u2014")+")"; }).join(", ");
+    var d=new Date(s.ts||s.date);
+    return '<div class="snap"><h4>'+d.toLocaleDateString('nl-NL')+(s.demo?' \u2014 <span style="color:var(--accent)">demodata</span>':'')+'</h4>'+
+      '<div class="meta">'+(s.items||[]).length+' aandelen \u00b7 weging M'+(s.weights&&s.weights.wm!=null?s.weights.wm:'?')+'/W'+(s.weights&&s.weights.wv!=null?s.weights.wv:'?')+'/G'+(s.weights&&s.weights.wg!=null?s.weights.wg:'?')+'/K'+(s.weights&&s.weights.wq!=null?s.weights.wq:'?')+' \u00b7 top: '+top+'</div></div>';
+  }).join("");
+}
+function exportHistory(){
+  if(!HISTORY.length){ tStat("Niets om te exporteren.",true); return; }
+  var blob=new Blob([JSON.stringify(HISTORY,null,2)],{type:"application/json"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download="screener-geschiedenis-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  tStat("Geschiedenis ge\u00ebxporteerd ("+HISTORY.length+" momentopnamen).");
+}
+function importHistory(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!Array.isArray(data))throw new Error("verkeerd formaat");
+      var seen={}; HISTORY.forEach(function(s){ if(s.ts)seen[s.ts]=1; });
+      data.forEach(function(s){ if(s&&s.ts&&!seen[s.ts]){ HISTORY.push(s); seen[s.ts]=1; } });
+      HISTORY.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+      tStat("Geschiedenis ge\u00efmporteerd \u2014 nu "+HISTORY.length+" momentopnamen.");
+      historyBewaren();
+      renderSnapList();
+    }catch(err){ tStat("Importeren mislukte: ongeldig bestand.",true); }
+  };
+  reader.readAsText(file);
+}
+function wisGeschiedenis(){
+  if(!HISTORY.length)return;
+  if(!confirm("Alle "+HISTORY.length+" momentopnamen wissen?"))return;
+  HISTORY=[];
+  renderSnapList();
+  $('kpiWrap').innerHTML=''; $('factorWrap').innerHTML=''; $('scatterWrap').innerHTML='';
+  tStat("Geschiedenis gewist.");
+  historyBewaren();
+}
+// knoppen: pas aansluiten nadat lokale + cloudhistorie geladen is, zodat de lijst
+// meteen de volledige geschiedenis toont
+historyLaden().then(function(){
+  renderSnapList();
+  return historyCloudMergen();
+}).then(function(){
+  renderSnapList();
+  if($('snapshot'))$('snapshot').onclick=takeSnapshot;
+  if($('export'))$('export').onclick=exportHistory;
+  if($('importBtn'))$('importBtn').onclick=function(){ $('importFile').click(); };
+  if($('importFile'))$('importFile').onchange=function(e){ if(e.target.files[0])importHistory(e.target.files[0]); };
+  if($('clearHist'))$('clearHist').onclick=wisGeschiedenis;
+});
+// Herrekenen (toonHerberekenVenster) en rapport-kopi\u00ebren (kopieerAnalyse) zijn nog niet
+// opnieuw aangesloten: die draaiden op dezelfde snapshot-structuur maar met eigen weergaven;
+// de knoppen geven tot zolang een duidelijke melding in plaats van niets te doen.
+function toonHerberekenVenster(){
+  tStat("Herrekenen is nog niet opnieuw aangesloten op de herbouwde momentopname-module.",true);
+}
+function kopieerAnalyse(){
+  tStat("Rapport kopi\u00ebren is nog niet opnieuw aangesloten op de herbouwde momentopname-module.",true);
+}
+
 // ---- Zelfbediening: eigen holdings toevoegen/verwijderen, lokaal + cloud bewaard ----
 var HOLDING_CUSTOM=[]; // door de gebruiker toegevoegde tickers (los van de standaardlijst)
 
@@ -8117,6 +8234,7 @@ function loadCloud(){
       if(typeof rebuildHoldingSet=="function"){rebuildHoldingSet();renderHoldingList();if(CURRENT&&CURRENT.length)render();}
     }
     if(typeof accuratesseRapportenCloudMergen=="function")accuratesseRapportenCloudMergen();
+    if(typeof historyCloudMergen=="function")historyCloudMergen();
     ['stocks','etfs'].forEach(function(kind){
       var cloudRun=data['lastRun_'+kind];
       if(!cloudRun||!cloudRun.data||!cloudRun.data.length)return;
