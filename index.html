@@ -1393,6 +1393,73 @@ function sectorNeutraal(){
 // Percentielen gebruiken we dus bij korte horizon óf wanneer sectorneutraal aanstaat.
 function gebruikPercentielen(){ return !isLong() || sectorNeutraal(); }
 
+// ---- Centrale foutafhandeling ----
+// E\u00e9n plek die elke fout in de tool vertaalt naar: wat er misging (kort), waarom dat
+// gebeurt (uitleg) en wat de eigenaar kan doen (actie). Voorheen had elke caller een
+// eigen vertaal- en afkaplogica; hier is d\u00e9ze classificatie de enige.
+// getJson levert al {kind,msg}; deze module normaliseert alles \u00e9n uniform.
+function foutNormaliseer(e){
+  if(e&&e.kind&&e.msg)return e;
+  var msg=(e&&e.msg)||(e&&e.message)||(typeof e==="string"?e:(e?"onverwacht: "+(JSON.stringify(e)||String(e)).slice(0,60):"onbekende fout (geen details)"));
+  return {kind:(e&&e.kind)||"onbekend",msg:msg};
+}
+var FOUT_SOORTEN=[
+  {test:/CORS|netwerkfout|Failed to fetch|NetworkError|ERR_NAME|ERR_CONNECTION/i,soort:"netwerk",
+   kort:"netwerkfout/CORS",
+   uitleg:"De browser kon de API niet bereiken \u2014 ofwel je verbinding, ofwel een adblocker/privacy-extensie die het API-domein blokkeert, ofwel CORS-weigering door de bron.",
+   actie:"Check je verbinding, zet tijdelijk je adblocker uit voor dit domein en probeer het opnieuw."},
+  {test:/403|access denied|don't have access|invalid.*key|api key|unauthorized/i,soort:"toegang",
+   kort:"geen toegang (sleutel of tier)",
+   uitleg:"De bron weigerde de aanroep: meestal een ontbrekende of ongeldige API-sleutel, of het endpoint valt buiten je gratis tier.",
+   actie:"Controleer de sleutel bij Instellingen; bestaat die, dan ondersteunt je tier dit endpoint waarschijnlijk niet."},
+  {test:/limit|429|too many|quota/i,soort:"limiet",
+   kort:"limiet bereikt",
+   uitleg:"Je dag- of minutenlimiet bij deze bron is op. De tool pauzeert automatisch bij snelheidslimieten, maar een dag- of maandlimiet herstelt pas later.",
+   actie:"Wacht tot het limietvenster herstelt, of vul een sleutel van een tweede bron in \u2014 de tool schuift automatisch door."},
+  {test:/timeout|geen antwoord/i,soort:"timeout",
+   kort:"time-out",
+   uitleg:"De API gaf binnen 20 seconden geen antwoord. Vaak tijdelijke drukte bij de bron.",
+   actie:"Meestal helpt het opnieuw; komt het bij elke aanroep voor, dan ligt het bij de bron of je verbinding."},
+  {test:/404|not found|niet gevonden/i,soort:"onbekend",
+   kort:"niet gevonden",
+   uitleg:"De bron heeft geen data voor dit specifieke effect \u2014 geen fout in je instellingen, gewoon geen dekking.",
+   actie:"Klopt de ticker/ISIN? Anders heeft deze bron dit effect simpelweg niet."},
+  {test:/Error Message|api/i,soort:"api",
+   kort:"API-melding",
+   uitleg:"De bron gaf zelf een foutmelding terug (bv. ongeldig formaat of onverwachte respons).",
+   actie:"De raw-melding staat erbij; meestal tijdelijk of bronspecifiek."}
+];
+function foutClassificeer(e){
+  var f=foutNormaliseer(e);
+  for(var i=0;i<FOUT_SOORTEN.length;i++){
+    if(FOUT_SOORTEN[i].test.test(f.msg))return {soort:FOUT_SOORTEN[i],raw:f};
+  }
+  var alg={soort:"onbekend",kort:null,uitleg:"Een onverwachte fout \u2014 geen bekend patroon.",actie:"Probeer het opnieuw; blijft hij komen, kijk dan in de browserconsole (F12) voor het volledige detail."};
+  return {soort:alg,raw:f};
+}
+function foutKort(e){
+  var c=foutClassificeer(e);
+  return c.soort.kort||c.raw.msg.slice(0,90);
+}
+// volledige, gedocumenteerde fout voor de frontend: wat/waarom/actie
+function foutVolledig(e){
+  var c=foutClassificeer(e);
+  return {
+    kort:c.soort.kort||c.raw.msg.slice(0,90),
+    msg:c.raw.msg,
+    uitleg:c.soort.uitleg,
+    actie:c.soort.actie
+  };
+}
+// HTML voor statusbalken: \u00e9\u00e9n vaste opmaak overal
+function foutHtml(e,prefix){
+  var v=foutVolledig(e);
+  return (prefix?"<b>"+prefix+"</b> ":"")+v.kort+
+    "<br><span style=\"opacity:.8\">"+v.uitleg+"</span>"+
+    "<br><span style=\"opacity:.7\">\u2192 "+v.actie+"</span>"+
+    (v.msg&&v.msg!==v.kort?" <span style=\"opacity:.5;font-size:10px\">(detail: "+String(v.msg).replace(/</g,"&lt;").slice(0,120)+")</span>":"");
+}
+
 // ============================================================================
 // 4. Scoremethodiek: deelscores, totaalscore, uitsplits, val-trap, winstverrassingen
 // ============================================================================
@@ -4002,26 +4069,20 @@ function enrichMultiFallback(symbol){
       if(!hasPrice) return fillPriceFrom(d,symbol,order,i);
       return d;
     }).catch(function(e){
-      // korte, niet-geneste foutreden per bron. Vang álle vormen af: onze eigen {msg},
-      // een gewone Error, of een onverwacht object - anders staat er alleen "fout".
-      var raw;
-      if(e&&e.msg)raw=e.msg;
-      else if(e&&e.message)raw=e.message;
-      else if(e instanceof Error)raw=String(e);
-      else if(typeof e==="string")raw=e;
-      else if(e)raw="onverwacht: "+(JSON.stringify(e)||String(e)).slice(0,60);
-      else raw="onbekende fout (geen details)";
-      var short=/CORS|netwerkfout/i.test(raw) ? "netwerkfout/CORS \u2014 check je verbinding of adblocker (API-domein geblokkeerd?)"
-              : /403|access denied|don't have access/i.test(raw) ? "geen toegang op je tier"
-              : /404|not found/i.test(raw) ? "niet gevonden"
-              : /limit|429/i.test(raw) ? "limiet bereikt"
-              : raw.slice(0,90);   // niet afkappen op haakjes: de reden staat er vaak juist ín
-      if(errors.indexOf(src+": "+short)===-1) errors.push(src+": "+short);
+      // korte, niet-geneste foutreden per bron via de centrale classificatie;
+      // de volledige uitleg (wat/waarom/actie) blijft bewaard voor het eindrapport.
+      var v=foutVolledig(e);
+      var short=src+": "+v.kort;
+      if(errors.indexOf(short)===-1)errors.push(short);
+      if(!foutDetails[src])foutDetails[src]=[];
+      if(foutDetails[src].indexOf(v)===-1)foutDetails[src].push(v);
       return attempt(i+1);
     });
   }
   return attempt(0);
 }
+// gedocumenteerde foutdetails per bron, voor het eindrapport na een screening
+var foutDetails={};
 // haalt alleen de koers op bij een andere bron, zonder de fundamentals te overschrijven
 function fillPriceFrom(d,symbol,order,skipIndex){
   var priceSources=order.filter(function(s,i){return i!==skipIndex && s!=="eulerpool";});
@@ -4419,10 +4480,19 @@ function runQueue(symbols,callsPer,fetchFn,label){
     all=(all||[]).filter(function(d){return d&&typeof d==="object"&&d.symbol;});
     if(!all.length){
       st.className="status err";
+      var fd=Object.keys(foutDetails||{});
       st.innerHTML='\u26a0\ufe0f Geen enkel aandeel kon opgehaald worden. '+
         (Object.keys(state.redenen||{}).length
           ? 'Redenen: '+Object.keys(state.redenen).slice(0,3).join('; ')
-          : 'Controleer je sleutels bij Instellingen.');
+          : 'Controleer je sleutels bij Instellingen.')+
+        (fd.length
+          ? '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">Wat betekent dit? ('+fd.length+' bron(nen) met fouten)</summary>'+
+            fd.map(function(bron){
+              var v=(foutDetails[bron]||[])[0];
+              return bron+': <b>'+(v?v.kort:'')+'</b><br><span style="opacity:.8">'+(v?v.uitleg:'')+'</span><br><span style="opacity:.7">\u2192 '+(v?v.actie:'')+'</span>';
+            }).join('<hr style="border:none;border-top:1px solid var(--line);margin:6px 0">')+
+            '</details>'
+          : '');
       return;
     }
     // winstverrassingen erbij halen indien gevraagd; faalt stil per aandeel
@@ -7505,14 +7575,17 @@ function checkAllPositions(){
       (uitslag.mislukt||[]).forEach(function(m){
         var pos=m.item.pos;
         var e=m.fout;
-        var msg=(e&&e.msg)?e.msg:(e&&e.message)?e.message:"onbekende fout ("+String(e).slice(0,80)+")";
+        var v=foutVolledig(e);
         var srcName=BRON.naam(BRON.voor(pos.symbol))||"databron";
-        pos._fresh=null; pos._alarm={level:"orange",text:"["+srcName+"] Kon niet ophalen: "+msg};
+        pos._fresh=null; pos._alarm={level:"orange",
+          text:"["+srcName+"] Kon niet ophalen: "+v.kort,
+          wat:v.kort+" (detail: "+v.msg+")",
+          waarom:v.uitleg,
+          actie:v.actie};
       });
     }).catch(function(e){
       // vangnet: zonder dit blijft de statusmelding hangen bij een onverwachte fout
-      pfStat("De check liep vast: "+((e&&e.msg)||(e&&e.message)||e)+
-             ". De resultaten die wel binnenkwamen staan hieronder.",true);
+      pfStat(foutHtml(e,"De check liep vast:")+" De resultaten die wel binnenkwamen staan hieronder.",true);
       renderPortfolio();
     }).then(function(){
     // posities die onder hun eigen ingestelde grens zakten
