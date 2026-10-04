@@ -8088,6 +8088,7 @@ document.querySelectorAll('.tab').forEach(function(t){
     var pane=$('tab-'+t.dataset.tab);
     if(pane)pane.classList.add('active');
     if(t.dataset.tab==='nieuws'&&typeof renderNwKiezer==="function")renderNwKiezer();
+    if(t.dataset.tab==='tracking'&&typeof renderSnapList==="function")renderSnapList();
   });
 });
 
