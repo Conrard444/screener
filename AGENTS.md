@@ -20,6 +20,16 @@ direct als statische pagina (GitHub Pages).
    6. Weergave (`render`, `renderPortfolio`, `renderEtf`)
    7. Koppelingen aan knoppen (`onclick`/`onchange`) — **altijd binnen DOMContentLoaded of na de DOM**
    Elk blok gebruikt alleen wat erboven staat; verplaatsen leidt tot "is not defined".
+   Het grote scriptblok is ingedeeld in 15 lagen, gemarkeerd met `// ====`-banners
+   en een architectuur-inhoudsopgave direct na `<script>`. Van boven naar benen:
+   1. Bronopties & configuratie · 2. Gedeelde toestand & lookup-tabellen ·
+   3. Centrale infrastructuur (ophaalpool, naamgeving, archief, veldweergave) ·
+   4. Scoremethodiek · 5. Kerndata & ophalen (enrich-functies, universa,
+   holding-detectie) · 6. Sorteer-helpers · 7. Overlap/broker/onderzoek ·
+   8. Nieuws & signaal-factoren · 9. Weergave-modules · 10. Universa & holdings ·
+   11. Datacache/call-teller · 12. Opslaglaag & sleutelbeheer · 13. ETF-databronnen ·
+   14. ETF-beoordeling · 15. Portefeuille-analyse. Nieuwe code hoort in de laag die
+   erbij past; bij herindeling banners en de inhoudsopgave meeveranderen.
 
 3. **Event listeners (tabs, knoppen, login) horen BINNEN een
    `document.addEventListener('DOMContentLoaded', ...)` handler**, nooit los in de

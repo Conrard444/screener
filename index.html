@@ -67,6 +67,9 @@
   });
 })();
 
+// ============================================================================
+// 1. Bronopties & configuratie
+// ============================================================================
 // ---- Bronopties (moeten vóór elk gebruik staan) ----
 // Winstverrassingen en analistenramingen ophalen: 1 tot 2 extra calls per aandeel.
 // Standaard uit, want het is aanvullende analysedata en geen onderdeel van de score.
@@ -77,6 +80,9 @@ var EULER_CHARTING=true;      // koershistorie: echt momentum en 52-weeks daling
 var EULER_FUNDAMENTALS=false; // oude route via jaarrekening; niet meer nodig met metrics aan
 var ISIN_RE=/^[A-Z]{2}[A-Z0-9]{9}\d$/;
 
+// ============================================================================
+// 2. Gedeelde toestand & lookup-tabellen
+// ============================================================================
 // ---- Gegevenstabellen en gedeelde toestand ----
 // Alles wat door meerdere modules gebruikt wordt staat hier, vóór elk gebruik. Voorheen
 // stonden deze verspreid, wat zeven defensieve typeof-checks nodig maakte en al viermaal
@@ -355,6 +361,9 @@ var BRON={
   bereikbaar: function(symbol){ return this.voor(symbol)!=null; }
 };
 
+// ============================================================================
+// 3. Centrale infrastructuur: ophaalpool, naamgeving, archief, veldweergave
+// ============================================================================
 // ---- Centrale ophaalpool ----
 // Eén plek voor het ophalen van effecten in alle tabbladen (screener, ETF's, portefeuille):
 // parallelle worker-pool met het schuivende snelheidslimiet-venster. Voorheen had alleen
@@ -1271,6 +1280,26 @@ var OPHAALPOOL={
   Persoonlijk analyse-instrument &mdash; geen financieel advies, geen aanbeveling tot koop of verkoop.
 </footer>
 
+// ============================================================
+// ARCHITECTUUR-INHOUD \u2014 vijftien lagen, gemarkeerd met ==== banners.
+// Elke laag gebruikt alleen wat erboven staat (AGENTS.md regel 2): bij herindeling
+// de banners en deze lijst handmatig mee veranderen. Niet verplaatsen.
+// ============================================================
+//   1. Bronopties & configuratie  [Bronopties (moeten vóór elk gebruik staan)]
+//   2. Gedeelde toestand & lookup-tabellen  [Gegevenstabellen en gedeelde toestand]
+//   3. Centrale infrastructuur: ophaalpool, naamgeving, archief, veldweergave  [Centrale ophaalpool]
+//   4. Scoremethodiek: deelscores, totaalscore, uitsplits, val-trap, winstverrassingen  [Centrale scoremethodiek]
+//   5. Kerndata & ophalen: kernvelden, enrich-functies, universa, holding-detectie  [Kerngegevens per effect]
+//   6. Sorteer- & universum-helpers  [Centrale sorteer- en herstelhelpers]
+//   7. Overlap, broker & onderzoek: portefeuille-overlap, broker-beschikbaarheid, researchlinks  [Overlap met je eigen portefeuille, getoond tijdens het screenen]
+//   8. Nieuws & signaal-factoren (Finnhub)  [Nieuws per positie]
+//   9. Weergave-modules: detailpaneel, sorteerbare tabellen  [Detailpaneel per effect]
+//   10. Universa & holdings-lijsten  [Universa op ISIN]
+//   11. Datacache, call-teller & screeningsbewaring  [Datacache: hergebruik opgehaalde cijfers, spaart API-calls en wachttijd]
+//   12. Opslaglaag, opslagbewaking & sleutelbeheer  [Opslaglaag: werkt in elke browser (localStorage), met fallback]
+//   13. ETF-catalogus & ETF-databronnen (SecuritiesDB, Eulerpool)  [ETF-catalogus: voorgeprogrammeerde selecties van grote Amerikaanse fondsen]
+//   14. ETF-beoordeling: compleetheid, fiscale last, index-groepering, efficiëntie  [Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score?]
+//   15. Portefeuille-analyse: alarms, verkoopsignalen, overlap-analyse, rendement, imports, spreiding  [Fiscale efficiëntie van een fonds]
 <script>
 const DEMO=[
   {symbol:"NVDA", name:"NVIDIA Corp.",     market:"US",sector:"Technologie",roe:91.9,margin:55.0,de:0.41,dd:-5.2,price:128.7,chg:5.4,mom1m:18.9,pe:54.8,peg:1.1,pb:46.1,revG:78.0,epsG:88.0},
@@ -1364,6 +1393,9 @@ function sectorNeutraal(){
 // Percentielen gebruiken we dus bij korte horizon óf wanneer sectorneutraal aanstaat.
 function gebruikPercentielen(){ return !isLong() || sectorNeutraal(); }
 
+// ============================================================================
+// 4. Scoremethodiek: deelscores, totaalscore, uitsplits, val-trap, winstverrassingen
+// ============================================================================
 // ---- Centrale scoremethodiek ----
 // Eén plek die vastlegt hoe elke score in deze tool tot stand komt, onafhankelijk van
 // welke databron (SecuritiesDB, Finnhub, Eulerpool) de cijfers leverde. De regels:
@@ -1595,6 +1627,9 @@ function bepaalBijstelling(d){
   };
 }
 
+// ============================================================================
+// 5. Kerndata & ophalen: kernvelden, enrich-functies, universa, holding-detectie
+// ============================================================================
 // ---- Kerngegevens per effect ----
 // De velden die de scorelogica leest. Dit is de bron van waarheid: een momentopname bewaart
 // déze cijfers, niet de scores. Een score is een afgeleide van een methodiek die kan wijzigen;
@@ -2307,6 +2342,9 @@ function renderScoreUitsplits(pos,fresh){
     '<span style="font-weight:600;color:var(--ink)">waar de score (\u2212'+Math.round(info.drop)+') van afstraalt:</span>'+
     (rijen?rijen:'<span style="color:var(--muted)">geen aparte pijler groot genoeg</span>')+pen+'</div>';
 }
+// ============================================================================
+// 6. Sorteer- & universum-helpers
+// ============================================================================
 // ---- Centrale sorteer- en herstelhelpers ----
 // Sorteren op totaalscore stond op zes plekken identiek gekopieerd; een toekomstige
 // wijziging (bijv. een andere scorefunctie of secundaire sortering) moest dan overal
@@ -2466,6 +2504,9 @@ function isinOf(d){
   return d.isin || isinFor(d.symbol) || null;
 }
 
+// ============================================================================
+// 7. Overlap, broker & onderzoek: portefeuille-overlap, broker-beschikbaarheid, researchlinks
+// ============================================================================
 // ---- Overlap met je eigen portefeuille, getoond tijdens het screenen ----
 // Vier soorten signalen, van sterk naar zwak:
 //   bezit    = je hebt dit exact al
@@ -2616,6 +2657,9 @@ function externalLinks(d){
   return links;
 }
 // klein linkicoontje met uitklapbaar menu
+// ============================================================================
+// 8. Nieuws & signaal-factoren (Finnhub)
+// ============================================================================
 // ---- Nieuws per positie ----
 // Finnhub's /company-news werkt op de gratis tier, maar labelt ruim: bij een opvraging voor
 // NVDA komen ook artikelen over SpaceX, Micron en Disney mee. We filteren daarom op
@@ -2954,6 +2998,9 @@ function nwWissel(id){
 }
 window.nwWissel=nwWissel;
 
+// ============================================================================
+// 9. Weergave-modules: detailpaneel, sorteerbare tabellen
+// ============================================================================
 // ---- Detailpaneel per effect ----
 // Eén weergave van alle bekende gegevens plus onderzoeksmogelijkheden, gebruikt door zowel
 // de screener als de portefeuille. Voorheen stond die informatie verspreid over kolommen
@@ -3263,6 +3310,9 @@ var UNIVERSE_SP_EXTRA=[
 // Chinese ADR's noteren in de VS en rapporteren bij de SEC -> lopen via SecuritiesDB
 var UNIVERSE_CHINA_ADR=["BABA","PDD","JD","BIDU","NTES","TCOM","BILI","YUMC","ZTO","LI","NIO","XPEV"];
 
+// ============================================================================
+// 10. Universa & holdings-lijsten
+// ============================================================================
 // ---- Universa op ISIN ----
 // Eulerpool werkt op ISIN, niet op beurstickers: dezelfde onderneming heeft per beurs een andere
 // ticker (EUNL.DE / IWDA.AS) maar altijd dezelfde ISIN. Getest en werkend voor EU, Scandinavië en Azië.
@@ -3486,6 +3536,9 @@ function getJson(url){
   })]);
 }
 
+// ============================================================================
+// 11. Datacache, call-teller & screeningsbewaring
+// ============================================================================
 // ---- Datacache: hergebruik opgehaalde cijfers, spaart API-calls en wachttijd ----
 // Fundamentals veranderen per kwartaal; 12 uur cache is ruim veilig. De cache zit in de
 // browseropslag en wordt gespiegeld naar Firestore, zodat je andere apparaten er ook van
@@ -4524,6 +4577,9 @@ $('csv').onclick=function(){
   $('status').className="status";$('status').textContent="CSV ge\u00ebxporteerd ("+CURRENT.length+" aandelen, puntkomma-gescheiden voor Excel).";
 };
 
+// ============================================================================
+// 12. Opslaglaag, opslagbewaking & sleutelbeheer
+// ============================================================================
 // ---- Opslaglaag: werkt in elke browser (localStorage), met fallback ----
 // ---- Opslagbewaking ----
 // Mislukte opslag was tot nu toe onzichtbaar: elke LS.set zat in een lege catch. Raakt de
@@ -4746,6 +4802,9 @@ loadAllKeys();
 setTimeout(updateSourceIndicator,500);
 
 // ============ ETF-TABBLAD ============
+// ============================================================================
+// 13. ETF-catalogus & ETF-databronnen (SecuritiesDB, Eulerpool)
+// ============================================================================
 // ---- ETF-catalogus: voorgeprogrammeerde selecties van grote Amerikaanse fondsen ----
 // SecuritiesDB heeft geen lijst-endpoint, dus we leveren de tickers zelf aan.
 // Dekking: VS-genoteerde ETF's (Europese UCITS-fondsen worden niet gedekt).
@@ -5964,6 +6023,9 @@ function removePosition(id){
 window.removePosition=removePosition;
 
 // classificeer het alarm: vergelijkt actuele staat met de baseline (vorige keer gecheckt)
+// ============================================================================
+// 14. ETF-beoordeling: compleetheid, fiscale last, index-groepering, efficiëntie
+// ============================================================================
 // ---- Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score? ----
 // Zonder waardering/groei/kwaliteit is een vier-factor-score misleidend; dan tonen we dat eerlijk
 // in plaats van een cijfer dat op halve gegevens rust.
@@ -6078,6 +6140,9 @@ function jaarlijksNadeel(fonds,beste){
   return +(kosten+fiscaal).toFixed(3);
 }
 
+// ============================================================================
+// 15. Portefeuille-analyse: alarms, verkoopsignalen, overlap-analyse, rendement, imports, spreiding
+// ============================================================================
 // ---- Fiscale efficiëntie van een fonds ----
 // Het domicilie bepaalt hoeveel bronbelasting er op Amerikaanse dividenden blijft hangen.
 // Ierland heeft een verdrag met de VS (15%), Luxemburg niet in dezelfde mate (tot 30%).
