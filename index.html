@@ -691,9 +691,9 @@ var OPHAALPOOL={
     <button class="tab active" data-tab="portfolio">Portefeuille</button>
     <button class="tab" data-tab="screener">Aandelen</button>
     <button class="tab" data-tab="etf">ETF's</button>
+    <button class="tab" data-tab="nieuws">Nieuws</button>
     <button class="tab" data-tab="tracking">Tracking</button>
     <button class="tab" data-tab="settings">Instellingen</button>
-    <button class="tab" data-tab="nieuws">Nieuws</button>
     <button class="tab" data-tab="uitleg">Uitleg</button>
   </div>
 
@@ -958,11 +958,6 @@ var OPHAALPOOL={
     <div class="status" id="pfStatus"></div>
 
     <div class="kpi-row" id="pfDashboard"></div>
-    <div id="aandachtWrap"></div>
-    <div id="importHint"></div>
-    <div id="spreidingWrap"></div>
-    <div id="overlapWrap"></div>
-    <div id="verkoopWrap"></div>
 
     <div class="control-row compact" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px">
       <span class="inline-lbl">Sorteren</span>
@@ -1008,6 +1003,12 @@ var OPHAALPOOL={
         </div>
       </details>
     </div>
+
+    <div id="aandachtWrap"></div>
+    <div id="importHint"></div>
+    <div id="spreidingWrap"></div>
+    <div id="overlapWrap"></div>
+    <div id="verkoopWrap"></div>
 
     <div id="pfList"><div class="empty">Nog geen posities toegevoegd.</div></div>
   </div><!-- /tab-portfolio -->
@@ -1201,15 +1202,12 @@ var OPHAALPOOL={
   </details>
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">ETF's</summary>
-      <div style="padding:8px 0 0"><details style="margin:16px 0 0">
+      <div style="padding:8px 0 0">
+      <details style="margin:0 0 10px">
       <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
       <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
     </details>
-    </div>
-  </details>
-    <details style="margin-bottom:10px">
-      <summary style="font-weight:600">ETF's</summary>
-      <div style="padding:8px 0 0"><details>
+      <details>
       <summary>&#128273; Over ETF-data</summary>
       <p>Draait op <b>SecuritiesDB</b> &mdash; gratis, zonder sleutel of account. Levert kostenratio, fondsomvang, aantal posities, concentratie, gewogen P/E, volatiliteit en Sharpe-ratio, plus <b>werkelijke overlap-percentages</b> tussen fondsen (data uit SEC N-PORT-filings). Is een ticker niet bekend, dan valt de tool terug op Finnhub mits je daar een sleutel voor hebt.</p>
       <p><b>Europese ETF's</b>: kies een van de &#127466;&#127482;-selecties in de lijst. Die zijn opgebouwd met ISIN's (bv. IE00B4L5Y983), het formaat waar Eulerpool het betrouwbaarst mee werkt. Ze lopen via <b>Eulerpool</b> &mdash; vul daarvoor je sleutel in bij Instellingen. Dat endpoint geeft kostenratio, fondsomvang, tracking-index en alle beursnoteringen van hetzelfde fonds, waarmee de tool herkent of je hetzelfde fonds twee keer aanhoudt onder verschillende tickers.</p>
