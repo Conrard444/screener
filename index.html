@@ -1322,6 +1322,7 @@ details[open] > summary{margin-bottom:4px}
 //   15. Portefeuille-analyse: alarms, verkoopsignalen, overlap-analyse, rendement, imports, spreiding  [Fiscale efficiëntie van een fonds]
 //       daarin: Tracking & momentopnamen + Accuratesse-meting (terugtoets van de scoremethodiek)  [Tracking & momentopnamen]
 //   16. Firebase-cloud-sync: inloggen, centrale cloud-lezer (loadCloud), instellingen- en sleutelopslag  [Firebase cloud-sync]
+//       daarin: Cloud-sync kern [Cloud-sync kern: \u00e9\u00e9n schrijver, \u00e9\u00e9n lezer, wachtrij + herpoging] \u2014 alle cloud-schrijfacties gaan uitsluitend via cloudSchrijf(): geserialiseerd, met herpoging en zichtbare foutmelding. De portefeuille-opslag is \u00e9\u00e9n atomaire schrijfactie (portfoliosJson met timestamp); de lezer lost conflicten op \u00e9\u00e9n timestamp-regel op en migreert de oude portfolios-structuur.
 <script>
 const DEMO=[
   {symbol:"NVDA", name:"NVIDIA Corp.",     market:"US",sector:"Technologie",roe:91.9,margin:55.0,de:0.41,dd:-5.2,price:128.7,chg:5.4,mom1m:18.9,pe:54.8,peg:1.1,pb:46.1,revG:78.0,epsG:88.0},
@@ -2928,11 +2929,8 @@ function accuratesseRapportenLezen(){
 }
 function accuratesseRapportenBewaren(lijstRap){
   try{ localStorage.setItem('kompas_'+ACC_RAPPORTEN_KEY,JSON.stringify(lijstRap)); }catch(e){}
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    var upd={}; upd[ACC_RAPPORTEN_KEY]=lijstRap;
-    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true})
-      .catch(function(e){ console.warn('Kompas: accuratesse-rapporten naar cloud mislukt',e&&e.message); });
-  }
+  if(typeof cloudSchrijf==="function")cloudSchrijf((function(){ var upd={}; upd[ACC_RAPPORTEN_KEY]=lijstRap; return upd; })(),'accuratesse-rapporten');
+
 }
 function accuratesseRapportOpslaan(rap){
   var lijstRap=accuratesseRapportenLezen();
@@ -3180,9 +3178,8 @@ function notitieBewaar(sleutel,tekst){
   if(tekst&&tekst.trim())EFFECT_NOTITIES[sleutel]={tekst:tekst.trim(),ts:Date.now()};
   else delete EFFECT_NOTITIES[sleutel];
   lsSafe('effectNotities',EFFECT_NOTITIES);
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid).set({effectNotities:EFFECT_NOTITIES},{merge:true}).catch(function(){});
-  }
+  if(typeof cloudSchrijf==="function")cloudSchrijf({effectNotities:EFFECT_NOTITIES},'effectnotities');
+
 }
 
 // Zoekopdrachten voor AI-zoekmachines. Deze openen in een nieuw tabblad met een kant-en-klare
@@ -3747,9 +3744,8 @@ function dataCacheSaveNu(){
   });
   DATA_CACHE=opschoon;
   try{ LS.set('dataCache',JSON.stringify(opschoon)).catch(function(){}); }catch(e){}
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid).set({dataCache:opschoon},{merge:true}).catch(function(){});
-  }
+  if(typeof cloudSchrijf==="function")cloudSchrijf({dataCache:opschoon},'datacache');
+
 }
 function dataCacheGet(sym){
   if(!DATA_CACHE_AAN)return null;
@@ -3801,16 +3797,8 @@ function saveLastRun(kind,data,params){
     });
   }catch(e){ console.warn('Kompas: opslagfout',e); }
   // ook naar Firestore, zodat je hem op je andere apparaten terugziet
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    var upd={}; upd['lastRun_'+kind]=payload;
-    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true})
-      .catch(function(e){ console.warn('Kompas: cloud-opslag screening mislukt',e&&e.message); });
-  }
-  // ook naar de cloud, zodat je hem op je andere apparaten terugziet
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    var upd={}; upd['lastRun_'+kind]=payload;
-    FB.db.collection("users").doc(FB.user.uid).set(upd,{merge:true}).catch(function(){});
-  }
+  if(typeof cloudSchrijf==="function"){ var upd={}; upd['lastRun_'+kind]=payload; cloudSchrijf(upd,'laatste screening'); }
+
 }
 function loadLastRun(kind){
   return LS.get('lastRun_'+kind).then(function(r){
@@ -5992,23 +5980,22 @@ function pfHernoem(id,naam){
   savePortfoliosLocal(); savePortfoliosCloud();
   renderPfKiezer();
 }
+var LS_PORTFOLIO_TS=0;
 function savePortfoliosLocal(){
   pfSync();
-  lsSafe('portfolios',{actief:ACTIEVE_PF,lijsten:PORTFOLIOS});
+  LS_PORTFOLIO_TS=Date.now();
+  lsSafe('portfolios',{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,ts:LS_PORTFOLIO_TS});
 }
 function savePortfoliosCloud(){
-  pfSync();
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    // Firestore voegt bij merge:true velden samen in plaats van te vervangen. Een verwijderde
-    // portefeuille bleef daardoor in de database staan en kwam bij het laden weer terug.
-    // We schrijven het hele blok daarom expliciet leeg en daarna opnieuw.
-    var ref=FB.db.collection("users").doc(FB.user.uid);
-    ref.set({portfolios:firebase.firestore.FieldValue.delete()},{merge:true})
-      .then(function(){
-        return ref.set({portfolios:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,bijgewerkt:Date.now()}},{merge:true});
-      })
-      .catch(function(e){ console.warn('Kompas: portefeuilles opslaan mislukt',e&&e.message); });
-  }
+  savePortfoliosLocal();
+  // Eén atomaire schrijfactie: het oude portfolios-veld (samenvoeggedrag liet verwijderde
+  // portefeuilles terugkomen) wordt meteen vervangen door de nieuwe structuur in \u00e9\u00e9n set.
+  // Vroeger waren dit twee losse schrijfacties met een gat ertussen waarin de database
+  // leeg was \u2014 viel de tweede actie weg, dan waren de portefeuilles definitief verdwenen.
+  return cloudSchrijf({
+    portfolios:firebase.firestore.FieldValue.delete(),
+    portfoliosJson:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,bijgewerkt:LS_PORTFOLIO_TS}
+  },'portefeuilles');
 }
 function loadPortfoliosLocal(){
   return LS.get('portfolios').then(function(r){
@@ -6020,6 +6007,7 @@ function loadPortfoliosLocal(){
           if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
           ACTIEVE_PF=(d.actief&&PORTFOLIOS[d.actief])?d.actief:"eigen";
           PORTFOLIO=PORTFOLIOS[ACTIEVE_PF].posities||[];
+          LS_PORTFOLIO_TS=d.ts||0;
           renderPfKiezer(); renderPortfolio();
           return true;
         }
@@ -7747,10 +7735,8 @@ function sanitizeHistory(lijst){
 }
 function historyBewaren(){
   try{ lsSafe(HISTORY_KEY,HISTORY); }catch(e){}
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid).set({history:HISTORY,updated:Date.now()},{merge:true})
-      .catch(function(e){ console.warn('Kompas: momentopnamen naar cloud mislukt',e&&e.message); });
-  }
+  if(typeof cloudSchrijf==="function")cloudSchrijf({history:HISTORY,updated:Date.now()},'momentopnamen');
+
 }
 function historyLaden(){
   return LS.get(HISTORY_KEY).then(function(r){
@@ -8412,10 +8398,9 @@ function loadHoldingsLocal(){
   }catch(e){}
 }
 function saveHoldingsCloud(){
-  if(typeof FB!=="undefined"&&FB.user&&FB.ready){
-    FB.db.collection("users").doc(FB.user.uid).set({holdingCustom:HOLDING_CUSTOM},{merge:true}).catch(function(){});
-  }
+  if(typeof cloudSchrijf==="function")cloudSchrijf({holdingCustom:HOLDING_CUSTOM},'eigen holdings');
 }
+
 function renderHoldingList(){
   var el=$('holdingList'); if(!el)return;
   var std=Object.keys(HOLDING_SET_DEFAULT);
@@ -8717,6 +8702,28 @@ function toonInlogStatus(ingelogd){
     zet(uit,ingelogd);
   });
 }
+// ---- Cloud-sync kern: één schrijver, één lezer, wachtrij + herpoging ----
+function cloudActief(){ return typeof FB!=="undefined"&&FB.user&&FB.ready; }
+var CLOUD_WACHTRIJ=Promise.resolve();
+function cloudSchrijf(lading, naam){
+  if(!cloudActief())return Promise.resolve(false);
+  var ref=FB.db.collection("users").doc(FB.user.uid);
+  var taak=CLOUD_WACHTRIJ.then(function(){
+    function herpoging(n){
+      return ref.set(lading,{merge:true}).then(function(){ return true; })
+        .catch(function(e){
+          if(n<2)return new Promise(function(w){ setTimeout(w,800); }).then(function(){ return herpoging(n+1); });
+          console.warn('Kompas: '+naam+' naar cloud mislukt', e&&e.message);
+          syncMsg('\u2601\ufe0f Cloud-opslag van '+naam+' mislukt \u2014 je gegevens blijven lokaal bewaard en worden bij de volgende synchronisatie opnieuw geprobeerd.');
+          return false;
+        });
+    }
+    return herpoging(0);
+  });
+  CLOUD_WACHTRIJ=taak.catch(function(){});
+  return taak;
+}
+function cloudDoc(){ return FB.db.collection("users").doc(FB.user.uid); }
 (function initFirebase(){
   if(typeof firebase==="undefined"||!window.FIREBASE_CONFIG){
     syncMsg("\u2601\ufe0f Cloud-sync niet beschikbaar (Firebase niet geladen \u2014 werkt alleen op de online versie).");
@@ -8781,21 +8788,29 @@ function loadCloud(){
       });
       if(typeof updateSourceIndicator==="function")updateSourceIndicator();
     }
-    if(data.portfolios&&data.portfolios.lijsten&&typeof PORTFOLIOS!=="undefined"){
-      var cloudLijsten=data.portfolios.lijsten;
-      var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
-        return !(PORTFOLIOS[k].posities||[]).length;
-      });
-      if(lokaalLeeg){
-        PORTFOLIOS=cloudLijsten;
-        if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
-        ACTIEVE_PF=(data.portfolios.actief&&PORTFOLIOS[data.portfolios.actief])?data.portfolios.actief:"eigen";
-        if(typeof savePortfoliosLocal==="function")savePortfoliosLocal();
-        if(typeof renderPfKiezer=="function")renderPfKiezer();
-        if(typeof renderPortfolio=="function")renderPortfolio();
-      }else if(typeof savePortfoliosCloud=="function"){
-        savePortfoliosCloud();
-        if(typeof renderPfKiezer=="function")renderPfKiezer();
+    if(typeof PORTFOLIOS!=="undefined"){
+      var cloudPf=data.portfoliosJson||null;
+      if(!cloudPf&&data.portfolios&&data.portfolios.lijsten){
+        cloudPf=data.portfolios;
+        cloudPf.bijgewerkt=cloudPf.bijgewerkt||0;
+      }
+      if(cloudPf&&cloudPf.lijsten){
+        var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
+          return !(PORTFOLIOS[k].posities||[]).length;
+        });
+        var lokaalTs=(typeof LS_PORTFOLIO_TS!=="undefined")?LS_PORTFOLIO_TS:0;
+        if(lokaalLeeg||(cloudPf.bijgewerkt||0)>=lokaalTs){
+          PORTFOLIOS=cloudPf.lijsten;
+          if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
+          ACTIEVE_PF=(cloudPf.actief&&PORTFOLIOS[cloudPf.actief])?cloudPf.actief:"eigen";
+          LS_PORTFOLIO_TS=cloudPf.bijgewerkt||0;
+          if(typeof savePortfoliosLocal==="function")savePortfoliosLocal();
+          if(typeof renderPfKiezer==="function")renderPfKiezer();
+          if(typeof renderPortfolio==="function")renderPortfolio();
+        }else if(typeof savePortfoliosCloud==="function"){
+          savePortfoliosCloud();
+          if(typeof renderPfKiezer==="function")renderPfKiezer();
+        }
       }
     }
     if(data.effectNotities&&typeof EFFECT_NOTITIES!=="undefined"){
@@ -8876,9 +8891,9 @@ function currentSettings(){
 }
 function saveSettingsCloud(){
   if(!FB.user||!FB.ready){syncMsg("Log eerst in om instellingen te bewaren.");return;}
-  FB.db.collection("users").doc(FB.user.uid).set({settings:currentSettings()},{merge:true}).then(function(){
-    syncMsg("\u2601\ufe0f Screener-instellingen bewaard in de cloud.");
-  }).catch(function(e){syncMsg("Bewaren mislukt: "+(e&&e.message||e));});
+  cloudSchrijf({settings:currentSettings()},'screener-instellingen').then(function(ok){
+    if(ok)syncMsg("\u2601\ufe0f Screener-instellingen bewaard in de cloud.");
+  });
 }
 // sleutels apart naar cloud schrijven, alleen als de opt-in checkbox aanstaat
 function saveKeysCloud(){
@@ -8887,9 +8902,9 @@ function saveKeysCloud(){
   if(on){
     var keys={};
     ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){if(KEYCACHE[src])keys[src]=KEYCACHE[src];});
-    FB.db.collection("users").doc(FB.user.uid).set({keys:keys},{merge:true}).catch(function(){});
+    if(typeof cloudSchrijf==="function")cloudSchrijf({keys:keys},'sleutels');
   }else{
-    FB.db.collection("users").doc(FB.user.uid).set({keys:firebase.firestore.FieldValue.delete()},{merge:true}).catch(function(){});
+    if(typeof cloudSchrijf==="function")cloudSchrijf({keys:firebase.firestore.FieldValue.delete()},'sleutels');
   }
 }
 </script>
