@@ -1431,7 +1431,7 @@ var FOUT_SOORTEN=[
    kort:"netwerkfout/CORS",
    uitleg:"De browser kon de API niet bereiken \u2014 ofwel je verbinding, ofwel een adblocker/privacy-extensie die het API-domein blokkeert, ofwel CORS-weigering door de bron.",
    actie:"Check je verbinding, zet tijdelijk je adblocker uit voor dit domein en probeer het opnieuw."},
-  {test:/403|access denied|don't have access|invalid.*key|api key|unauthorized/i,soort:"toegang",
+  {test:/401|403|access denied|don't have access|invalid.*key|api key|unauthorized/i,soort:"toegang",
    kort:"geen toegang (sleutel of tier)",
    uitleg:"De bron weigerde de aanroep: meestal een ontbrekende of ongeldige API-sleutel, of het endpoint valt buiten je gratis tier.",
    actie:"Controleer de sleutel bij Instellingen; bestaat die, dan ondersteunt je tier dit endpoint waarschijnlijk niet."},
@@ -3671,14 +3671,15 @@ function sourceFromUrl(u){
   return null;
 }
 function getJson(url){
-  if(typeof recordCall==="function"){ var s=sourceFromUrl(url); if(s)recordCall(s,1); }
+  var bron=sourceFromUrl(url);
+  if(typeof recordCall==="function"){ if(bron)recordCall(bron,1); }
   // Tijdslimiet: zonder dit kan één trage of hangende aanroep de hele check blokkeren,
   // waardoor de statusmelding blijft staan zonder dat er nog iets gebeurt.
   var timeout=new Promise(function(_,rej){
     setTimeout(function(){rej({kind:"timeout",msg:"geen antwoord binnen 20 seconden"});},20000);
   });
   return Promise.race([timeout, fetch(url).then(function(r){
-    if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText}; }
+    if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText+" ("+(bron||"onbekende bron")+")"}; }
     return r.text();
   }).then(function(txt){
     var data;
