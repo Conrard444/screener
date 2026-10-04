@@ -7794,9 +7794,16 @@ $('pfImportBtn').onclick=function(){$('pfBoleroFile').click();};
 // nieuwstabblad
 if($('nwOphalen'))$('nwOphalen').onclick=nieuwsOphalen;
 if($('nwAccuratesse'))$('nwAccuratesse').onclick=signaalAccuratesseMeten;
+// tab-navigatie: één centrale luisteraar die het actieve tabblad en -paneel wisselt,
+// plus de per-tabblad-haken (nieuws: portefeuillekiezer vullen).
 document.querySelectorAll('.tab').forEach(function(t){
-  if(t.dataset.tab==='nieuws')t.addEventListener('click',function(){
-    if(typeof renderNwKiezer==="function")renderNwKiezer();
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+    document.querySelectorAll('.tabpane').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+    var pane=$('tab-'+t.dataset.tab);
+    if(pane)pane.classList.add('active');
+    if(t.dataset.tab==='nieuws'&&typeof renderNwKiezer==="function")renderNwKiezer();
   });
 });
 
