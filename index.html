@@ -8012,8 +8012,15 @@ function syncMsg(t){
 function toonInlogStatus(ingelogd){
   [['loginBtn','logoutBtn'],['cloudKopLogin','cloudKopLogout']].forEach(function(p){
     var aan=$(p[0]), uit=$(p[1]);
-    if(aan)aan.style.display=ingelogd?"none":"";
-    if(uit)uit.style.display=ingelogd?"":"none";
+    // zowel inline-stijl als de .verborgen-klasse meenemen: de uitlogknop staat
+    // standaard op class="verborgen" en een inline display="" heft dat niet op
+    var zet=function(el,tonen){
+      if(!el)return;
+      el.style.display=tonen?"":"none";
+      if(el.classList){ el.classList.toggle("verborgen",!tonen); }
+    };
+    zet(aan,!ingelogd);
+    zet(uit,ingelogd);
   });
 }
 (function initFirebase(){
