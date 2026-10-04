@@ -578,7 +578,18 @@ var OPHAALPOOL={
   .tab:hover{color:var(--ink);background:var(--panel-2)}
   .tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--panel);font-weight:700}
   .tabpane{display:none}
-  .tabpane.active{display:block;animation:fadeIn 0.2s ease-in}
+  
+/* ---- Centrale weergave-klassen ----
+   Veelvoorkomende combinaties die voorheen overal als inline style stonden. */
+.verborgen{display:none}
+.muted-klein{font-size:11px;color:var(--muted)}
+.muted-tekst{color:var(--muted)}
+.sectie-kop{font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;font-size:13px}
+.sub-kop{font-size:13px;color:var(--muted);font-weight:400}
+details > summary{cursor:pointer}
+details[open] > summary{margin-bottom:4px}
+
+.tabpane.active{display:block;animation:fadeIn 0.2s ease-in}
   @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
   .kpi-row{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0}
   .kpi{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
@@ -687,7 +698,7 @@ var OPHAALPOOL={
          zonder synchronisatie werkt en je wijzigingen alleen lokaal blijven staan. -->
     <div id="cloudKop" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
          margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px">
-      <span id="cloudKopStatus" style="color:var(--muted)">&#9729;&#65039; niet ingelogd &mdash;
+      <span id="cloudKopStatus" class="muted-tekst">&#9729;&#65039; niet ingelogd &mdash;
         wijzigingen blijven alleen op dit apparaat</span>
       <button class="btn-ghost" id="cloudKopLogin"
         style="height:28px;padding:0 12px;font-size:11.5px">Inloggen met Google</button>
@@ -743,10 +754,10 @@ var OPHAALPOOL={
       <button class="btn-go" id="run" aria-label="Voer screening uit">Screenen</button>
       <button class="btn-ghost" id="loadLast" title="Toon de laatst opgehaalde screening opnieuw, zonder API-calls te verbruiken" aria-label="Toon laatste screening">Laatste tonen</button>
       <!-- verborgen velden: behouden voor compatibiliteit met bestaande logica -->
-      <select id="source" style="display:none"><option value="finnhub" selected>finnhub</option><option value="fmp">fmp</option><option value="eodhd">eodhd</option></select>
-      <input type="password" id="apikey" style="display:none" autocomplete="off">
-      <span id="keylabel" style="display:none"></span>
-      <button id="saveKey" style="display:none"></button>
+      <select id="source" class="verborgen"><option value="finnhub" selected>finnhub</option><option value="fmp">fmp</option><option value="eodhd">eodhd</option></select>
+      <input type="password" id="apikey" class="verborgen" autocomplete="off">
+      <span id="keylabel" class="verborgen"></span>
+      <button id="saveKey" class="verborgen"></button>
     </div>
     <div class="control-row compact" id="filterRow">
       <span class="inline-lbl" style="color:var(--ink);font-weight:600">Filters:</span>
@@ -957,10 +968,10 @@ var OPHAALPOOL={
         <button class="btn-go" id="pfAdd">+ Toevoegen</button>
         <button class="btn-ghost" id="pfCheck" style="margin-left:auto">Alles checken</button>
         <button class="btn-ghost" id="pfImportBtn" title="Importeer een export van Saxo (CSV) of Bolero (XLSX) — het formaat wordt automatisch herkend">Importeren</button>
-        <input type="file" id="pfBoleroFile" accept=".csv,.xlsx" style="display:none">
+        <input type="file" id="pfBoleroFile" accept=".csv,.xlsx" class="verborgen">
         <button class="btn-ghost" id="pfOverlapBtn" title="Haalt de werkelijke overlap tussen je ETF's op via SecuritiesDB (gratis, geen sleutel nodig)">Overlap meten</button>
         <button class="btn-ghost" id="pfVerkoopBtn" title="Combineert je alarmen met nieuws-sentiment, insider-transacties en analistenadviezen (Finnhub) tot een verkooprapport per positie">Verkoopsignalen</button>
-        <input type="file" id="pfImportFile" accept=".csv,text/csv" style="display:none">
+        <input type="file" id="pfImportFile" accept=".csv,text/csv" class="verborgen">
       </div>
     </div>
 
@@ -1029,7 +1040,7 @@ var OPHAALPOOL={
       <div class="control-row">
         <span id="syncStatus" style="flex:1;min-width:200px;font-size:12.5px;color:var(--muted)">&#9729;&#65039; Cloud-sync: niet ingelogd \u2014 log in om je geschiedenis tussen apparaten te synchroniseren.</span>
         <button class="btn-ghost" id="loginBtn">Inloggen met Google</button>
-        <button class="btn-ghost" id="logoutBtn" style="display:none">Uitloggen</button>
+        <button class="btn-ghost verborgen" id="logoutBtn">Uitloggen</button>
         <button class="btn-ghost" id="saveSettingsBtn" title="Bewaar je huidige universum, weging, horizon en modus in de cloud, zodat ze op je andere apparaten worden hersteld">Instellingen bewaren</button>
       </div>
 
@@ -1038,12 +1049,12 @@ var OPHAALPOOL={
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
         <button class="btn-ghost" onclick="toonHerberekenVenster()"
           title="Herrekent bewaarde momentopnamen met de huidige scoremethodiek. Toont eerst wat er verandert; terug te draaien.">Herrekenen</button>
-        <button class="btn-ghost" id="analyseKnop" onclick="kopieerAnalyse()" style="display:none"
+        <button class="btn-ghost verborgen" id="analyseKnop" onclick="kopieerAnalyse()"
           title="Kopieert de meting inclusief ruwe data en voorbehouden, klaar om in een gesprek met Claude te plakken">
           Rapport kopi&euml;ren</button>
         <button class="btn-ghost" id="export">Exporteren</button>
         <button class="btn-ghost" id="importBtn">Importeren</button>
-        <input type="file" id="importFile" accept="application/json" style="display:none">
+        <input type="file" id="importFile" accept="application/json" class="verborgen">
         <button class="btn-ghost" id="clearHist" style="color:var(--red);margin-left:auto">Wis geschiedenis</button>
       </div>
     </div>
@@ -1067,7 +1078,7 @@ var OPHAALPOOL={
 
   <div class="tabpane" id="tab-settings">
     <details style="margin:16px 0 0" open>
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe meerdere sleutels samenwerken</summary>
+      <summary class="sub-kop">Hoe meerdere sleutels samenwerken</summary>
       <p class="sub" style="margin-top:8px">Elke gratis databron heeft andere gaten: Finnhub dekt de VS ruim maar blokkeert vaak Europa, EODHD dekt Europa beter maar heeft strenge daglimieten, FMP zit daartussenin. Vul hieronder alle sleutels in die je hebt &mdash; de tool kiest dan <b>per aandeel automatisch</b> de meest geschikte bron, en schuift bij een blokkade door naar de volgende. Zo vul je de gaten die &eacute;&eacute;n bron alleen laat vallen.</p>
     </details>
 
@@ -1096,7 +1107,7 @@ var OPHAALPOOL={
       <!-- FMP is uitgeschakeld: kwam in de praktijk nooit aan de beurt (SecuritiesDB/Finnhub/Eulerpool
            dekken alles af) en de gratis tier blokkeert Europese tickers. Code blijft intact als reserve;
            zet display:block hieronder om hem weer zichtbaar te maken. -->
-      <div class="control-row" id="fmpRow" style="display:none">
+      <div class="control-row verborgen" id="fmpRow">
         <div class="field" style="flex:1;min-width:220px">
           <label>FMP-sleutel <span style="color:var(--muted);text-transform:none;letter-spacing:0">&mdash; reserve, standaard uit</span></label>
           <input type="password" id="key_fmp" placeholder="financialmodelingprep.com" autocomplete="off" style="width:100%">
@@ -1187,7 +1198,7 @@ var OPHAALPOOL={
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">Portefeuille</summary>
       <div style="padding:8px 0 0"><details style="margin:16px 0 0">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
+      <summary class="sub-kop">Hoe het check-alarm werkt &amp; welke databron actief is</summary>
       <p class="sub" style="margin-top:8px">De tool herberekent bij elk bezoek de actuele score en vergelijkt die met de score van toen je invoerde. Dit is een <b>check-alarm</b>, geen verkoopsignaal: het zegt "iets is veranderd, onderzoek opnieuw" &mdash; niet "verkoop nu". De tool kent je motivatie voor de aankoop niet. Bij elke waarschuwing: vraag jezelf af waar&oacute;m je deze positie ook alweer aanhield.</p>
       <p class="sub" style="margin-top:8px">Posities worden gecheckt via de databron die bij <b>Screener</b> is geselecteerd: <b id="pfSourceName">\u2014</b>. Europese/Aziatische tickers (.AS, .DE, .HK) vereisen op de meeste gratis tiers een andere bron dan Amerikaanse.</p>
     </details>
@@ -1213,7 +1224,7 @@ var OPHAALPOOL={
       <summary style="font-weight:600">ETF's</summary>
       <div style="padding:8px 0 0">
       <details style="margin:0 0 10px">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Waarom ETF's anders gescoord worden</summary>
+      <summary class="sub-kop">Waarom ETF's anders gescoord worden</summary>
       <p class="sub" style="margin-top:8px">ETF's beoordeel je anders dan aandelen: geen winst per aandeel of ROE, maar kosten, spreiding en hoe effici&euml;nt het fonds zijn index volgt. Deze score staat los van de aandelenscore. Dit vergelijkt fondsen op meetbare kenmerken &mdash; het voorspelt geen rendement. Lage kosten en brede spreiding zijn de factoren waar het meeste onderzoek achter staat, niet historisch rendement.</p>
     </details>
       <details>
@@ -1226,7 +1237,7 @@ var OPHAALPOOL={
     <details style="margin-bottom:10px">
       <summary style="font-weight:600">Tracking</summary>
       <div style="padding:8px 0 0"><details style="margin:16px 0 0">
-      <summary style="font-size:13px;color:var(--muted);font-weight:400">Hoe accuratesse gemeten wordt</summary>
+      <summary class="sub-kop">Hoe accuratesse gemeten wordt</summary>
       <p class="sub" style="margin-top:8px">Sla na elke screening een momentopname op; bij latere bezoeken vergelijkt de tool de toenmalige scores met het werkelijke koersverloop sindsdien. Accuratesse over korte perioden en weinig momentopnamen zegt weinig &mdash; toeval domineert. Pas na tientallen metingen over maanden ontstaat een enigszins betrouwbaar beeld, en zelfs dan blijft verleden geen garantie. Gebruik dit om te leren, niet om zekerheid te claimen.</p>
     </details>
     </div>
@@ -2407,7 +2418,7 @@ function renderScoreUitsplits(pos,fresh){
   if(!rijen&&!pen)return '';
   return '<div class="pf-scores" style="border-left:2px solid var(--red);padding-left:8px">'+
     '<span style="font-weight:600;color:var(--ink)">waar de score (\u2212'+Math.round(info.drop)+') van afstraalt:</span>'+
-    (rijen?rijen:'<span style="color:var(--muted)">geen aparte pijler groot genoeg</span>')+pen+'</div>';
+    (rijen?rijen:'<span class="muted-tekst">geen aparte pijler groot genoeg</span>')+pen+'</div>';
 }
 // ============================================================================
 // 6. Sorteer- & universum-helpers
@@ -2858,9 +2869,9 @@ function signaalAccuratesseMeten(){
   var st=$('nwStatus'), lijst=$('nwLijst');
   var h=signaalSnapshotLezen();
   var syms=Object.keys(h).filter(function(s){return h[s].length;});
-  if(!syms.length){ st.className="status"; st.innerHTML='Nog geen signaalmomentopnamen. Haal eerst <b>Nieuws + signalen</b> op — dan wordt automatisch een snapshot bewaard.'; return; }
-  if(!MULTI_KEYS.finnhub){ st.className='status err'; st.innerHTML='Accuratesse meten vereist een Finnhub-sleutel.'; return; }
-  st.className="status";
+  if(!syms.length){ setStatus(st,'Nog geen signaalmomentopnamen. Haal eerst <b>Nieuws + signalen</b> op — dan wordt automatisch een snapshot bewaard.',false); return; }
+  if(!MULTI_KEYS.finnhub){ setStatus(st,'Accuratesse meten vereist een Finnhub-sleutel.',true); return; }
+  setStatus(st,null,false);
   st.textContent="Accuratesse meten…";
   var rijen=[], klaar=0;
   var seq=Promise.resolve();
@@ -2897,7 +2908,7 @@ function renderSignaalAccuratesse(rijen){
     var c=correlatie(rs);
     var corr=c==null?'te weinig data':c.toFixed(2);
     var kleur=c==null?'var(--muted)':(c>0.2?'#1a7f37':(c<-0.2?'#c0392b':'var(--muted)'));
-    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;display:flex;justify-content:space-between"><span>'+faktorNamen[f]+'</span><span style="font-family:var(--mono,monospace)"><b style="color:'+kleur+'">'+corr+'</b> <span style="color:var(--muted)">(n='+rs.length+')</span></span></div>';
+    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;display:flex;justify-content:space-between"><span>'+faktorNamen[f]+'</span><span style="font-family:var(--mono,monospace)"><b style="color:'+kleur+'">'+corr+'</b> <span class="muted-tekst">(n='+rs.length+')</span></span></div>';
   });
   uit+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Meet vaker (bijv. wekelijks) voor een betrouwbaarder beeld: correlaties onder n=10 zijn ruis.</div></div>';
   return uit;
@@ -2906,15 +2917,14 @@ function renderSignaalAccuratesse(rijen){
 function nieuwsOphalen(){
   var st=$('nwStatus'), lijst=$('nwLijst');
   if(!MULTI_KEYS.finnhub){
-    st.className="status err";
-    st.innerHTML='Nieuws vereist een Finnhub-sleutel. Vul die in bij <b>Instellingen</b>.';
+    setStatus(st,'Nieuws vereist een Finnhub-sleutel. Vul die in bij <b>Instellingen</b>.',true);
     return;
   }
   // welke portefeuilles moeten mee?
   var ids=Object.keys(PORTFOLIOS).filter(function(id){
     return NIEUWS_SELECTIE[id]!==false && (PORTFOLIOS[id].posities||[]).length;
   });
-  if(!ids.length){ st.className="status"; st.textContent="Geen posities om nieuws voor op te halen."; return; }
+  if(!ids.length){ setStatus(st,"Geen posities om nieuws voor op te halen.",false); return; }
 
   // alleen Amerikaanse tickers: Finnhub dekt geen Europese bedrijven
   var taken=[];
@@ -2925,14 +2935,14 @@ function nieuwsOphalen(){
     });
   });
   if(!taken.length){
-    st.className="status err";
+    setStatus(st,null,true);
     st.innerHTML='Geen Amerikaanse posities gevonden. Finnhub levert alleen nieuws voor '+
       'Noord-Amerikaanse bedrijven; voor je Europese posities staan hieronder zoeklinks.';
     lijst.innerHTML=renderEuropeseLinks(ids);
     return;
   }
 
-  st.className="status";
+  setStatus(st,null,false);
   st.textContent="Nieuws ophalen voor "+taken.length+" posities\u2026";
   var resultaat={}, klaar=0;
   var seq=Promise.resolve();
@@ -2968,7 +2978,7 @@ function nieuwsOphalen(){
     var totaal=0; Object.keys(resultaat).forEach(function(k){
       resultaat[k].forEach(function(g){totaal+=g.items.length;});
     });
-    st.className="status";
+    setStatus(st,null,false);
     st.innerHTML=totaal?('<b>'+totaal+'</b> artikelen gevonden over '+klaar+' posities \u00b7 '+
       '<span style="opacity:.7">alleen artikelen die het bedrijf werkelijk noemen.</span>')
       :'Geen recent nieuws gevonden dat je posities specifiek noemt.';
@@ -3118,7 +3128,7 @@ function effectPaneel(d,posities){
   function rij(lbl,waarde,tip){
     if(waarde==null||waarde==="")return "";
     return '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0">'+
-      '<span style="color:var(--muted)"'+(tip?' title="'+tip+'"':'')+'>'+lbl+'</span>'+
+      '<span class="muted-tekst"'+(tip?' title="'+tip+'"':'')+'>'+lbl+'</span>'+
       '<span style="font-family:\'IBM Plex Mono\'">'+waarde+'</span></div>';
   }
   var pct=function(v){return v!=null?((v>0?"+":"")+v+"%"):null;};
@@ -4341,12 +4351,11 @@ function run(){
   var key=$('apikey').value.trim();
   var st=$('status');
   if(!key && !(multiEnabled()&&(MULTI_KEYS.finnhub||MULTI_KEYS.eulerpool||MULTI_KEYS.eodhd||MULTI_KEYS.fmp))){
-    st.className="status err";
-    st.innerHTML='Geen databron beschikbaar \u2014 vul minstens \u00e9\u00e9n sleutel in bij <b>Instellingen</b>.';
+    setStatus(st,'Geen databron beschikbaar \u2014 vul minstens \u00e9\u00e9n sleutel in bij <b>Instellingen</b>.',true);
     CURRENT=[];DEMO_ACTIVE=false;render();return;
   }
   var needKey=(typeof universeNeedsKey==="function")?universeNeedsKey():null;
-  if(needKey){ st.className="status err"; st.innerHTML='\u26a0\ufe0f '+needKey; return; }
+  if(needKey){ setStatus(st,'\u26a0\ufe0f '+needKey,true); return; }
 
   // Vooraf controleren of de multi-bron keten daadwerkelijk actief is. Zonder deze check
   // start de screening en falen alle aandelen één voor één, met een misleidende melding
@@ -4355,14 +4364,13 @@ function run(){
   var multiAan=(typeof multiEnabled==="function")&&multiEnabled();
   var heeftSleutel=MULTI_KEYS.finnhub||MULTI_KEYS.eodhd||MULTI_KEYS.eulerpool;
   if(!multiAan&&!$('apikey').value.trim()){
-    st.className="status err";
+    setStatus(st,null,true);
     st.innerHTML='\u26a0\ufe0f Automatische bronkeuze staat uit en er is geen losse sleutel ingevuld. '+
       'Zet <b>\u201cAutomatisch de beste bron per aandeel kiezen\u201d</b> aan bij Instellingen.';
     return;
   }
   if(multiAan&&!heeftSleutel){
-    st.className="status err";
-    st.innerHTML='\u26a0\ufe0f Geen enkele sleutel ingesteld. Vul er minstens \u00e9\u00e9n in bij <b>Instellingen</b> en klik daar op <b>Sleutels bewaren</b>.';
+    setStatus(st,'\u26a0\ufe0f Geen enkele sleutel ingesteld. Vul er minstens \u00e9\u00e9n in bij <b>Instellingen</b> en klik daar op <b>Sleutels bewaren</b>.',true);
     return;
   }
   var universe=chosenUniverse();
@@ -4373,8 +4381,7 @@ function run(){
   if($('exchange').value==="ARCHIEF"){
     var uitArchief=archiefLijst('aandelen');
     if(!uitArchief.length){
-      st.className="status err";
-      st.innerHTML='Je archief is nog leeg. Draai eerst een screening; alles wat je ophaalt wordt hier bewaard.';
+      setStatus(st,'Je archief is nog leeg. Draai eerst een screening; alles wat je ophaalt wordt hier bewaard.',true);
       return;
     }
     SCORESET=uitArchief.slice();
@@ -4382,7 +4389,7 @@ function run(){
     CURRENT=sorteerOpScore(uitArchief).slice(0,limit);
     render();
     var oudste=Math.min.apply(null,uitArchief.map(function(d){return d._opgehaald||Date.now();}));
-    st.className="status";
+    setStatus(st,null,false);
     st.innerHTML='\ud83d\uddc3\ufe0f <b>'+uitArchief.length+'</b> effecten uit je archief \u2014 '+
       'oudste meting '+archiefLeeftijd(oudste)+' geleden \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span> '+
       'Let op: de cijfers dateren van het moment van ophalen, niet van nu.';
@@ -4398,7 +4405,7 @@ function run(){
   universe.forEach(function(s){var b=BRON.voor(s); if(b)bronnenInGebruik[b]=(bronnenInGebruik[b]||0)+1;});
   var onbereikbaar=universe.filter(function(s){return !BRON.bereikbaar(s);});
   if(onbereikbaar.length===universe.length){
-    st.className="status err";
+    setStatus(st,null,true);
     st.innerHTML='\u26a0\ufe0f Geen bruikbare bron voor dit universum. '+
       (ISIN_RE.test(universe[0])?'Deze aandelen worden op ISIN opgehaald en vereisen een <b>Eulerpool</b>-sleutel.'
                                 :'Controleer je sleutels bij <b>Instellingen</b>.');
@@ -4419,7 +4426,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
       voortgang:function(klaar,totaal){
         if(klaar%4===0||klaar===totaal)st.textContent=label+"\u2026 "+klaar+"/"+totaal;
       },
-      status:function(tekst){ st.className="status"; st.textContent=tekst; },
+      status:function(tekst){ setStatus(st,tekst,false); },
       isDaglimiet:function(msg){ return /limit reached|daily|monthly|exceed|429/i.test(msg||""); }
     }).then(function(uitslag){
       uitslag.mislukt.forEach(function(m){
@@ -4442,7 +4449,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
   var useFunnel=universe.length>60;
   var stage1;
   if(useFunnel){
-    st.className="status";
+    setStatus(st,null,false);
     var allesAan=$('volledigeAnalyse')&&$('volledigeAnalyse').checked;
     st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)"+
       (allesAan?" \u2014 daarna gaan ze allemaal door naar de volledige analyse":"")+"\u2026";
@@ -4479,7 +4486,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
     // keten stil laat afbreken - met de laatste voortgangsmelding blijvend in beeld.
     all=(all||[]).filter(function(d){return d&&typeof d==="object"&&d.symbol;});
     if(!all.length){
-      st.className="status err";
+      setStatus(st,null,true);
       var fd=Object.keys(foutDetails||{});
       st.innerHTML='\u26a0\ufe0f Geen enkel aandeel kon opgehaald worden. '+
         (Object.keys(state.redenen||{}).length
@@ -4539,15 +4546,15 @@ function runQueue(symbols,callsPer,fetchFn,label){
     CURRENT=passed.slice(0,limit);
     var skipped=state.skipped;
     if(state.dayLimit){
-      st.className="status err";
+      setStatus(st,null,true);
       var srcName={finnhub:"Finnhub",fmp:"FMP",eodhd:"EODHD"}[currentSource()]||"databron";
       var tip=currentSource()!=="finnhub"?" Tip: schakel bovenaan over op Finnhub voor een veel ruimere gratis limiet.":" Mogelijk je maandlimiet; probeer later of een kleiner universum.";
       st.innerHTML="\u26a0\ufe0f Limiet van je "+srcName+"-sleutel bereikt \u2014 melding: \""+
         String(state.dayLimit).replace(/</g,"&lt;")+"\"."+tip+" Hieronder zie je wat al binnenkwam.";
     }else if(CURRENT.length===0){
-      st.className="status";
+      setStatus(st,null,false);
       if(skipped.length){
-        st.className="status err";
+        setStatus(st,null,true);
         var redenLijst="";
         if(state.redenen){
           redenLijst=Object.keys(state.redenen).sort(function(a,b){return state.redenen[b]-state.redenen[a];})
@@ -4558,11 +4565,11 @@ function runQueue(symbols,callsPer,fetchFn,label){
           (redenLijst||"onbekend")+
           "<br><span style=\"opacity:.8\">Controleer je sleutels bij Instellingen. Europese universa vereisen een Eulerpool-sleutel.</span>";
       }else{
-        st.className="status";
+        setStatus(st,null,false);
         st.textContent="Geen aandelen voldoen aan deze filters. Versoepel P/E of marktwaarde.";
       }
     }else{
-      st.className="status";
+      setStatus(st,null,false);
       var fun=useFunnel?" (via vooranalyse-trechter)":"";
       var extra=skipped.length?" "+skipped.length+" overgeslagen (niet beschikbaar op je tier: "+skipped.slice(0,6).join(", ")+(skipped.length>6?"\u2026":"")+").":"";
       st.textContent="Klaar"+fun+" \u2014 "+CURRENT.length+" aandelen getoond."+extra+
@@ -4609,7 +4616,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
     // te hangen terwijl er niets meer gebeurt.
     console.error("Kompas: screening afgebroken",fout);
     var reden=(fout&&(fout.msg||fout.message))||String(fout||"onbekende fout");
-    st.className="status err";
+    setStatus(st,null,true);
     st.innerHTML='\u26a0\ufe0f De screening liep vast: '+reden.slice(0,120).replace(/</g,"&lt;")+
       '.<br><span style="opacity:.8">Wat al binnenkwam staat hieronder. Probeer eventueel een '+
       'kleiner universum, of controleer je sleutels bij Instellingen.</span>';
@@ -4628,7 +4635,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
 $('run').onclick=run;
 if($('demo'))$('demo').onclick=function(){DEMO_ACTIVE=true;CURRENT=DEMO;render();};
 $('csv').onclick=function(){
-  if(!CURRENT.length){$('status').className="status";$('status').textContent="Niets te exporteren \u2014 draai eerst een screening.";return;}
+  if(!CURRENT.length){setStatus($('status'),'Niets te exporteren \u2014 draai eerst een screening.',false);return;}
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT);
   var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","potentieel_pct","valtrap","totaalscore"];
   function esc(v){if(v==null)return"";var s=String(v);return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
@@ -4644,7 +4651,7 @@ $('csv').onclick=function(){
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');a.href=url;a.download="screening-"+new Date().toISOString().slice(0,10)+".csv";
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-  $('status').className="status";$('status').textContent="CSV ge\u00ebxporteerd ("+CURRENT.length+" aandelen, puntkomma-gescheiden voor Excel).";
+  setStatus($('status'),null,false);$('status').textContent="CSV ge\u00ebxporteerd ("+CURRENT.length+" aandelen, puntkomma-gescheiden voor Excel).";
 };
 
 // ============================================================================
@@ -4729,12 +4736,12 @@ $('saveKey').onclick=function(){
   KEYCACHE[src]=val;
   if(true){
     LS.set(keyStorageId(src),val).then(function(){
-      $('status').className="status";$('status').textContent="Sleutel voor "+src+" bewaard in deze browser.";
+      setStatus($('status'),'Sleutel voor '+src+' bewaard in deze browser.',false);
     }).catch(function(){
-      $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie (persistente opslag niet beschikbaar).";
+      setStatus($('status'),null,false);$('status').textContent="Sleutel bewaard voor deze sessie (persistente opslag niet beschikbaar).";
     });
   }else{
-    $('status').className="status";$('status').textContent="Sleutel bewaard voor deze sessie.";
+    setStatus($('status'),'Sleutel bewaard voor deze sessie.',false);
   }
   // ook naar cloud als ingelogd én sync-keuze aanstaat
   if(typeof saveKeysCloud==="function")saveKeysCloud();
@@ -4786,7 +4793,7 @@ function saveAllKeys(){
   loadKeyFor($('source').value);
   updateSourceIndicator();
   if(typeof saveKeysCloud==="function")saveKeysCloud();
-  var st=$('settingsStatus'); st.className="status";
+  var st=$('settingsStatus'); setStatus(st,null,false);
   var where = LS.available ? "in deze browser bewaard" : "alleen voor deze sessie bewaard (opslag geblokkeerd \u2014 sta opslag toe voor deze site)";
   var cloudPart = (typeof FB!=="undefined"&&FB.user&&FB.ready)
     ? ($('syncKeys')&&$('syncKeys').checked ? " \u00b7 \u2601\ufe0f ook opgeslagen in je Google-account" : " \u00b7 niet in de cloud (vinkje staat uit)")
@@ -4794,13 +4801,13 @@ function saveAllKeys(){
   st.innerHTML=count+" sleutel(s) "+where+cloudPart+".";
 }
 function testAllKeys(){
-  var st=$('settingsStatus'); st.className="status"; st.textContent="Sleutels testen\u2026";
+  var st=$('settingsStatus'); setStatus(st,'Sleutels testen\u2026',false);
   var tests=[
     {src:"finnhub",sym:"AAPL"},
     {src:"eodhd",sym:"ASML.AS"},
     {src:"eulerpool",sym:"ASML.AS"}
   ].filter(function(t){return MULTI_KEYS[t.src];});
-  if(!tests.length){st.className="status err";st.textContent="Geen sleutels ingevuld om te testen.";return;}
+  if(!tests.length){setStatus(st,"Geen sleutels ingevuld om te testen.",true);return;}
   var seq=Promise.resolve(), results=[];
   tests.forEach(function(t){
     seq=seq.then(function(){
@@ -4815,7 +4822,7 @@ function testAllKeys(){
     });
   });
   seq.then(function(){
-    st.className="status";
+    setStatus(st,null,false);
     st.textContent="Testresultaat \u2014 "+results.join("  \u00b7  ");
   });
 }
@@ -4826,17 +4833,17 @@ if($('syncQuota'))$('syncQuota').onclick=function(){
     "(de tool telt er nu "+huidig+")", String(huidig));
   if(v===null)return;
   var n=parseInt(v.trim(),10);
-  if(isNaN(n)||n<0){ $('settingsStatus').className="status err"; $('settingsStatus').textContent="Geef een geldig aantal."; return; }
+  if(isNaN(n)||n<0){ setStatus($('settingsStatus'),'Geef een geldig aantal.',true); return; }
   if(!CALL_LOG.eulerpool)CALL_LOG.eulerpool={day:todayKey(),dayCount:0,minuteStamp:Date.now(),minuteCount:0};
   CALL_LOG.eulerpool.month=monthKey();
   CALL_LOG.eulerpool.monthCount=n;
   saveCallLog(); renderQuota();
-  $('settingsStatus').className="status";
+  setStatus($('settingsStatus'),null,false);
   $('settingsStatus').textContent="Stand gelijkgezet op "+n+" calls deze maand.";
 };
 if($('resetQuota'))$('resetQuota').onclick=function(){
   CALL_LOG={}; saveCallLog(); renderQuota();
-  var st=$('settingsStatus'); st.className="status";
+  var st=$('settingsStatus'); setStatus(st,null,false);
   st.textContent="Teller op nul gezet. Let op: dit wist alleen je eigen telling, niet het werkelijke verbruik bij de aanbieder.";
 };
 if($('eulerCharting'))$('eulerCharting').onchange=function(){
@@ -5136,7 +5143,7 @@ function renderIndexVergelijking(){
             (fl.vorm==="uitkerend"?'30% roerende voorheffing op dividend boven de vrijstelling van 833 euro'
                                   :'geen roerende voorheffing, wel '+fl.beurstaksTarief+'% beurstaks')+
             ' \u2014 op 50.000 euro, 10 jaar aangehouden">'+
-            (fl.vorm?fl.vorm.slice(0,4):'?')+' <span style="color:var(--muted)">'+
+            (fl.vorm?fl.vorm.slice(0,4):'?')+' <span class="muted-tekst">'+
             fl.perJaarProcent+'%</span></td>'+
           '<td class="num'+(nadeel>0.05?' neg':'')+'">'+(i===0?'\u2014':'+'+nadeel.toFixed(2)+'%/jaar')+'</td>';
         })()+
@@ -5731,14 +5738,13 @@ function runEtf(){
   if(cat==="ARCHIEF"){
     var uitA=archiefLijst('etfs');
     if(!uitA.length){
-      st.className="status err";
-      st.innerHTML='Je ETF-archief is nog leeg. Vergelijk eerst een selectie; alles wordt daarna bewaard.';
+      setStatus(st,'Je ETF-archief is nog leeg. Vergelijk eerst een selectie; alles wordt daarna bewaard.',true);
       return;
     }
     ETF_CURRENT=uitA;
     renderEtf();
     var oud=Math.min.apply(null,uitA.map(function(d){return d._opgehaald||Date.now();}));
-    st.className="status";
+    setStatus(st,null,false);
     st.innerHTML='\ud83d\uddc3\ufe0f <b>'+uitA.length+'</b> fondsen uit je archief \u2014 '+
       'oudste meting '+archiefLeeftijd(oud)+' geleden \u00b7 <span style="opacity:.7">geen API-calls.</span>';
     return;
@@ -5746,8 +5752,8 @@ function runEtf(){
   var syms = (cat==="custom")
     ? $('etfTickers').value.split(",").map(function(s){return s.trim().toUpperCase();}).filter(Boolean)
     : etfCatalogTickers(cat);
-  if(!syms.length){st.className="status err";st.textContent="Geen tickers geselecteerd.";return;}
-  st.className="status";
+  if(!syms.length){setStatus(st,"Geen tickers geselecteerd.",true);return;}
+  setStatus(st,null,false);
   var etaMin=Math.ceil(syms.length*0.7/60);
   st.textContent="ETF-gegevens ophalen voor "+syms.length+" fondsen via SecuritiesDB\u2026"+(syms.length>40?" (duurt ongeveer "+etaMin+" min \u2014 laat dit tabblad open)":"");
   var key=$('apikey')?$('apikey').value.trim():"";
@@ -5775,8 +5781,7 @@ function runEtf(){
   });
   seq.then(function(all){
     if(!all.length){
-      st.className="status err";
-      st.innerHTML="\u26a0\ufe0f Geen ETF-data ontvangen voor: "+failed.join(", ")+". VS-fondsen lopen via SecuritiesDB; voor Europese fondsen is een Eulerpool-sleutel nodig (zie Instellingen).";
+      setStatus(st,"\u26a0\ufe0f Geen ETF-data ontvangen voor: "+failed.join(", ")+". VS-fondsen lopen via SecuritiesDB; voor Europese fondsen is een Eulerpool-sleutel nodig (zie Instellingen).",true);
       ETF_CURRENT=[]; renderEtf(); return;
     }
     ETF_CURRENT=all;
@@ -5816,7 +5821,7 @@ if($('etfBroker'))$('etfBroker').onchange=function(){
   if(f&&ETF_CURRENT.length){
     var zichtbaar=ETF_CURRENT.filter(function(d){return brokersFor(d).brokers.some(function(b){return b.key===f;});}).length;
     var label=f==='saxo'?'SaxoInvestor':(f==='bolero'?'Bolero':'MeDirect');
-    $('etfStatus').className="status";
+    setStatus($('etfStatus'),null,false);
     $('etfStatus').innerHTML='Brokerfilter <b>'+label+'</b>: '+zichtbaar+' van '+ETF_CURRENT.length+      ' fondsen voldoen aan de beursdekking \u2014 indicatie, controleer in je platform.';
   }
 };
@@ -5853,7 +5858,7 @@ loadLastRun('etfs').then(function(run){
   if(!run||!run.data||!run.data.length)return;
   ETF_CURRENT=run.data;
   renderEtf();
-  $('etfStatus').className="status";
+  setStatus($('etfStatus'),null,false);
   $('etfStatus').innerHTML='\ud83d\udcbe Laatste vergelijking geladen \u2014 '+describeRun(run)+
     ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>';
 });
@@ -6580,7 +6585,7 @@ function renderVerkoopRapport(rap,totaal){
     uit+='<div class="snap" style="border-left:3px solid '+(erg?'var(--red)':'var(--accent)')+';margin-bottom:8px">'+
       '<div style="font-weight:600">'+r.naam+
       ' <span style="color:var(--muted);font-weight:400;font-size:11px">'+r.sym+'</span>'+
-      (r.pos._fresh&&r.pos._fresh.score!=null?' <span style="font-size:11px;color:var(--muted)">\u00b7 score '+r.pos._fresh.score+'</span>':'')+'</div>';
+      (r.pos._fresh&&r.pos._fresh.score!=null?' <span class="muted-klein">\u00b7 score '+r.pos._fresh.score+'</span>':'')+'</div>';
     if(r.scores&&Object.keys(r.scores).length)uit+=renderSignaalScores(r.scores);
     r.bevindingen.forEach(function(b){
       uit+='<div style="padding:6px 0;border-top:1px solid var(--line)">'+
@@ -6793,7 +6798,7 @@ function renderPortfolio(){
           '</div>'
       ) : '')+
       (!p._fresh && !p.isin && !isinFor(p.symbol)
-        ? '<div class="pf-alarm-text" style="color:var(--muted)">\u2139\ufe0f Voor Europese aandelen is een <b>ISIN</b> nodig (Eulerpool werkt daarop). '+
+        ? '<div class="pf-alarm-text">\u2139\ufe0f Voor Europese aandelen is een <b>ISIN</b> nodig (Eulerpool werkt daarop). '+
           'Vul hem hier in \u2014 je vindt hem op je broker-overzicht of via een zoekopdracht op de bedrijfsnaam:<br>'+
           '<input type="text" id="isin_'+p.id+'" placeholder="bv. NL0010273215" style="width:180px;margin-top:6px">'+
           '<button class="btn-ghost" style="margin-left:6px" onclick="setPositionIsin(\''+p.id+'\')">Opslaan</button></div>'
@@ -6802,7 +6807,7 @@ function renderPortfolio(){
         ? (function(){
             var c=p._fresh.completeness, link=researchLinkFor(p.symbol);
             var isPriceOnly=c.level==="price-only";
-            return '<div class="pf-alarm-text" style="color:var(--muted)">\u2139\ufe0f '+
+            return '<div class="pf-alarm-text">\u2139\ufe0f '+
               (isPriceOnly
                 ? 'Alleen koersdata beschikbaar voor dit aandeel via je huidige bronnen \u2014 <b>geen betrouwbare score mogelijk</b>. '
                 : 'Deels onvolledige data: ontbrekend \u2014 '+c.missing.join(", ")+'. De score is daardoor minder betrouwbaar. ')+
@@ -6833,8 +6838,8 @@ if($('exchange'))$('exchange').addEventListener('change',function(){
   // bewaarde screening van dit universum tonen als die er is
   if(typeof showLastRunFor==="function")showLastRunFor(this.value);
   var warn=(typeof universeNeedsKey==="function")?universeNeedsKey():null;
-  if(warn){ $('status').className="status err"; $('status').innerHTML='\u26a0\ufe0f '+warn; }
-  else if($('status').className.indexOf("err")>-1){ $('status').className="status"; $('status').textContent=""; }
+  if(warn){ setStatus($('status'),'\u26a0\ufe0f '+warn,true); }
+  else if($('status').className.indexOf("err")>-1){ setStatus($('status'),null,false); }
 });
 if($('colPreset'))$('colPreset').onchange=applyColumnPreset;
 if($('volledigeAnalyse'))$('volledigeAnalyse').onchange=function(){
@@ -6870,7 +6875,7 @@ if($('ewReset'))$('ewReset').onclick=function(){
   });
   if(typeof syncEtfWeightUI==="function")syncEtfWeightUI();
   if(ETF_CURRENT.length)renderEtf();
-  $('etfStatus').className="status";
+  setStatus($('etfStatus'),null,false);
   $('etfStatus').textContent="Weging teruggezet op de standaard (kosten 40, spreiding 25, liquiditeit 20, track record 15).";
 };
 
@@ -6881,7 +6886,7 @@ if($('wReset'))$('wReset').onclick=function(){
   });
   if(typeof syncWeightUI==="function")syncWeightUI();
   if(CURRENT&&CURRENT.length)render();
-  $('status').className="status";
+  setStatus($('status'),null,false);
   $('status').textContent="Weging teruggezet op de standaard (momentum 30, waardering 25, groei 15, kwaliteit 30).";
 };
 if($('pfSort'))$('pfSort').onchange=renderPortfolio;
@@ -7350,7 +7355,7 @@ function renderPortfolioTabel(lijst){
         '<span class="tk">'+(naam||p.symbol)+'</span>'+
         '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span>'+
         effectPaneel(Object.assign({},d,{naam:p.naam,isin:p.isin,_opgehaald:p._raw&&p._raw._opgehaald}))+'</td>'+
-      '<td class="l" style="font-size:11px;color:var(--muted)">'+(f.sector||"\u2014")+'</td>'+
+      '<td class="l muted-klein">'+(f.sector||"\u2014")+'</td>'+
       '<td class="num"'+(koersBron?' title="Koers via '+koersBron+'" style="cursor:help"':'')+'>'+
         (k?k.v.toFixed(2):"\u2014")+(p.brokerPrice!=null?'<span style="font-size:8px;color:var(--muted)">\u00b7b</span>':'')+'</td>'+
       cel(waarde!=null?Math.round(waarde):null)+
@@ -7377,7 +7382,7 @@ function renderPortfolioTabel(lijst){
         '<span class="tk">'+naam+'</span>'+
         '<span style="display:block;font-size:9.5px;color:var(--muted)">'+p.qty+' \u00d7 '+p.symbol+'</span>'+
       '</td>'+
-      '<td class="l" colspan="9" style="font-size:11px;color:var(--muted)">'+
+      '<td class="l muted-klein" colspan="9">'+
         '<span title="'+String(reden).replace(/"/g,'&quot;')+'">'+reden+'</span>'+
         (bm
           ?' \u2014 beperkte score <b>'+bm.score+'</b>/100 op basis van '+bm.gebaseerdOp+dekkingBadge({pct:bm.dekking})+
@@ -7420,7 +7425,7 @@ function renderSpreiding(){
 
   var balk=function(lbl,sc,detail){
     return '<div style="margin:5px 0"><div style="display:flex;justify-content:space-between;font-size:11.5px">'+
-      '<span>'+lbl+'</span><span style="color:var(--muted)">'+detail+'</span></div>'+
+      '<span>'+lbl+'</span><span class="muted-tekst">'+detail+'</span></div>'+
       '<div class="bar" style="margin-top:2px"><i style="width:'+sc+'%"></i></div></div>';
   };
   var sectorLijst=Object.keys(a.perSector).sort(function(x,y){return a.perSector[y]-a.perSector[x];})
