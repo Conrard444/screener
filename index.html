@@ -7938,6 +7938,38 @@ function kopieerAnalyse(){
   ven.style.display="";
   tStat("Kerndata-uitvoer klaargezet in het venster - selecteer en kopieer.");
 }
+// ---- Dividendhistorie over de meetperiode: werkelijk uitgekeerde bedragen ----
+// Het snapshot-bewaarde divYield is een schatting van nu, geen feit van toen.
+// Voor het TOTAALrendement over de houdperiode tellen de werkelijke ex-dividend-
+// datums + bedragen tussen momentopname en meetmoment. Per uniek aandeel een
+// call; de filtering op datum gebeurt per datapunt in de meting zelf.
+function dividendHistorie(sym,key){
+  var tot=new Date().toISOString().slice(0,10);
+  var urls={
+    fmp:BASE+"/stock-dividend/"+encodeURIComponent(sym)+"?apikey="+encodeURIComponent(key),
+    finnhub:FINNHUB_BASE+"/stock/dividend?symbol="+encodeURIComponent(sym)+"&from=2000-01-01&to="+tot+"&token="+encodeURIComponent(key),
+    eodhd:EODHD_BASE+"/dividend/"+(sym.indexOf(".")>-1?sym:sym+".US")+"?api_token="+encodeURIComponent(key)+"&fmt=json"
+  };
+  var pogingen=(key&&key===MULTI_KEYS.fmp)?["fmp"]:(key&&key===MULTI_KEYS.finnhub)?["finnhub"]:(key&&key===MULTI_KEYS.eodhd)?["eodhd"]:
+    (MULTI_KEYS.fmp?["fmp","finnhub"]:["finnhub","fmp"]);
+  var idx=0;
+  function probeer(){
+    if(idx>=pogingen.length)return Promise.resolve(null);
+    var bron=pogingen[idx++];
+    return getJson(urls[bron]).then(function(d){
+      var rijen=Array.isArray(d)?d:(d&&d.data?d.data:[]);
+      var uit=[];
+      rijen.forEach(function(r){
+        if(!r||!r.date)return;
+        var bedrag=(r.adjDividend!=null?r.adjDividend:(r.dividend!=null?r.dividend:r.amount));
+        if(bedrag==null||isNaN(+bedrag)||+bedrag<=0)return;
+        uit.push({datum:String(r.date).slice(0,10),bedrag:+bedrag});
+      });
+      return uit.length?uit:null;
+    }).catch(function(){ return probeer(); });
+  }
+  return probeer();
+}
 // ---- Accuratesse meten: kerndata destijds versus werkelijk rendement nu ----
 // Dit is de terugtoets van de scoremethodiek: haal actuele koersen op voor alles wat
 // in bewaarde (niet-demo) momentopnamen staat, herrekende scores uit de bewaarde
@@ -7945,6 +7977,7 @@ function kopieerAnalyse(){
 // materiaal om een optimale scoreformule te bouwen. Scores zelf worden nergens
 // bewaard of hergebruikt: de herrekening gebeurt uitsluitend vanuit de kerndata.
 var LAATSTE_METING=null;
+var DIV_HIST={};
 function meetAccuratesse(){
   var hasKey=(MULTI_KEYS.finnhub||MULTI_KEYS.fmp||MULTI_KEYS.eodhd)||($('apikey')&&$('apikey').value.trim());
   if(!hasKey){ tStat("Voor het meten zijn actuele koersen nodig \u2014 vul minstens \u00e9\u00e9n sleutel in bij Instellingen.",true); return; }
@@ -7971,7 +8004,13 @@ function meetAccuratesse(){
   });
   Promise.all(vragen).then(function(){
     if(!Object.keys(prijzen).length){ tStat("Geen actuele koersen ontvangen ("+mislukt+" mislukt). Controleer je sleutels bij Instellingen.",true); return; }
-    berekenEnToonAccuratesse(oud,prijzen);
+    var divLijst=Object.keys(prijzen);
+    tStat("Koersen binnen \u2014 dividendhistorie ophalen voor "+divLijst.length+" waarden\u2026");
+    var divVragen=divLijst.map(function(sym){
+      return dividendHistorie(sym,key).then(function(rij){ if(rij)DIV_HIST[sym]=rij; })
+        .catch(function(){});
+    });
+    return Promise.all(divVragen).then(function(){ berekenEnToonAccuratesse(oud,prijzen); });
   });
 }
 function berekenEnToonAccuratesse(snaps,prices){
@@ -7993,7 +8032,17 @@ function berekenEnToonAccuratesse(snaps,prices){
       if(leeftijdDagen<2)return;
       var koersRendement=((prices[it.symbol]-it.price)/it.price)*100;
       var dagen=leeftijdDagen;
-      var dividendDeel=(it.divYield!=null&&it.divYield>0&&it.divYield<25)?it.divYield*(dagen/365):0;
+      var dividendDeel=0,divBronMet='geen';
+      var hist=DIV_HIST[it.symbol];
+      if(hist){
+        var snapDatum=new Date(s.ts||0).toISOString().slice(0,10);
+        var tot=0;
+        hist.forEach(function(d){ if(d.datum>=snapDatum)tot+=d.bedrag; });
+        if(tot>0){ dividendDeel=(tot/it.price)*100; divBronMet='feitelijke uitkeringen'; }
+        else divBronMet='historie zonder uitkering';
+      } else if(it.divYield!=null&&it.divYield>0&&it.divYield<25){
+        dividendDeel=it.divYield*(dagen/365); divBronMet='divYield-schatting';
+      }
       var ret=koersRendement+dividendDeel;
       // Scores worden niet meer bewaard (afgeleide van een wijzigende methodiek); de
       // meting herrekent ze uitsluitend uit de kerndata. Ontbreekt die, dan valt het
@@ -8010,7 +8059,7 @@ function berekenEnToonAccuratesse(snaps,prices){
       pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
         sym:it.symbol,holdD:+leeftijdDagen.toFixed(0),
         herrekend:hr.niveau,snapTs:s.ts,sector:it.sector||null,mcap:it._mcap!=null?it._mcap:null,
-        divYield:it.divYield,koersDeel:+koersRendement.toFixed(1),divDeel:+dividendDeel.toFixed(2),
+        divYield:it.divYield,koersDeel:+koersRendement.toFixed(1),divDeel:+dividendDeel.toFixed(2),divBronMet:divBronMet,
         trap:(typeof valueTrap==="function"&&it.pe!=null)?valueTrap(it).level:null,volledig:hr.factoren,
         pe:it.pe,pb:it.pb,peg:it.peg,roe:it.roe,revG:it.revG,epsG:it.epsG,aaqs:it.aaqs,
         piotroski:it.piotroski,altmanZ:it.altmanZ,
@@ -8115,7 +8164,12 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   if(holds.length)r.push("  houdperiode per datapunt: mediaan "+med(holds)+
     " dagen (kortste "+holds[0]+", langste "+holds[holds.length-1]+")");
   var metDiv=pairs.filter(function(p){ return p.divYield!=null&&p.divYield>0; }).length;
-  r.push("  rendement gemeten als TOTAALrendement (koers + dividend, indien divYield bekend)");
+  r.push("  rendement gemeten als TOTAALrendement (koers + dividend)");
+  var divFeit=pairs.filter(function(p){ return p.divBronMet==='feitelijke uitkeringen'; }).length;
+  var divSchat=pairs.filter(function(p){ return p.divBronMet==='divYield-schatting'; }).length;
+  var divNiks=pairs.filter(function(p){ return p.divBronMet==='geen'; }).length;
+  r.push("  dividend: "+divFeit+" punten met werkelijk uitgekeerde bedragen, "+
+    divSchat+" met divYield-schatting, "+divNiks+" zonder dividend (retroactief opgehaald uit de dividendhistorie)");
   r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
     ", waardering "+Math.round(w.wv*100)+", groei "+Math.round(w.wg*100)+
     ", kwaliteit "+Math.round(w.wq*100));
@@ -8258,7 +8312,7 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   if(dagen<90)bezwaren.push("Korte meetperiode ("+dagen+" dagen): factorpremies zijn gemeten over jaren.");
   if(snaps.length<4)bezwaren.push("Weinig momentopnamen ("+snaps.length+"): metingen uit dezelfde periode zijn afhankelijk.");
   if(metDiv<pairs.length*0.5)bezwaren.push("Bij "+(pairs.length-metDiv)+" van "+pairs.length+
-    " punten is het dividend onbekend \u2014 dat onderschat uitkeerende aandelen.");
+    " punten kon geen feitelijke dividenduitkering worden opgehaald \u2014 bij die punten valt de meting terug op de destijds bewaarde divYield-schatting of op koersrendement alleen.");
   if(telHer.geen>pairs.length*0.3)bezwaren.push("Van "+telHer.geen+" punten konden de scores niet herrekend worden (oude opnamen zonder kerngegevens).");
   if(laagste>45)bezwaren.push("Scorebereik "+laagste+"-"+hoogste+": nauwelijks lage scores, dus bereikbeperking \u2014 correlatie wordt onderschat.");
   if(uniek<pairs.length*0.5)bezwaren.push("Veel herhaalde metingen van dezelfde effecten ("+uniek+" uniek van "+pairs.length+"): effectieve steekproef is kleiner.");
