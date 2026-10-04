@@ -1071,7 +1071,18 @@ details[open] > summary{margin-bottom:4px}
     <div id="scatterWrap"></div>
 
     <h3 style="font-family:'Fraunces',serif;font-size:18px;margin:20px 0 8px">Opgeslagen momentopnamen</h3>
-    <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Screening vastleggen".</div></div>
+    <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Vastleggen".</div></div>
+
+    <details style="margin-top:20px">
+      <summary class="sub-kop">Diagnose: waarom zie ik mijn momentopnamen niet?</summary>
+      <div style="margin-top:8px">
+        <button class="btn-ghost" id="diagKnop">Cloud-data controleren</button>
+        <div id="diagUit" style="font-size:12.5px;color:var(--muted);margin-top:8px;white-space:pre-wrap"></div>
+        <textarea id="diagJson" readonly class="verborgen" style="width:100%;height:160px;margin-top:8px;background:var(--panel-2);
+          border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:10px;
+          font-family:'IBM Plex Mono',monospace;font-size:11px;resize:vertical"></textarea>
+      </div>
+    </details>
   </div><!-- /tab-tracking -->
 
   <div class="tabpane" id="tab-settings">
@@ -7836,6 +7847,47 @@ function wisGeschiedenis(){
   tStat("Geschiedenis gewist.");
   historyBewaren();
 }
+
+function cloudDiagnose(){
+  var uit=$('diagUit'), ta=$('diagJson'); if(!uit)return;
+  var regels=[];
+  regels.push("Inlogstatus: "+((typeof FB!=="undefined"&&FB.user)?"ingelogd als "+FB.user.email+" (uid "+FB.user.uid+")":"NIET ingelogd \u2014 cloud-sync haalt niets op"));
+  regels.push("Zichtbaar in de lijst (lokaal): "+HISTORY.length+" momentopname(n)");
+  var lokaalP=(typeof LS!=="undefined"&&LS.get)?LS.get(HISTORY_KEY).then(function(r){
+    var n=-2; if(r&&r.value){ try{ var d=JSON.parse(r.value); n=Array.isArray(d)?d.length:-1; }catch(e){ n=-1; } }
+    return n;
+  }).catch(function(){ return -2; }):Promise.resolve(-2);
+  lokaalP.then(function(lokaal){
+  regels.push("In lokale opslag (kompas_history): "+(lokaal===-2?"niet beschikbaar":lokaal<0?"onleesbaar":lokaal+" momentopname(n)"));
+  if(typeof FB==="undefined"||!FB.user||!FB.ready){
+    uit.textContent=regels.join("\n");
+    return;
+  }
+  uit.textContent=regels.join("\n")+"\n\u2139\ufe0f Firestore-document ophalen...";
+  FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var data=doc.exists?(doc.data()||{}):null;
+    if(!data){ uit.textContent=regels.join("\n")+"\n\u274c Geen Firestore-document users/"+FB.user.uid+" \u2014 dit account heeft nooit iets gesynchroniseerd. Ben je misschien ingelogd met een ander Google-account dan degene die de momentopnamen maakte?"; return; }
+    var raw=data.history;
+    if(!Array.isArray(raw)||!raw.length){
+      uit.textContent=regels.join("\n")+"\n\u274c Document bestaat maar het veld 'history' is leeg of ontbreekt \u2014 momentopnamen zijn nooit naar de cloud geschreven (of onder een ander account).";
+      if(ta){ ta.value=JSON.stringify(data,null,2).slice(0,20000); ta.classList.remove('verborgen'); }
+      return;
+    }
+    var schoon=sanitizeHistory(raw);
+    var d=function(x){ return x&&x.ts?new Date(x.ts).toLocaleDateString('nl-NL'):"?"; };
+    var lijst=regels.join("\n")+"\n\u2705 Firestore users/"+FB.user.uid+".history: "+raw.length+" ruwe momentopname(n)"+
+      "\n   \u00b7 eerste: "+d(raw[0])+" \u00b7 laatste: "+d(raw[raw.length-1])+
+      "\n   \u00b7 na sanering bruikbaar: "+schoon.length+" (momentopnamen met all\u00e9\u00e9n scores en geen kerndata verdwijnen)";
+    if(schoon.length>0&&HISTORY.length===0){
+      lijst+="\n\u26a0\ufe0f Cloud heeft data maar de lijst is leeg \u2014 hard-herlaad de pagina (Ctrl+F5) om een gecachte oude versie te omzeilen.";
+    }
+    uit.textContent=lijst;
+    if(ta){ ta.value=JSON.stringify(raw.slice(0,2),null,2).slice(0,20000); ta.classList.remove('verborgen'); }
+  }).catch(function(e){
+    uit.textContent=regels.join("\n")+"\n\u274c Firestore-leesfout: "+(e&&e.message?e.message:e)+" \u2014 check je internetverbinding.";
+  });
+  });
+}
 // knoppen: pas aansluiten nadat lokale + cloudhistorie geladen is, zodat de lijst
 // meteen de volledige geschiedenis toont
 historyLaden().then(function(){
@@ -7848,7 +7900,7 @@ historyLaden().then(function(){
   if($('export'))$('export').onclick=exportHistory;
   if($('importBtn'))$('importBtn').onclick=function(){ $('importFile').click(); };
   if($('importFile'))$('importFile').onchange=function(e){ if(e.target.files[0])importHistory(e.target.files[0]); };
-  if($('clearHist'))$('clearHist').onclick=wisGeschiedenis;
+  if($('diagKnop'))$('diagKnop').onclick=cloudDiagnose; if($('clearHist'))$('clearHist').onclick=wisGeschiedenis;
 });
 function kopieerAnalyse(){
   var ven=$('analyseVenster'); if(!ven)return;
