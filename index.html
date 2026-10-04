@@ -2257,6 +2257,58 @@ function rawScore(d){
 function totalScore(d){
   return dampedScore(d,rawScore(d));
 }
+// ---- Score-uitsplits: welke pijler trok de totaalscore omlaag? ----
+// Vergelijkt de huidige deelscores met de laatst bewaarde meting en rekent per pijler
+// uit hoeveel punt van de totaalscore-daling op welke factor komt, inclusief de
+// val-trap-penalty (25% bij rood, 10% bij oranje). geeft ook de onderliggende cijfers
+// mee zodat je ziet wat er precies verschoof.
+function scoreDalingInfo(pos,fresh){
+  var b=pos.baseline;
+  if(!b||b.score==null||!fresh||fresh.score==null)return {drop:0,onderdelen:[],verlies:0};
+  var drop=b.score-fresh.score;
+  var w=(typeof weights==="function")?weights():{wm:0.25,wv:0.25,wg:0.25,wq:0.25};
+  var oudeTrap=b.trapLevel||0, nieuweTrap=fresh.trapLevel||0;
+  var oudePen=oudeTrap===2?0.75:(oudeTrap===1?0.90:1);
+  var nieuwePen=nieuweTrap===2?0.75:(nieuweTrap===1?0.90:1);
+  var basisOud=b.score/oudePen, basisNieuw=fresh.score/nieuwePen;
+  var verlies=[
+    {f:'momentum',label:'Momentum',oud:b.m,nieuw:fresh.m,w:w.wm},
+    {f:'waardering',label:'Waardering',oud:b.v,nieuw:fresh.v,w:w.wv},
+    {f:'groei',label:'Groei',oud:b.g,nieuw:fresh.g,w:w.wg},
+    {f:'kwaliteit',label:'Kwaliteit',oud:b.quality,nieuw:fresh.q,w:w.wq}
+  ].map(function(p){
+    var dal=(p.oud!=null&&p.nieuw!=null)?(p.oud-p.nieuw):null;
+    return {f:p.f,label:p.label,oud:p.oud,nieuw:p.nieuw,
+           punt:(dal!=null)?+(dal*p.w).toFixed(1):null};
+  }).sort(function(x,y){return (y.punt||0)-(x.punt||0);});
+  var penaltyVerschil=+(basisNieuw*(oudePen-nieuwePen)).toFixed(1);
+  var somPunten=verlies.reduce(function(s,o){return s+(o.punt||0);},0);
+  var netto=(basisOud-basisNieuw);
+  if(somPunten>0&&netto>0){
+    var schaal=netto/somPunten;
+    verlies.forEach(function(o){if(o.punt!=null)o.punt=+(o.punt*schaal).toFixed(1);});
+  }
+  return {drop:drop,onderdelen:verlies,penaltyVerschil:penaltyVerschil,
+         trapOud:oudeTrap,trapNieuw:nieuweTrap,verlies:basisOud-basisNieuw};
+}
+// HTML-blok voor de portefeuillekaart: per pijler oud\u2192nieuw met de punten die het
+// kostte, gesorteerd grootste straf eerst, plus de val-trap-penalty als aparte regel.
+function renderScoreUitsplits(pos,fresh){
+  var info=scoreDalingInfo(pos,fresh);
+  if(!info.drop||info.drop<1)return '';
+  var rijen=info.onderdelen.filter(function(o){return o.punt!=null&&o.punt>=0.5;})
+    .map(function(o){
+      return '<span title="deelscore '+o.label+': '+o.oud+' \u2192 '+o.nieuw+' \u00b7 weging in de totaalscore bepaalt het puntenverlies">'+
+        o.label+' <b>'+o.oud+'\u2192'+o.nieuw+'</b> <span class="neg">\u2212'+o.punt+'</span></span>';
+    }).join('');
+  var pen='';
+  if(info.penaltyVerschil>=0.5)
+    pen='<span class="neg" title="val-trap-indicator versprong van niveau '+info.trapOud+' naar '+info.trapNieuw+' (0=geen, 1=let op: 10% straf, 2=val-trap: 25% straf)">val-trap-penalty \u2212'+info.penaltyVerschil+'</span>';
+  if(!rijen&&!pen)return '';
+  return '<div class="pf-scores" style="border-left:2px solid var(--red);padding-left:8px">'+
+    '<span style="font-weight:600;color:var(--ink)">waar de score (\u2212'+Math.round(info.drop)+') van afstraalt:</span>'+
+    (rijen?rijen:'<span style="color:var(--muted)">geen aparte pijler groot genoeg</span>')+pen+'</div>';
+}
 // ---- Centrale sorteer- en herstelhelpers ----
 // Sorteren op totaalscore stond op zes plekken identiek gekopieerd; een toekomstige
 // wijziging (bijv. een andere scorefunctie of secundaire sortering) moest dan overal
@@ -2591,6 +2643,16 @@ function nieuwsRelevantie(artikel,symbol,naam){
   return 1;                                              // wel getagd, niet genoemd
 }
 function isUsTicker(sym){ return sym && !/\./.test(sym) && !ISIN_RE.test(sym); }
+// Finnhub levert datetime als unix-seconden; toon zowel de exacte datum als hoe lang geleden,
+// want bij het duiden van een score-daling wil je weten wat er w\u00e9r gebeurde en wanneer.
+function nieuwsDatumTijd(dt){
+  if(!dt)return '';
+  var t=new Date(dt*1000);
+  if(isNaN(t.getTime()))return '';
+  var d=t.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+  var lft=archiefLeeftijd(dt*1000);
+  return d+(lft?' ('+lft+' geleden)':'');
+}
 
 // ---- Signaal-factoren (Finnhub): sentiment, insiders, analisten, prijs-target ----
 // Vier aparte factoren die geen onderdeel zijn van de klassieke fundamentals, maar
@@ -2863,13 +2925,13 @@ function renderNieuws(resultaat,ids){
         ' <span style="color:var(--muted);font-weight:400;font-size:11px">'+g.pos.symbol+'</span></div>'+
         (g.scores?renderSignaalScores(g.scores):'')+
         g.items.map(function(a){
-          var wanneer=archiefLeeftijd(a.datetime*1000);
+          var wanneer=nieuwsDatumTijd(a.datetime)||archiefLeeftijd(a.datetime*1000)||'';
           return '<div style="padding:5px 0;border-top:1px solid var(--line)">'+
             '<a href="'+a.url+'" target="_blank" rel="noopener" '+
             'style="color:var(--ink);text-decoration:none;font-size:12.5px;line-height:1.5">'+
             (a.headline||"").replace(/</g,"&lt;")+'</a>'+
             '<div style="font-size:10.5px;color:var(--muted);margin-top:2px">'+
-            (a.source||"")+' \u00b7 '+wanneer+' geleden</div></div>';
+            (a.source||"")+(wanneer?' \u00b7 '+wanneer:'')+'</div></div>';
         }).join("")+'</div>';
     });
   });
@@ -6400,7 +6462,8 @@ function renderVerkoopRapport(rap,totaal){
       uit+='<div style="padding:4px 0;border-top:1px solid var(--line)">'+
         '<a href="'+a.url+'" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:none;font-size:12px">'+
         (a.headline||"").replace(/</g,"&lt;")+'</a>'+
-        '<div style="font-size:10px;color:var(--muted)">'+(a.source||"")+'</div></div>';
+        '<div style="font-size:10px;color:var(--muted)">'+(a.source||"")+
+        (a.datetime?' \u00b7 '+nieuwsDatumTijd(a.datetime):'')+'</div></div>';
     });
     uit+='</div>';
   });
@@ -6615,6 +6678,7 @@ function renderPortfolio(){
         : '')+
       (p._fresh&&p._fresh.holdingSuggestion?'<div class="pf-alarm-text orange">\ud83c\udfe6 Dit cijferpatroon lijkt op een holding ('+p._fresh.holdingSuggestion.reasons.join(", ")+
         '). <span style="text-decoration:underline;cursor:pointer" onclick="confirmHoldingSuggestion(\''+p.symbol+'\')">Als holding scoren?</span></div>':'')+
+      (p._fresh&&!p._fresh.isEtf&&p.baseline?renderScoreUitsplits(p,p._fresh):'')+
       (p._alarm?'<div class="pf-alarm-text '+(p._alarm.level==="red"?"red":p._alarm.level==="orange"?"orange":"")+'">'+
         (p._alarm.level==="red"?"\ud83d\udd34 ":p._alarm.level==="orange"?"\ud83d\udfe0 ":"\ud83d\udfe2 ")+p._alarm.text+
         ((p._alarm.wat||p._alarm.waarom)?
@@ -7359,7 +7423,7 @@ function checkAllPositions(){
         pos._fresh=fresh;
         pos._raw=d;            // ruwe cijfers bewaren voor de tabelweergave
         pos._alarm=classifyAlarm(pos,fresh);
-        if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,ts:Date.now()};
+        if(!pos.baseline) pos.baseline={score:fresh.score,quality:fresh.q,trapLevel:fresh.trapLevel,m:fresh.m,v:fresh.v,g:fresh.g,ts:Date.now()};
       });
   }
 
