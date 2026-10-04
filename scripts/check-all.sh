@@ -14,6 +14,13 @@ if [ -f scripts/check-structure.js ] && command -v node >/dev/null 2>&1; then
   done
 fi
 
+# Sectiecontrole: per-sectie syntax en verplichte ankers (zie scripts/check-sections.js)
+if [ -f scripts/check-sections.js ] && command -v node >/dev/null 2>&1; then
+  for f in index.html; do
+    [ -f "$f" ] && node scripts/check-sections.js "$f" || FAIL=1
+  done
+fi
+
 if [ $FAIL -eq 1 ]; then
   echo ""
   echo "KWALITEITSCONTROLE MISLUKT — Los de fouten op voordat je commit."

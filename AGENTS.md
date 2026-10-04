@@ -9,6 +9,11 @@ direct als statische pagina (GitHub Pages).
 1. **Voer vóór elke commit uit:** `./scripts/check-all.sh`
    - JS-syntaxcontrole van alle inline `<script>` blokken
    - HTML-structuurcontrole (tag-nesting, IIFE-balans, ID-referenties)
+   - Sectiecontrole: elke `// ----` sectie apart geparseerd, zodat haakjes-
+     en quote-fouten aan één sectie worden toegeschreven, plus controle dat
+     verplichte ankerblokken bestaan (tab-navigatie, Firebase-init, clampScore,
+     setStatus, foutVolledig, OPHAALPOOL, loadCloud, accuratesse-rapporten) —
+     deze blokken zijn ooit verloren gegaan bij een herstructurering
    - Bij falen: commit weigeren en eerst oplossen.
 
 2. **Module-volgorde in `index.html` is bewust en moet behouden blijven:**
@@ -32,6 +37,16 @@ direct als statische pagina (GitHub Pages).
    (inloggen, laden en opslaan). Nieuwe code hoort in de laag die
    erbij past; bij herindeling banners en de inhoudsopgave meeveranderen.
 
+3. **Sectiestructuur is de index van het scriptblok:**
+   - Elke functionele eenheid begint met een top-level `// ---- naam ----` header
+     (kolom 0). Ingesprongen headers zijn sub-secties binnen één functie.
+   - Bij het toevoegen/verwijderen/herbenoemen van een sectie: de inhoudsopgave
+     bovenaan het scriptblok en `node scripts/gen-section-index.js` synchroon houden.
+   - Bij elke wijziging in een sectie wordt het hele blok gecontroleerd door
+     `scripts/check-sections.js` (draait automatisch mee in `check-all.sh`):
+     syntaxfouten worden aan de exacte sectie toegeschreven en ontbrekende
+     ankerblokken (tab-navigatie, Firebase-init, centrale functies) vallen
+     direct op in plaats van maanden onopgemerkt te blijven.
 3. **Event listeners (tabs, knoppen, login) horen BINNEN een
    `document.addEventListener('DOMContentLoaded', ...)` handler**, nooit los in de
    globale scope. De tab-bug en de login-bug zijn hierdoor ontstaan.
@@ -109,6 +124,8 @@ direct als statische pagina (GitHub Pages).
 | `scripts/check-js.sh` | wrapper: syntax van inline scripts via node |
 | `scripts/extract-and-check.js` | extraheert `<script>` blokken en valideert met `new Function()` |
 | `scripts/check-structure.js` | tag-nesting, IIFE-balans, ID-referenties in HTML |
+| `scripts/check-sections.js` | per-sectie syntax + verplichte ankerblokken |
+| `scripts/gen-section-index.js` | drukt de sectie-index af (regelnummers per sectie) — naslag en sync-check met de inhoudsopgave |
 | `scripts/check-all.sh` | combinatie — dit draait ook in CI en de pre-commit hook |
 | `scripts/pre-commit` | hook-template; kopieer naar `.git/hooks/pre-commit` |
 | `.github/workflows/check-js.yml` | GitHub Action: "Quality Check" op push/PR naar main |
