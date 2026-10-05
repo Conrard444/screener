@@ -8485,67 +8485,70 @@ function parseCsvLine(line){
   out.push(cur);
   return out;
 }
+// verwerkt Saxo-regels (CSV-regels én xlsx-rijen als string-arrays) tot posities.
+// Zelfde kolomnamen, zelfde logica — alleen de bestandslees-wrapper verschilt per formaat.
+function importSaxoRijen(lines){
+  if(lines.length<2)throw new Error("leeg bestand");
+  var headers=lines[0].map(function(h){return String(h).replace(/^"|"$/g,'').trim();});
+  var idxSymb=headers.indexOf("Symb.");
+  var idxQty=headers.indexOf("Aantal");
+  var idxAvgPrice=headers.indexOf("AK-krs");
+  var idxDate=headers.indexOf("Valutadatum");
+  var idxIsinGlobal=headers.indexOf("ISIN");
+  var idxKoers=headers.indexOf("Koers");
+  var idxRend=headers.indexOf("+/- koers %");
+  if(idxSymb===-1||idxQty===-1){throw new Error("onbekend Saxo-formaat (kolommen 'Symb.' of 'Aantal' niet gevonden) — is dit een posities-export uit SaxoInvestor?");}
+  var added=0, skipped=0, updated=0;
+  var existing={}; PORTFOLIO.forEach(function(p){existing[p.symbol]=true;});
+  for(var i=1;i<lines.length;i++){
+    var cols=lines[i].map(function(c){return String(c).replace(/^"|"$/g,'');});
+    var symbRaw=cols[idxSymb];
+    var qtyRaw=cols[idxQty];
+    if(!symbRaw||!qtyRaw){skipped++;continue;}
+    var ticker=saxoSymbolToTicker(symbRaw);
+    var qty=parseFloat(String(qtyRaw).replace(",","."));
+    if(!ticker||!qty||isNaN(qty)){skipped++;continue;}
+    var priceRaw=idxAvgPrice>-1?cols[idxAvgPrice]:null;
+    var price=priceRaw?parseFloat(String(priceRaw).replace(",",".")):null;
+    var dateRaw=idxDate>-1?cols[idxDate]:null;
+    var isoDate=null;
+    if(dateRaw){
+      var m=String(dateRaw).match(/(\d{1,2})-([a-z]{3})-(\d{4})/i);
+      var maand={jan:"01",feb:"02",mrt:"03",mar:"03",apr:"04",mei:"05",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",okt:"10",oct:"10",nov:"11",dec:"12"};
+      if(m&&maand[m[2].toLowerCase()]) isoDate=m[3]+"-"+maand[m[2].toLowerCase()]+"-"+("0"+m[1]).slice(-2);
+    }
+    var isinVal=(idxIsinGlobal>-1&&cols[idxIsinGlobal])?String(cols[idxIsinGlobal]).trim():null;
+    if(existing[ticker]){
+      for(var k=0;k<PORTFOLIO.length;k++){
+        if(PORTFOLIO[k].symbol===ticker && !PORTFOLIO[k].isin && isinVal){
+          PORTFOLIO[k].isin=isinVal; updated++;
+        }
+      }
+      skipped++; continue;
+    }
+    var sKoers=(idxKoers>-1&&cols[idxKoers])?parseFloat(String(cols[idxKoers]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
+    var sRend=(idxRend>-1&&cols[idxRend])?parseFloat(String(cols[idxRend]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
+    PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,
+      buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,isin:isinVal,baseline:null,
+      brokerPrice:(sKoers&&!isNaN(sKoers))?+sKoers.toFixed(4):null,
+      brokerReturn:(sRend!=null&&!isNaN(sRend))?+sRend.toFixed(2):null,
+      brokerNaam:"SaxoInvestor", brokerDatum:Date.now()});
+    existing[ticker]=true; added++;
+  }
+  savePortfolioLocal();savePortfolioCloud();
+  renderPortfolio();
+  pfStat("Ge\u00efmporteerd: "+added+" posities toegevoegd"+
+    (updated?", "+updated+" bestaande posities aangevuld met ISIN":"")+
+    (skipped?", "+skipped+" regel(s) overgeslagen":"")+". Klik 'Alles checken' voor actuele gegevens.");
+}
 function importSaxoCsv(file){
   var reader=new FileReader();
   reader.onload=function(e){
     try{
-      var text=e.target.result.replace(/^\uFEFF/,''); // BOM verwijderen
-      var lines=text.split(/\r?\n/).filter(function(l){return l.trim().length;});
-      if(lines.length<2)throw new Error("leeg bestand");
-      var headers=parseCsvLine(lines[0]).map(function(h){return h.replace(/^"|"$/g,'');});
-      var idxName=headers.indexOf("Instrument");
-      var idxSymb=headers.indexOf("Symb.");
-      var idxQty=headers.indexOf("Aantal");
-      var idxAvgPrice=headers.indexOf("AK-krs");
-      var idxDate=headers.indexOf("Valutadatum");
-      var idxIsinGlobal=headers.indexOf("ISIN");
-      // Saxo levert ook zijn eigen koers en rendement; die zijn leidend voor jouw positie
-      var idxKoers=headers.indexOf("Koers");
-      var idxRend=headers.indexOf("+/- koers %");
-      if(idxSymb===-1||idxQty===-1){throw new Error("onbekend CSV-formaat (kolommen 'Symb.' of 'Aantal' niet gevonden)");}
-      var added=0, skipped=0, updated=0;
-      var existing={}; PORTFOLIO.forEach(function(p){existing[p.symbol]=true;});
-      for(var i=1;i<lines.length;i++){
-        var cols=parseCsvLine(lines[i]).map(function(c){return c.replace(/^"|"$/g,'');});
-        var symbRaw=cols[idxSymb];
-        var qtyRaw=cols[idxQty];
-        if(!symbRaw||!qtyRaw){skipped++;continue;} // tussenkoppen zoals "Aandelen (12)" hebben geen Symb./Aantal
-        var ticker=saxoSymbolToTicker(symbRaw);
-        var qty=parseFloat(qtyRaw.replace(",","."));
-        if(!ticker||!qty||isNaN(qty)){skipped++;continue;}
-        var priceRaw=idxAvgPrice>-1?cols[idxAvgPrice]:null;
-        var price=priceRaw?parseFloat(priceRaw.replace(",",".")):null;
-        var dateRaw=idxDate>-1?cols[idxDate]:null; // formaat: 30-jan-2026
-        var isoDate=null;
-        if(dateRaw){
-          var m=dateRaw.match(/(\d{1,2})-([a-z]{3})-(\d{4})/i);
-          var maand={jan:"01",feb:"02",mrt:"03",mar:"03",apr:"04",mei:"05",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",okt:"10",oct:"10",nov:"11",dec:"12"};
-          if(m&&maand[m[2].toLowerCase()]) isoDate=m[3]+"-"+maand[m[2].toLowerCase()]+"-"+("0"+m[1]).slice(-2);
-        }
-        if(existing[ticker]){
-          // bestaat al: vul ontbrekende ISIN aan i.p.v. simpelweg overslaan
-          for(var k=0;k<PORTFOLIO.length;k++){
-            if(PORTFOLIO[k].symbol===ticker && !PORTFOLIO[k].isin && isinVal){
-              PORTFOLIO[k].isin=isinVal; updated++;
-            }
-          }
-          skipped++; continue;
-        }
-        var isinVal=(idxIsinGlobal>-1&&cols[idxIsinGlobal])?cols[idxIsinGlobal].trim():null;
-        var sKoers=(idxKoers>-1&&cols[idxKoers])?parseFloat(String(cols[idxKoers]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
-        var sRend=(idxRend>-1&&cols[idxRend])?parseFloat(String(cols[idxRend]).replace(/[^0-9.,-]/g,"").replace(",",".")):null;
-        PORTFOLIO.push({id:Date.now()+"_"+ticker+"_"+i,symbol:ticker,qty:qty,
-          buyPrice:price&&!isNaN(price)?price:null,buyDate:isoDate,isin:isinVal,baseline:null,
-          brokerPrice:(sKoers&&!isNaN(sKoers))?+sKoers.toFixed(4):null,
-          brokerReturn:(sRend!=null&&!isNaN(sRend))?+sRend.toFixed(2):null,
-          brokerNaam:"SaxoInvestor", brokerDatum:Date.now()});
-        existing[ticker]=true; added++;
-      }
-      savePortfolioLocal();savePortfolioCloud();
-      renderPortfolio();
-      pfStat("Ge\u00efmporteerd: "+added+" posities toegevoegd"+
-        (updated?", "+updated+" bestaande posities aangevuld met ISIN":"")+
-        (skipped?", "+skipped+" regel(s) overgeslagen":"")+". Klik 'Alles checken' voor actuele gegevens.");
+      var text=e.target.result.replace(/^\uFEFF/,'');
+      var lines=text.split(/\r?\n/).filter(function(l){return l.trim().length;})
+        .map(function(l){return parseCsvLine(l);});
+      importSaxoRijen(lines);
     }catch(err){
       pfStat("Import mislukt: "+(err&&err.message||"onbekend CSV-formaat. Controleer of dit een SaxoInvestor posities-export is."),true);
     }
@@ -8598,10 +8601,30 @@ if($('pfBoleroFile'))$('pfBoleroFile').onchange=function(e){
 
 // Bolero-xlsx inlezen en verwerken
 function leesBoleroBestand(f){
-  pfStat("Bolero-bestand inlezen\u2026");
+  pfStat("Excel-bestand inlezen…");
   var lezer=new FileReader();
   lezer.onload=function(ev){
     leesXlsx(ev.target.result).then(function(rijen){
+      // Saxo levert zijn posities-export ook als Excel. Herkenning op kolomnamen:
+      // Saxo heeft 'Symb.' en 'Aantal' in de kopregel, Bolero heeft 'ISIN' en 'Naam'.
+      var eersteRij=rijen[0]||{};
+      var kopwaarden=Object.keys(eersteRij).map(function(k){return String(eersteRij[k]).trim();});
+      var isSaxo=kopwaarden.indexOf("Symb.")>-1&&kopwaarden.indexOf("Aantal")>-1;
+      if(isSaxo){
+        try{
+          var lines=rijen.map(function(rij){
+            var max=-1;
+            Object.keys(rij).forEach(function(k){var n=+k; if(n>max)max=n;});
+            var arr=[];
+            for(var k=0;k<=max;k++)arr[k]=rij[k]!=null?String(rij[k]):"";
+            return arr;
+          }).filter(function(arr){return arr.some(function(c){return c&&c.trim().length;});});
+          importSaxoRijen(lines);
+        }catch(err){
+          pfStat("Import mislukt: "+(err&&err.message||"onbekend Saxo-formaat."),true);
+        }
+        return;
+      }
       var res=parseBolero(rijen);
       if(res.fout){pfStat(res.fout,true);return;}
       if(!res.posities.length){pfStat("Geen posities gevonden in dit bestand.",true);return;}
