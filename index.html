@@ -1431,14 +1431,15 @@ var FOUT_SOORTEN=[
    kort:"netwerkfout/CORS",
    uitleg:"De browser kon de API niet bereiken \u2014 ofwel je verbinding, ofwel een adblocker/privacy-extensie die het API-domein blokkeert, ofwel CORS-weigering door de bron.",
    actie:"Check je verbinding, zet tijdelijk je adblocker uit voor dit domein en probeer het opnieuw."},
+  {test:/limit reached|api limit|429|too many|quota/i,soort:"limiet",
+   kort:"limiet bereikt",
+   uitleg:"Je dag- of minutenlimiet bij deze bron is op. De tool pauzeert automatisch bij snelheidslimieten, maar een dag- of maandlimiet herstelt pas later.",
+   actie:"Wacht tot het limietvenster herstelt, of vul een sleutel van een tweede bron in \u2014 de tool schuift automatisch door."},
   {test:/401|403|access denied|don't have access|invalid.*key|api key|unauthorized/i,soort:"toegang",
    kort:"geen toegang (sleutel of tier)",
    uitleg:"De bron weigerde de aanroep: meestal een ontbrekende of ongeldige API-sleutel, of het endpoint valt buiten je gratis tier.",
    actie:"Controleer de sleutel bij Instellingen; bestaat die, dan ondersteunt je tier dit endpoint waarschijnlijk niet."},
-  {test:/limit|429|too many|quota/i,soort:"limiet",
-   kort:"limiet bereikt",
-   uitleg:"Je dag- of minutenlimiet bij deze bron is op. De tool pauzeert automatisch bij snelheidslimieten, maar een dag- of maandlimiet herstelt pas later.",
-   actie:"Wacht tot het limietvenster herstelt, of vul een sleutel van een tweede bron in \u2014 de tool schuift automatisch door."},
+
   {test:/timeout|geen antwoord/i,soort:"timeout",
    kort:"time-out",
    uitleg:"De API gaf binnen 20 seconden geen antwoord. Vaak tijdelijke drukte bij de bron.",
@@ -3679,7 +3680,17 @@ function getJson(url){
     setTimeout(function(){rej({kind:"timeout",msg:"geen antwoord binnen 20 seconden"});},20000);
   });
   return Promise.race([timeout, fetch(url).then(function(r){
-    if(!r.ok){ throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText+" ("+(bron||"onbekende bron")+")"}; }
+    if(!r.ok){
+      // Finnhub (en andere bronnen) zeggen in de respons-body pas wát er mis is:
+      // "Invalid API key" (sleutel), "You don't have access to this resource" (tier)
+      // of "API limit reached" (limiet). Zonder deze tekst classificeert de tool
+      // elke 401 als sleutelprobleem en blijft de pool bij een limiet het hele
+      // universum zinloos afvuren.
+      return r.text().catch(function(){return "";}).then(function(txt){
+        var detail=(txt||"").replace(/<[^>]*>/g,"").trim().slice(0,120);
+        throw {kind:"http",msg:"HTTP "+r.status+" "+r.statusText+" ("+(bron||"onbekende bron")+")"+(detail?" \u2014 "+detail:"")};
+      });
+    }
     return r.text();
   }).then(function(txt){
     var data;
@@ -4858,10 +4869,11 @@ function updateSourceIndicator(){
 function loadAllKeys(){
   ['finnhub','eodhd','fmp','eulerpool'].forEach(function(src){
     var applyVal=function(v){
+      v=(v||"").trim();
       if(v){MULTI_KEYS[src]=v;var f=$('key_'+src);if(f)f.value=v;setKeyStatus(src,"ok","ingesteld");}
       else setKeyStatus(src,"none","niet ingesteld");
     };
-    if(KEYCACHE[src]) {applyVal(KEYCACHE[src]);return;}
+    if(KEYCACHE[src]) {applyVal((""+KEYCACHE[src]).trim());return;}
     LS.get(keyStorageId(src)).then(function(r){applyVal(r&&r.value);}).catch(function(){applyVal(null);});
   });
 }
@@ -8801,8 +8813,8 @@ function loadCloud(){
       if($('syncKeys'))$('syncKeys').checked=true;
       ['finnhub','fmp','eodhd','eulerpool'].forEach(function(src){
         if(data.keys[src]){
-          KEYCACHE[src]=data.keys[src];
-          MULTI_KEYS[src]=data.keys[src];
+          KEYCACHE[src]=(""+data.keys[src]).trim();
+          MULTI_KEYS[src]=KEYCACHE[src];
           gotKeys++;
           LS.set(keyStorageId(src),data.keys[src]);
           var f=$('key_'+src);
