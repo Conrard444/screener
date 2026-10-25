@@ -424,7 +424,6 @@ var OPHAALPOOL={
         var msg=(err&&(err.msg||err.message))||"";
         if(poging===0&&opties.throttle&&/429|rate limit|too many/i.test(msg)){
           return self.aftellen(61,"Snelheidslimiet geraakt",opties.status).then(function(){
-            self.reset();
             return probeer(item,1);
           });
         }
@@ -454,6 +453,28 @@ var OPHAALPOOL={
       return {geslaagd:geslaagd,mislukt:mislukt,gestopt:gestopt};
     });
   }
+};
+
+// ---- Koerscache voor de vooranalyse ----
+// De vooranalyse deed bij elke run 1 call per aandeel, ook als dezelfde screening
+// een minuut eerder al gelopen had. Een koers van enkele minuten oud is voor het
+// rangschikken op dagverandering bruikbaar; de volledige analyse haalt de koers
+// bewust vers op (zie de datacache verderop). Deze cache leeft in het geheugen:
+// na een herlaadbeurt is hij leeg, wat precies goed is - dan zijn de koersen echt vers.
+var KOERSCACHE={
+  TTL:10*60*1000,
+  d:{},
+  sleutel:function(s){ return String(s||"").toUpperCase(); },
+  get:function(s){
+    var e=this.d[this.sleutel(s)];
+    if(!e||Date.now()-e.ts>this.TTL)return null;
+    return {symbol:e.symbol,price:e.price,chg:e.chg,dd:e.dd};
+  },
+  put:function(q){
+    if(!q||!q.symbol)return;
+    this.d[this.sleutel(q.symbol)]={ts:Date.now(),symbol:q.symbol,price:q.price,chg:q.chg,dd:q.dd};
+  },
+  reset:function(){ this.d={}; }
 };
 
 
@@ -3784,6 +3805,18 @@ function getJson(url){
 var DATA_CACHE_TTL=12*60*60*1000;
 var DATA_CACHE= {};
 function dataCacheKey(sym){ return (sym||"").toUpperCase().replace(/[^A-Z0-9.:]/g,""); }
+// Samenvoegen in plaats van vervangen: een net opgehaald aandeel mag niet uit het
+// geheugen verdwijnen omdat de opslag nog niet is bijgeschreven. Dat schrijven is
+// 1,5 s uitgesteld, dus een tweede screening binnen die tijd verloor anders alles
+// wat de eerste run zojuist had opgehaald.
+function dataCacheSamenvoegen(bron){
+  Object.keys(bron||{}).forEach(function(k){
+    var e=bron[k];
+    if(!e||!e.d)return;
+    if(!DATA_CACHE[k]||(e.ts||0)>(DATA_CACHE[k].ts||0))DATA_CACHE[k]=e;
+  });
+  return DATA_CACHE;
+}
 function dataCacheLoad(){
   return LS.get('dataCache').then(function(r){
     var lokaal={};
@@ -3791,19 +3824,12 @@ function dataCacheLoad(){
     if(typeof FB!="undefined"&&FB.user&&FB.ready){
       return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
         var cloud=(doc.exists?doc.data().dataCache:null)||{};
-        var merger={};
-        Object.keys(cloud).forEach(function(k){
-          if(!merger[k]||(cloud[k].ts||0)>(merger[k].ts||0))merger[k]=cloud[k];
-        });
-        Object.keys(lokaal).forEach(function(k){
-          if(!merger[k]||(lokaal[k].ts||0)>(merger[k].ts||0))merger[k]=lokaal[k];
-        });
-        DATA_CACHE=merger;
-        return merger;
-      }).catch(function(){ DATA_CACHE=lokaal; return lokaal; });
+        dataCacheSamenvoegen(cloud);
+        return dataCacheSamenvoegen(lokaal);
+      }).catch(function(){ return dataCacheSamenvoegen(lokaal); });
     }
-    DATA_CACHE=lokaal; return lokaal;
-  }).catch(function(){ DATA_CACHE={}; return {}; });
+    return dataCacheSamenvoegen(lokaal);
+  }).catch(function(){ return DATA_CACHE; });
 }
 var dataCacheSaveTimer=null;
 function dataCacheSave(){
@@ -4345,6 +4371,15 @@ function quoteOnlyCached(symbol,key){
   if(!bron)return Promise.reject({kind:"config",msg:"geen koersbron voor "+symbol+" \u2014 vul een sleutel in bij Instellingen"});
   return quoteOnly(symbol,bron.key,bron.src);
 }
+// koers voor de vooranalyse: 1 call, tien minuten hergebruik (zie KOERSCACHE)
+function vooranalyseQuote(symbol,key){
+  var uit=KOERSCACHE.get(symbol);
+  if(uit)return Promise.resolve(uit);
+  return quoteOnlyCached(symbol,key).then(function(q){
+    KOERSCACHE.put(q);
+    return q;
+  });
+}
 
 // --- Finnhub: 2 calls (quote + basic financials). VS-symbolen zonder suffix. ---
 function enrichFinnhub(symbol,key){
@@ -4565,7 +4600,6 @@ function run(){
   // bron en kosten bepalen via de centrale BRON-module, niet via het verborgen source-veld
   var cacheKlaar=dataCacheLoad();
   var throttle=BRON.throttle(universe);
-  var CALLS_FULL=Math.max.apply(null,universe.slice(0,20).map(function(s){return BRON.kosten(s);}).concat([2]));
   var state={dayLimit:null,skipped:[],redenen:{}};
   // vooraf melden welke bron gebruikt wordt, zodat verrassingen uitblijven
   var bronnenInGebruik={};
@@ -4585,7 +4619,8 @@ function runQueue(symbols,callsPer,fetchFn,label){
     // ETF-rij, zodat alle tabbladen dezelfde ophaalmethodiek delen.
     var PARALLEL=throttle?5:8;
     var items=symbols.map(function(s){
-      return {sym:s,callsPer:callsPer,haal:function(){return fetchFn(s,key);}};
+      var kosten=(typeof callsPer==="function")?callsPer(s):callsPer;
+      return {sym:s,callsPer:kosten,haal:function(){return fetchFn(s,key);}};
     });
     return OPHAALPOOL.loop(items,{
       parallel:PARALLEL,
@@ -4618,9 +4653,9 @@ function runQueue(symbols,callsPer,fetchFn,label){
   if(useFunnel){
     setStatus(st,null,false);
     var allesAan=$('volledigeAnalyse')&&$('volledigeAnalyse').checked;
-    st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)"+
+    st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (hooguit 1 call per aandeel; recente koersen uit de cache)"+
       (allesAan?" \u2014 daarna gaan ze allemaal door naar de volledige analyse":"")+"\u2026";
-    stage1=runQueue(universe,1,quoteOnlyCached,"Vooranalyse").then(function(quotes){
+    stage1=runQueue(universe,function(s){return KOERSCACHE.get(s)?0:1;},vooranalyseQuote,"Vooranalyse").then(function(quotes){
       // rangschik op dagverandering, neem de top (3x de toonlimiet, min 40)
       var keep=Math.max(limit*3,40);
       if(!quotes.length){
@@ -4648,7 +4683,7 @@ function runQueue(symbols,callsPer,fetchFn,label){
     // cache eerst inlezen (browser + cloud) voordat de keten calls gaat doen;
     // cache-hits kosten geen calls en geen wachttijd
     return cacheKlaar.then(function(){
-      return runQueue(symbols,CALLS_FULL,enrich,"Volledige analyse");
+      return runQueue(symbols,function(s){return dataCacheGet(s)?1:BRON.kosten(s);},enrich,"Volledige analyse");
     });
   }).then(function(all){
     // Mislukte aanroepen leveren undefined op. Zonder deze filter struikelt de verwerking

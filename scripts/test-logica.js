@@ -93,6 +93,14 @@ check("cache ouder dan 12u is verlopen", C.dataCacheGet("AAPL") === null);
 C.DATA_CACHE.MSFT = { ts: Date.now(), d: null };
 check("cache zonder data geeft null", C.dataCacheGet("MSFT") === null);
 
+C.DATA_CACHE = { AAPL: { ts: Date.now(), d: { symbol: "AAPL", pe: 25 } } };
+C.dataCacheSamenvoegen({ MSFT: { ts: 1, d: { symbol: "MSFT" } } });
+check("dataCacheSamenvoegen vult aan vanuit de opslag", !!C.DATA_CACHE.MSFT, JSON.stringify(Object.keys(C.DATA_CACHE)));
+C.dataCacheSamenvoegen({ AAPL: { ts: 0, d: { symbol: "AAPL", pe: 99 } } });
+check("dataCacheSamenvoegen laat een vers opgehaald aandeel staan", (C.DATA_CACHE.AAPL.d || {}).pe === 25,
+  "werd " + ((C.DATA_CACHE.AAPL.d || {}).pe));
+C.DATA_CACHE = {};
+
 var schoon = C.sanitizeHistory([
   { ts: 1, date: "2026-01-01", items: [{ symbol: "AAPL", pe: 20, score: 88, totaalscore: 88 }] },
   { ts: 2, date: "2026-01-02", items: [{ symbol: "MSFT", score: 70 }] },
@@ -214,6 +222,27 @@ check("onbekend formaat geeft een duidelijke fout", (function () {
 })());
 C.PORTFOLIO = [];
 
+// ---------------- I. Ophaalpool: een 429 mag het venster niet wissen
+function ophaalpoolTest() {
+  var pool = C.OPHAALPOOL;
+  var bewaard = pool.aftellen;
+  pool.aftellen = function () { return Promise.resolve(); };
+  pool.reset();
+  pool.markeer(30);
+  var n = 0;
+  return pool.loop([{
+    sym: "X", callsPer: 1, haal: function () {
+      n++;
+      return n === 1 ? Promise.reject({ msg: "429 Too Many Requests" }) : Promise.resolve({ ok: 1 });
+    }
+  }], { throttle: true, parallel: 1 }).then(function (u) {
+    pool.aftellen = bewaard;
+    var na = pool.stempels.length;
+    pool.reset();
+    return { na: na, geslaagd: u.geslaagd.length, mislukt: u.mislukt.length };
+  });
+}
+
 // ---------------- H. Archief laden uit een oudere opslagvorm
 console.log("\nH. Archief laden");
 C.ARCHIEF = { aandelen: {}, etfs: {} };
@@ -225,6 +254,13 @@ C.archiefLaden().then(function () {
   C.ARCHIEF = { aandelen: { AAPL: { symbol: "AAPL", price: 1 } } };
   C.archiefOpslaan();
   check("archiefOpslaan bewaart ook na het laden van een oude vorm", !!h.opslag["kompas_archief"], "niets weggeschreven");
+
+  return ophaalpoolTest();
+}).then(function (r) {
+  console.log("\nI. Ophaalpool");
+  check("een 429 wist het snelheidsvenster niet", r.na === 31, "stempels na de herkansing: " + r.na);
+  check("de 429-herkansing levert het item alsnog", r.geslaagd === 1 && r.mislukt === 0,
+    r.geslaagd + " geslaagd, " + r.mislukt + " mislukt");
 
   process.exit(teller.rapport("Logische audit") ? 1 : 0);
 });

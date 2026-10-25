@@ -74,6 +74,38 @@ function portfolio(naam, lokaal, lokaleTs, cloud) {
   });
 }
 
+// ------------------------------------------------- herhaalde screening
+// Dezelfde screening twee keer achter elkaar: de tweede run hoort de koersen uit
+// KOERSCACHE te halen en de pool mag alleen boekhouden wat er echt gebeurt.
+function herhaaldeScreening() {
+  var log = [];
+  var h = maakSandbox({ velden: { exchange: "SP500" }, fetch: maakFetch(log) });
+  Object.assign(h.ctx.MULTI_KEYS, { finnhub: "FINNHUB-KEY", eodhd: "", fmp: "", eulerpool: "" });
+  h.el("multiSource").checked = true;
+  h.el("source").value = "finnhub";
+  h.ctx.OPHAALPOOL.MAX_PER_MIN = 1e9;
+  function eenRun() {
+    h.el("status").textContent = "";
+    h.el("status").innerHTML = "";
+    h.ctx.run();
+    return wachtTot(function () {
+      return /Klaar|Geen enkel aandeel/.test(statusTekst(h));
+    }, 30000);
+  }
+  return eenRun().then(function () {
+    var eerste = log.length;
+    h.ctx.OPHAALPOOL.reset();
+    return eenRun().then(function () {
+      return {
+        eerste: eerste,
+        tweede: log.length - eerste,
+        stempels: h.ctx.OPHAALPOOL.stempels.length,
+        tekst: statusTekst(h)
+      };
+    });
+  });
+}
+
 function main() {
   var finnhub = { finnhub: "FINNHUB-KEY", eodhd: "", fmp: "", eulerpool: "" };
   var reeks = [];
@@ -129,6 +161,16 @@ function main() {
       console.log("\n[" + r.naam + "] posities: " + r.posities);
       check("een lege cloud wist de lokale posities niet", r.posities === 1, "werd " + r.posities);
     }));
+
+  reeks.push(herhaaldeScreening().then(function (r) {
+    console.log("\n[twee keer dezelfde S&P 500-screening]");
+    console.log("  calls: eerste run " + r.eerste + ", tweede run " + r.tweede +
+      ", geboekt in de pool " + r.stempels);
+    check("tweede run haalt de vooranalyse uit de koerscache", r.tweede < r.eerste / 2,
+      r.tweede + " calls tegen " + r.eerste);
+    check("de pool boekt alleen wat er echt gebeurt", r.stempels === 75, "geboekt: " + r.stempels);
+    check("tweede run levert nog steeds aandelen", /Klaar/.test(r.tekst), r.tekst.slice(0, 200));
+  }));
 
   return Promise.all(reeks).then(function () {
     process.exit(teller.rapport("Gedragstest") ? 1 : 0);
