@@ -219,6 +219,7 @@ function archiefSleutel(d){
 }
 function archiefBewaar(soort,records){
   if(!records)return;
+  if(!ARCHIEF[soort])ARCHIEF[soort]={};
   var lijst=Array.isArray(records)?records:[records];
   var nu=Date.now(), n=0;
   lijst.forEach(function(d){
@@ -242,7 +243,7 @@ function archiefOpslaan(){
   try{
     // ruim op bij overmaat: oudste eerst, zodat de opslaglimiet niet wordt geraakt
     ["aandelen","etfs"].forEach(function(s){
-      var k=Object.keys(ARCHIEF[s]);
+      var k=Object.keys(ARCHIEF[s]||{});
       if(k.length>600){
         k.sort(function(a,b){return (ARCHIEF[s][a]._opgehaald||0)-(ARCHIEF[s][b]._opgehaald||0);});
         k.slice(0,k.length-600).forEach(function(x){ delete ARCHIEF[s][x]; });
@@ -256,7 +257,11 @@ function archiefLaden(){
     if(r&&r.value){
       try{
         var d=JSON.parse(r.value);
-        if(d&&d.aandelen)ARCHIEF=d;
+        if(d&&d.aandelen){
+          ARCHIEF=d;
+          if(!ARCHIEF.aandelen)ARCHIEF.aandelen={};
+          if(!ARCHIEF.etfs)ARCHIEF.etfs={};
+        }
       }catch(e){}
     }
     archiefTellerBijwerken();
@@ -1948,10 +1953,13 @@ function qualityScore(d){
   }
   return Math.round(norm(d.roe,0,40,false)*0.4+norm(d.margin,0,30,false)*0.35+norm(d.de,0,2,true)*0.25);
 }
+var AANDELEN_STANDAARD_WEGING={wm:0.10,wv:0.00,wg:0.30,wq:0.60};
 function weights(){
   // lange termijn: vaste weging op trage fundamenten, momentum laag
-  if(isLong()) return {wm:0.10,wv:0.00,wg:0.30,wq:0.60};
-  var wm=+wmEl.value,wv=+wvEl.value,wg=+wgEl.value,wq=+wqEl.value;var s=wm+wv+wg+wq||1;
+  if(isLong()) return Object.assign({},AANDELEN_STANDAARD_WEGING);
+  var wm=+wmEl.value,wv=+wvEl.value,wg=+wgEl.value,wq=+wqEl.value;
+  var s=wm+wv+wg+wq;
+  if(!(s>0))return Object.assign({},AANDELEN_STANDAARD_WEGING);
   return {wm:wm/s,wv:wv/s,wg:wg/s,wq:wq/s};
 }
 // diepte van de daling, relatief: dieper gevallen dan peers = hogere herstelpotentie-score
@@ -3694,6 +3702,7 @@ function universeNeedsKey(){
 
 // lokale filter op de verrijkte data, met jouw criteria
 function passesFilters(d){
+  if(!d)return false;
   var mcap=(+$('mcap').value||0)*1e9;
   var pemax=+$('pemax').value;
   var divYieldMin=+$('divYieldMin').value || 0;
@@ -4293,8 +4302,8 @@ function enrichSingle(symbol,key){
 }
 
 // Goedkope vooranalyse: 1 call per aandeel, alleen koers + dagverandering
-function quoteOnly(symbol,key){
-  var src=currentSource();
+function quoteOnly(symbol,key,srcOverride){
+  var src=srcOverride||currentSource();
   if(src==="finnhub"){
     return getJson(FINNHUB_BASE+"/quote?symbol="+encodeURIComponent(symbol)+"&token="+key)
       .then(function(q){
@@ -4320,15 +4329,21 @@ function quoteOnly(symbol,key){
 }
 
 // koers ophalen zonder de call-telling van de volledige analyse: 1 call, elke bron
-function quoteOnlyCached(symbol,key){
-  var src=currentSource();
-  if(src==="finnhub"&&MULTI_KEYS.finnhub)return quoteOnly(symbol,MULTI_KEYS.finnhub);
-  if(src==="eodhd"&&MULTI_KEYS.eodhd)return quoteOnly(symbol,MULTI_KEYS.eodhd);
-  if((src==="fmp"||!MULTI_KEYS.finnhub)&&MULTI_KEYS.fmp)return quoteOnly(symbol,MULTI_KEYS.fmp);
-  if(MULTI_KEYS.finnhub)return quoteOnly(symbol,MULTI_KEYS.finnhub);
+function koersBronVoor(symbol){
+  if(typeof multiEnabled==="function" && multiEnabled()){
+    var order=sourceOrderFor(symbol).filter(function(s){return s!=="eulerpool"&&MULTI_KEYS[s];});
+    if(order.length)return {src:order[0],key:MULTI_KEYS[order[0]],bron:"instellingen"};
+  }
   var los=$('apikey')?$('apikey').value.trim():"";
-  if(los)return quoteOnly(symbol,los);
-  return Promise.reject({kind:"config",msg:"geen bron voor een verse koers"});
+  if(los)return {src:currentSource(),key:los,bron:"losse-sleutel"};
+  var nodig=sourceOrderFor(symbol).filter(function(s){return s!=="eulerpool"&&MULTI_KEYS[s];});
+  if(nodig.length)return {src:nodig[0],key:MULTI_KEYS[nodig[0]],bron:"instellingen"};
+  return null;
+}
+function quoteOnlyCached(symbol,key){
+  var bron=koersBronVoor(symbol);
+  if(!bron)return Promise.reject({kind:"config",msg:"geen koersbron voor "+symbol+" \u2014 vul een sleutel in bij Instellingen"});
+  return quoteOnly(symbol,bron.key,bron.src);
 }
 
 // --- Finnhub: 2 calls (quote + basic financials). VS-symbolen zonder suffix. ---
@@ -4605,9 +4620,12 @@ function runQueue(symbols,callsPer,fetchFn,label){
     var allesAan=$('volledigeAnalyse')&&$('volledigeAnalyse').checked;
     st.textContent="Vooranalyse: dagmomentum scannen voor "+universe.length+" aandelen (1 call per aandeel)"+
       (allesAan?" \u2014 daarna gaan ze allemaal door naar de volledige analyse":"")+"\u2026";
-    stage1=runQueue(universe,1,quoteOnly,"Vooranalyse").then(function(quotes){
+    stage1=runQueue(universe,1,quoteOnlyCached,"Vooranalyse").then(function(quotes){
       // rangschik op dagverandering, neem de top (3x de toonlimiet, min 40)
       var keep=Math.max(limit*3,40);
+      if(!quotes.length){
+        return [];
+      }
       if(currentMode()==='herstel'){
         // grootste dalers eerst: op 52w-daling indien beschikbaar (FMP), anders op dagdaling
         quotes.sort(function(a,b){
@@ -5222,7 +5240,9 @@ function getEtfCategoryWeights(category) {
 }
 
 function etfWeights(){
-  var wc=+$('ewc').value,wd=+$('ewd').value,wl=+$('ewl').value,wt=+$('ewt').value;var s=wc+wd+wl+wt||1;
+  var wc=+$('ewc').value,wd=+$('ewd').value,wl=+$('ewl').value,wt=+$('ewt').value;
+  var s=wc+wd+wl+wt;
+  if(!(s>0))return Object.assign({},ETF_STANDAARD_WEGING);
   return {wc:wc/s,wd:wd/s,wl:wl/s,wt:wt/s};
 }
 function etfTotalScore(d){
@@ -6083,9 +6103,9 @@ function pfHernoem(id,naam){
   renderPfKiezer();
 }
 var LS_PORTFOLIO_TS=0;
-function savePortfoliosLocal(){
+function savePortfoliosLocal(bewaarTs){
   pfSync();
-  LS_PORTFOLIO_TS=Date.now();
+  LS_PORTFOLIO_TS=(bewaarTs!=null?bewaarTs:Date.now());
   lsSafe('portfolios',{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,ts:LS_PORTFOLIO_TS});
 }
 function savePortfoliosCloud(){
@@ -8912,6 +8932,7 @@ function loadCloud(){
         }
       });
       if(typeof updateSourceIndicator==="function")updateSourceIndicator();
+      if(typeof loadKeyFor==="function")loadKeyFor($('source').value);
     }
     if(typeof PORTFOLIOS!=="undefined"){
       var cloudPf=data.portfoliosJson||null;
@@ -8920,16 +8941,24 @@ function loadCloud(){
         cloudPf.bijgewerkt=cloudPf.bijgewerkt||0;
       }
       if(cloudPf&&cloudPf.lijsten){
-        var lokaalLeeg=Object.keys(PORTFOLIOS).every(function(k){
-          return !(PORTFOLIOS[k].posities||[]).length;
-        });
+        var telPosities=function(lijsten){
+          var n=0;
+          Object.keys(lijsten||{}).forEach(function(k){ n+=((lijsten[k]&&lijsten[k].posities)||[]).length; });
+          return n;
+        };
+        var lokaalAantal=telPosities(PORTFOLIOS);
+        var cloudAantal=telPosities(cloudPf.lijsten);
+        var lokaalLeeg=lokaalAantal===0;
+        var cloudLeeg=cloudAantal===0;
         var lokaalTs=(typeof LS_PORTFOLIO_TS!=="undefined")?LS_PORTFOLIO_TS:0;
-        if(lokaalLeeg||(cloudPf.bijgewerkt||0)>=lokaalTs){
+        var cloudTs=cloudPf.bijgewerkt||0;
+        var neemCloud=cloudLeeg ? lokaalLeeg : (lokaalLeeg || cloudTs>=lokaalTs);
+        if(neemCloud){
           PORTFOLIOS=cloudPf.lijsten;
           if(!PORTFOLIOS.eigen)PORTFOLIOS.eigen={naam:"Mijn portefeuille",posities:[]};
           ACTIEVE_PF=(cloudPf.actief&&PORTFOLIOS[cloudPf.actief])?cloudPf.actief:"eigen";
-          LS_PORTFOLIO_TS=cloudPf.bijgewerkt||0;
-          if(typeof savePortfoliosLocal==="function")savePortfoliosLocal();
+          PORTFOLIO=PORTFOLIOS[ACTIEVE_PF].posities||[];
+          if(typeof savePortfoliosLocal==="function")savePortfoliosLocal(cloudTs);
           if(typeof renderPfKiezer==="function")renderPfKiezer();
           if(typeof renderPortfolio==="function")renderPortfolio();
         }else if(typeof savePortfoliosCloud==="function"){

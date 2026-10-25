@@ -21,6 +21,17 @@ if [ -f scripts/check-sections.js ] && command -v node >/dev/null 2>&1; then
   done
 fi
 
+# Gedrags- en logische tests: laden de echte paginacode met stubs en toetsen de
+# ketens die statisch niet te controleren zijn (screening-trechter, cloud-merge van
+# portefeuilles, score-invarianten, archiefopslag, weergave-robuustheid).
+if command -v node >/dev/null 2>&1; then
+  for t in scripts/test-gedrag.js scripts/test-logica.js; do
+    if [ -f "$t" ]; then
+      node "$t" || FAIL=1
+    fi
+  done
+fi
+
 if [ $FAIL -eq 1 ]; then
   echo ""
   echo "KWALITEITSCONTROLE MISLUKT — Los de fouten op voordat je commit."

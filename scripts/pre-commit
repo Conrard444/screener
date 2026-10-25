@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Git pre-commit hook: draait de volledige kwaliteitscontrole v\u00f3\u00f3r elke commit.
+# Git pre-commit hook: draait de volledige kwaliteitscontrole vóór elke commit.
 # Installatie: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 cd "$(git rev-parse --show-toplevel)"
 if [ -f scripts/check-all.sh ]; then

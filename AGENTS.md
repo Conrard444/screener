@@ -126,12 +126,16 @@ direct als statische pagina (GitHub Pages).
 | `scripts/check-structure.js` | tag-nesting, IIFE-balans, ID-referenties in HTML |
 | `scripts/check-sections.js` | per-sectie syntax + verplichte ankerblokken |
 | `scripts/gen-section-index.js` | drukt de sectie-index af (regelnummers per sectie) — naslag en sync-check met de inhoudsopgave |
+| `scripts/test-harnas.js` | gedeeld harnas: laadt de echte paginacode in een vm met DOM-, opslag- en fetchstubs |
+| `scripts/test-gedrag.js` | ketentests: screening-trechter (S&P 500) en cloud-merge van portefeuilles |
+| `scripts/test-logica.js` | invarianten: score- en ETF-wegingen, archiefopslag, filters, weergave-robuustheid |
 | `scripts/check-all.sh` | combinatie — dit draait ook in CI en de pre-commit hook |
 | `scripts/pre-commit` | hook-template; kopieer naar `.git/hooks/pre-commit` |
 | `.github/workflows/check-js.yml` | GitHub Action: "Quality Check" op push/PR naar main |
 
 ## Verifiëren van de volledige app
 
-Er zijn geen geautomatiseerde UI-tests. Na grote wijzigingen: open de pagina, controleer
+Er zijn geautomatiseerde gedrags- en logische tests (`scripts/test-*.js`, via `check-all.sh`),
+maar geen UI-tests. Na grote wijzigingen: open de pagina, controleer
 (1) toegangscode "screeno", (2) alle tabbladen, (3) Google-login/cloud-status,
 (4) een demo-screening, (5) mobiele weergave.
