@@ -6114,10 +6114,13 @@ function savePortfoliosCloud(){
   // portefeuilles terugkomen) wordt meteen vervangen door de nieuwe structuur in \u00e9\u00e9n set.
   // Vroeger waren dit twee losse schrijfacties met een gat ertussen waarin de database
   // leeg was \u2014 viel de tweede actie weg, dan waren de portefeuilles definitief verdwenen.
-  return cloudSchrijf({
-    portfolios:firebase.firestore.FieldValue.delete(),
-    portfoliosJson:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,bijgewerkt:LS_PORTFOLIO_TS}
-  },'portefeuilles');
+  return cloudSchrijf((function(){
+    var lading={portfoliosJson:{actief:ACTIEVE_PF,lijsten:PORTFOLIOS,bijgewerkt:LS_PORTFOLIO_TS}};
+    if(typeof firebase!=="undefined"&&firebase.firestore&&firebase.firestore.FieldValue){
+      lading.portfolios=firebase.firestore.FieldValue.delete();
+    }
+    return lading;
+  })(),'portefeuilles');
 }
 function loadPortfoliosLocal(){
   return LS.get('portfolios').then(function(r){

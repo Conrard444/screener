@@ -118,6 +118,9 @@ C.ARCHIEF = { aandelen: {}, etfs: {} };
 check("archief dedupliceert op symbool", archief.length === 2, "werd " + archief.length);
 check("archief bewaart de nieuwste meting", (archief.find(function (x) { return x.symbol === "AAPL"; }) || {}).price === 101, JSON.stringify(archief));
 
+check("savePortfoliosCloud werkt zonder Firebase-SDK", (function () { try { C.savePortfoliosCloud(); return true; } catch (e) { return false; } })());
+check("lokale portefeuille blijft bewaard zonder Firebase", !!h.opslag["kompas_portfolios"], "niets weggeschreven");
+
 var e1 = C.estimateCalls(15, C.UNIVERSE_US.slice(0, 15));
 var e2 = C.estimateCalls(75, C.UNIVERSE_US);
 check("estimateCalls bevat geen NaN", !isNaN(e1.total) && !isNaN(e2.total), JSON.stringify([e1, e2]));
@@ -184,8 +187,35 @@ C.PORTFOLIO = [];
 check("renderPfKiezer() werpt niet", werptNiet(function () { C.renderPfKiezer(); }));
 check("archiefLeeftijd(null) = null", C.archiefLeeftijd(null) === null);
 
-// ---------------- G. Archief laden uit een oudere opslagvorm
-console.log("\nG. Archief laden");
+// ---------------- G. Broker-import (Saxo)
+console.log("\nG. Broker-import (Saxo)");
+C.PORTFOLIO = [];
+var saxoRegels = [
+  ["Symb.", "Aantal", "AK-krs", "Valutadatum", "ISIN", "Koers", "+/- koers %"],
+  ["AAPL:xnas", "10", "150,5", "01-okt-2026", "US0378331005", "170", "5,2"],
+  ["ASML:xams", "3", "600", "02-okt-2026", "NL0010273215", "650", "8,3"]
+];
+C.importSaxoRijen(saxoRegels);
+var aapl = C.PORTFOLIO.filter(function (p) { return p.symbol === "AAPL"; })[0];
+check("Saxo-import voegt twee posities toe", C.PORTFOLIO.length === 2, JSON.stringify(C.PORTFOLIO.map(function (p) { return p.symbol; })));
+check("VS-ticker krijgt geen suffix", !!aapl);
+check("aantal en aankoopkoers met decimale komma", !!(aapl && aapl.qty === 10 && aapl.buyPrice === 150.5), JSON.stringify(aapl));
+check("ISIN wordt overgenomen", !!(aapl && aapl.isin === "US0378331005"), JSON.stringify(aapl && aapl.isin));
+check("koers en rendement van de broker", !!(aapl && aapl.brokerPrice === 170 && aapl.brokerReturn === 5.2), JSON.stringify(aapl));
+check("Europese beurs krijgt de juiste suffix", C.PORTFOLIO.some(function (p) { return p.symbol === "ASML.AS"; }), JSON.stringify(C.PORTFOLIO.map(function (p) { return p.symbol; })));
+check("datum wordt ISO", !!(aapl && aapl.buyDate === "2026-10-01"), aapl && aapl.buyDate);
+check("aandelenklasse BRKb -> BRK-B", C.saxoSymbolToTicker("BRKb:xnas") === "BRK-B", C.saxoSymbolToTicker("BRKb:xnas"));
+check("CSV-parser houdt komma binnen quotes", C.parseCsvLine('"A, B",2').join("|") === "A, B|2", C.parseCsvLine('"A, B",2').join("|"));
+C.importSaxoRijen([saxoRegels[0], saxoRegels[1]]);
+check("tweede import dupliceert geen posities", C.PORTFOLIO.length === 2, "werd " + C.PORTFOLIO.length);
+check("onbekend formaat geeft een duidelijke fout", (function () {
+  try { C.importSaxoRijen([["Foo", "Bar"], ["1", "2"]]); return false; }
+  catch (e) { return /onbekend Saxo-formaat/.test(e.message); }
+})());
+C.PORTFOLIO = [];
+
+// ---------------- H. Archief laden uit een oudere opslagvorm
+console.log("\nH. Archief laden");
 C.ARCHIEF = { aandelen: {}, etfs: {} };
 h.opslag["kompas_archief"] = JSON.stringify({ aandelen: { AAPL: { symbol: "AAPL", price: 1 } } });
 C.archiefLaden().then(function () {
