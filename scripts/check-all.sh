@@ -32,6 +32,12 @@ if command -v node >/dev/null 2>&1; then
   done
 fi
 
+# Zelftest van de offline herrekening (parser, analyse en oordeel op een klein
+# voorbeeld). De tool zelf leest een gekopieerd accuratesserapport.
+if [ -f scripts/acc-replay.js ] && command -v node >/dev/null 2>&1; then
+  node scripts/acc-replay.js --zelftest || FAIL=1
+fi
+
 if [ $FAIL -eq 1 ]; then
   echo ""
   echo "KWALITEITSCONTROLE MISLUKT — Los de fouten op voordat je commit."

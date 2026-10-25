@@ -129,6 +129,7 @@ direct als statische pagina (GitHub Pages).
 | `scripts/test-harnas.js` | gedeeld harnas: laadt de echte paginacode in een vm met DOM-, opslag- en fetchstubs |
 | `scripts/test-gedrag.js` | ketentests: screening-trechter (S&P 500) en cloud-merge van portefeuilles |
 | `scripts/test-logica.js` | invarianten: score- en ETF-wegingen, archiefopslag, filters, weergave-robuustheid |
+| `scripts/acc-replay.js` | herrekent een gekopieerd accuratesserapport: meetkracht, correlaties per aandeel, mediaansplitsing, alternatieve formules en een onderbouwd oordeel (`--zelftest` draait mee in `check-all.sh`) |
 | `scripts/check-all.sh` | combinatie — dit draait ook in CI en de pre-commit hook |
 | `scripts/pre-commit` | hook-template; kopieer naar `.git/hooks/pre-commit` |
 | `.github/workflows/check-js.yml` | GitHub Action: "Quality Check" op push/PR naar main |
