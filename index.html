@@ -8256,11 +8256,11 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   r.push("ACCURATESSEMETING KOMPAS \u2014 "+new Date().toLocaleDateString('nl-NL'));
   r.push("");
   var vingerafdrukken={};
-  pairs.forEach(function(p){ vingerafdrukken[p.g+"|"+p.q]=1; });
+  pairs.forEach(function(p){ vingerafdrukken[p.sym]=1; });
   var uniek=Object.keys(vingerafdrukken).length;
   r.push("MEETOPZET");
   r.push("  datapunten: "+pairs.length+" (aandeel-momentopname combinaties)");
-  r.push("  geschat aantal unieke effecten: "+uniek+" \u2014 de rest zijn herhaalde metingen");
+  r.push("  unieke effecten: "+uniek+" \u2014 de rest zijn herhaalde metingen");
   var scoresAlle=pairs.map(function(p){ return p.score; });
   var laagste=Math.min.apply(null,scoresAlle),hoogste=Math.max.apply(null,scoresAlle);
   var telHer={volledig:0,gedeeltelijk:0,geen:0};
@@ -8269,21 +8269,26 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     telHer.gedeeltelijk+" gedeeltelijk, "+telHer.geen+" niet (oude opnamen zonder ruwe cijfers)");
   r.push("  scorebereik in de meting: "+laagste+" tot "+hoogste+
     (laagste>45?"  (LET OP: vooral hoger scorende posities \u2014 bereikbeperking)":""));
-  r.push("  momentopnamen: "+snaps.length);
+  var snapsGebruikt={};
+  pairs.forEach(function(p){ snapsGebruikt[p.snapTs]=1; });
+  var snapsInMeting=Object.keys(snapsGebruikt).length;
+  r.push("  momentopnamen in de meting: "+snapsInMeting+
+    (snapsInMeting!==snaps.length?" (archief: "+snaps.length+")":""));
   r.push("  meetperiode: "+dagen+" dagen (oudste momentopname)");
   var holds=pairs.map(function(p){ return p.holdD; }).filter(function(h){ return h!=null; }).sort(function(a,b){ return a-b; });
   if(holds.length)r.push("  houdperiode per datapunt: mediaan "+med(holds)+
     " dagen (kortste "+holds[0]+", langste "+holds[holds.length-1]+")");
   var metDiv=pairs.filter(function(p){ return p.divYield!=null&&p.divYield>0; }).length;
-  r.push("  rendement gemeten als TOTAALrendement (koers + dividend)");
   var divFeit=pairs.filter(function(p){ return p.divBronMet==='feitelijke uitkeringen'; }).length;
   var divSchat=pairs.filter(function(p){ return p.divBronMet==='divYield-schatting'; }).length;
   var divNiks=pairs.filter(function(p){ return p.divBronMet==='geen'; }).length;
+  r.push("  rendement: koers + dividend voor zover bekend");
   r.push("  dividend: "+divFeit+" punten met werkelijk uitgekeerde bedragen, "+
     divSchat+" met divYield-schatting, "+divNiks+" zonder dividend (retroactief opgehaald uit de dividendhistorie)");
   r.push("  weging bij meting: momentum "+Math.round(w.wm*100)+
     ", waardering "+Math.round(w.wv*100)+", groei "+Math.round(w.wg*100)+
-    ", kwaliteit "+Math.round(w.wq*100));
+    ", kwaliteit "+Math.round(w.wq*100)+
+    " \u2014 daarna valstrik-korting (10% of 25%) op dat gewogen cijfer");
   r.push("");
   r.push("UITKOMSTEN");
   r.push("  correlatie totaalscore met rendement: "+cTot.toFixed(3)+" (Pearson, n="+pairs.length+")");
