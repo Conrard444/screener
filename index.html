@@ -8201,8 +8201,9 @@ function berekenEnToonAccuratesse(snaps,prices){
       PEERS=herrekenPeers[s.ts]||null; SECTOR_PEERS=herrekenSectorPeers[s.ts]||null;
       var sc=totalScore(it),sm=momentumScore(it),sv=valuationScore(it),
           sg=growthScore(it),sq=qualityScore(it);
+      var cComp=(typeof compounderScore==="function")?compounderScore(it):null;
       SCORESET=vSet; PEERS=vPeers; SECTOR_PEERS=vSec;
-      pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,
+      pairs.push({score:sc,m:sm,v:sv,g:sg,q:(sq!=null?sq:50),ret:ret,comp:cComp,
         sym:it.symbol,holdD:+leeftijdDagen.toFixed(0),
         herrekend:hr.niveau,snapTs:s.ts,sector:it.sector||null,mcap:it._mcap!=null?it._mcap:null,
         divYield:it.divYield,koersDeel:+koersRendement.toFixed(1),divDeel:+dividendDeel.toFixed(2),divBronMet:divBronMet,
@@ -8392,7 +8393,8 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   r.push("  per factor \u2014 momentum "+(corrOver('m')||0).toFixed(3)+
     ", waardering "+(corrOver('v')||0).toFixed(3)+
     ", groei "+(corrOver('g')||0).toFixed(3)+
-    ", kwaliteit "+(corrOver('q')||0).toFixed(3));
+    ", kwaliteit "+(corrOver('q')||0).toFixed(3)+
+    ", compounder "+((function(){ var v=corrOver('comp'); return v==null?"n.v.t.":v.toFixed(3); })()));
   r.push("");
   var perSnapPairs={};
   pairs.forEach(function(p){ (perSnapPairs[p.snapTs]=perSnapPairs[p.snapTs]||[]).push(p); });
@@ -8447,14 +8449,57 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     (p.trap===1?"valstrik-niveau 1 (waarschuwing)":
     (p.trap===0?"geen valstrik gemeten":"valstrik onbekend")); },
     "WERKT DE VALSTRIK-DETECTIE?");
+  // ---- Kandidaat-factoren: opgehaald en bewaard, maar nog niet in totalScore ----
+  // AGENTS.md regel 6: toets nieuwe factoren eerst via de accuratesse-meting. Deze
+  // factoren worden al betaald (1-2 extra calls per aandeel) en in de kerndata bewaard,
+  // maar kwamen nergens in het rapport terug - daarmee kon de toets nooit sluiten.
+  // Gecorrleerd tegen overrendement (niet ruw rendement), Pearson en Spearman naast
+  // elkaar: rangcorrelatie is robuuster bij de scheve verdelingen die deze factoren hebben.
+  function kandidaatRegel(naam,veld){
+    var pts=pairs.filter(function(p){ return p[veld]!=null&&!isNaN(p[veld]); });
+    if(!pts.length)return null;
+    var mx=pts.reduce(function(s,p){ return s+p[veld]; },0)/pts.length;
+    var my=pts.reduce(function(s,p){ return s+p.over; },0)/pts.length;
+    var num=0,dx=0,dy=0;
+    pts.forEach(function(p){ var a=p[veld]-mx,b=p.over-my; num+=a*b; dx+=a*a; dy+=b*b; });
+    var pear=(dx&&dy)?num/Math.sqrt(dx*dy):null;
+    var sr=rangCorr(function(p){ return p[veld]; });
+    var tv=tWaarde(pear,pts.length);
+    return "  "+(naam+"                    ").slice(0,22)+"n="+pts.length+
+      "  Pearson "+(pear==null?"n.v.t.":(pear>0?"+":"")+pear.toFixed(3))+
+      "  Spearman "+(sr==null?"n.v.t.":(sr>0?"+":"")+sr.toFixed(3))+
+      "  t="+(tv==null?"n.v.t.":tv.toFixed(2));
+  }
+  var kandidaten=[
+    ["winstverrassing","verrassing"],["verr.-consistentie","verrassingConsistentie"],
+    ["ramingsbijstelling","bijstelling"],["raming-spreiding","ramingSpreiding"],
+    ["aandelenuitgifte","uitgifte"],["volatiliteit","vol"],["max. terugval","maxTerugval"],
+    ["compounder-profiel","comp"]
+  ];
+  var kandUit=[];
+  kandidaten.forEach(function(k){
+    var regel=kandidaatRegel(k[0],k[1]); if(regel)kandUit.push(regel);
+  });
+  var kandGetoetst=pairs.some(function(p){ return p.verrassing!=null||p.bijstelling!=null||p.uitgifte!=null||p.vol!=null||p.maxTerugval!=null||p.ramingSpreiding!=null; });
+  var kandBeschikbaar=pairs.some(function(p){ return p.comp!=null; });
+  if(kandUit.length){
+    r.push("KANDIDAAT-FACTOREN (opgehaald, bewaard, nog niet in de totaalscore)");
+    r.push("  correlatie met overrendement \u2014 positief en |t|>2: kandidaat voor opname in totalScore; geen verband: laten wegvallen");
+    kandUit.forEach(function(x){ r.push(x); });
+    r.push("");
+  }
   r.push("RUWE DATAPUNTEN");
-  r.push("  sym; score; mom; waard; groei; kwal; rend%; overrend%; dagen; sector; P/E; K/B; PEG; ROE; omzetgr; winstgr; Piotroski; AltmanZ; divYld%; valstrik");
+  r.push("  sym; score; mom; waard; groei; kwal; rend%; overrend%; dagen; sector; P/E; K/B; PEG; ROE; omzetgr; winstgr; Piotroski; AltmanZ; divYld%; valstrik; verrassing; verrConsist; bijst; ramSpreid; uitgifte; vol; maxTerug; comp");
   pairs.slice().sort(function(a,b){ return b.score-a.score; }).forEach(function(p){
     r.push("  "+[p.sym||"?",p.score,p.m,p.v,p.g,p.q,p.ret.toFixed(1),p.over.toFixed(1),
       p.holdD,p.sector||"?",
       p.pe!=null?p.pe:"",p.pb!=null?p.pb:"",p.peg!=null?p.peg:"",p.roe!=null?p.roe:"",
       p.revG!=null?p.revG:"",p.epsG!=null?p.epsG:"",p.piotroski!=null?p.piotroski:"",
-      p.altmanZ!=null?p.altmanZ:"",p.divYield!=null?p.divYield:"",p.trap!=null?p.trap:""].join("; "));
+      p.altmanZ!=null?p.altmanZ:"",p.divYield!=null?p.divYield:"",p.trap!=null?p.trap:"",
+      p.verrassing!=null?p.verrassing:"",p.verrassingConsistentie!=null?p.verrassingConsistentie:"",
+      p.bijstelling!=null?p.bijstelling:"",p.ramingSpreiding!=null?p.ramingSpreiding:"",
+      p.uitgifte!=null?p.uitgifte:"",p.vol!=null?p.vol:"",p.maxTerugval!=null?p.maxTerugval:"",
+      p.comp!=null?p.comp:""].join("; "));
   });
   r.push("");
   r.push("VOORBEHOUD");
@@ -8466,6 +8511,8 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     " punten kon geen feitelijke dividenduitkering worden opgehaald \u2014 bij die punten valt de meting terug op de destijds bewaarde divYield-schatting of op koersrendement alleen.");
   if(telHer.geen>pairs.length*0.3)bezwaren.push("Van "+telHer.geen+" punten konden de scores niet herrekend worden (oude opnamen zonder kerngegevens).");
   if(laagste>45)bezwaren.push("Scorebereik "+laagste+"-"+hoogste+": nauwelijks lage scores, dus bereikbeperking \u2014 correlatie wordt onderschat.");
+  if(!kandGetoetst)bezwaren.push("Geen kandidaat-factoren in de meting: de bewaarde opnamen bevatten geen winstverrassing, bijstelling, uitgifte, volatiliteit of terugval \u2014 zet de optie 'Winstverrassingen + ramingen' aan bij de volgende screening om ze te laten meewegen.");
+  if(!kandBeschikbaar)bezwaren.push("Geen compounder-profiel in de meting: het compounder-profiel zelf is met deze data niet getoetst.");
   if(uniek<pairs.length*0.5)bezwaren.push("Veel herhaalde metingen van dezelfde effecten ("+uniek+" uniek van "+pairs.length+"): effectieve steekproef is kleiner.");
   var gemRend=pairs.reduce(function(s,p){ return s+p.ret; },0)/pairs.length;
   if(Math.abs(gemRend)>3)bezwaren.push("Gemiddeld rendement "+gemRend.toFixed(1)+

@@ -27,8 +27,21 @@ var VELD = {
   dagen: "dagen", sector: "sector",
   "p/e": "pe", pe: "pe", "k/b": "pb", pb: "pb", peg: "peg", roe: "roe",
   omzetgr: "revg", winstgr: "epsg", piotroski: "piotroski", altmanz: "altmanz",
-  divyld: "div", dividend: "div", valstrik: "trap"
+  divyld: "div", dividend: "div", valstrik: "trap",
+  verrassing: "verrassing", verrconsist: "verrconsist", bijst: "bijst",
+  ramspreid: "ramspreid", uitgifte: "uitgifte", vol: "vol", maxterug: "maxterug", comp: "comp"
 };
+
+var KANDIDAAT_KOLOMMEN = [
+  ["verrassing", "winstverrassing"],
+  ["verrconsist", "verr.-consistentie"],
+  ["bijst", "ramingsbijstelling"],
+  ["ramspreid", "raming-spreiding"],
+  ["uitgifte", "aandelenuitgifte"],
+  ["vol", "volatiliteit"],
+  ["maxterug", "max. terugval"],
+  ["comp", "compounder-profiel"]
+];
 
 function veldnaam(k) {
   var t = String(k).trim().toLowerCase().replace(/%/g, "").replace(/\s+/g, "");
@@ -140,7 +153,10 @@ function bootstrap(rond, rijen, symboolLijst, veld, reps) {
 
 function analyse(rijen, opties) {
   opties = opties || {};
-  var uit = { waarschuwingen: [] };
+  var kolommen = (opties.kolommen && opties.kolommen.length)
+    ? opties.kolommen.map(function (n) { return { naam: n, veld: veldnaam(n) }; })
+    : [];
+  var uit = { waarschuwingen: [], kolommen: kolommen };
   var syms = Object.keys(rijen.reduce(function (m, r) { m[r.sym] = 1; return m; }, {}));
   var factorVelden = ["score", "mom", "waard", "groei", "kwal"];
   uit.n = rijen.length;
@@ -168,6 +184,16 @@ function analyse(rijen, opties) {
     uit.perAandeel[v] = { r: rr, rho: rho, t: tWaarde(rr, per.length) };
   });
   uit.per = per;
+
+  uit.kandidaten = [];
+  KANDIDAAT_KOLOMMEN.forEach(function (kc) {
+    var pts = rijen.filter(function (r) { return r[kc[0]] != null && !isNaN(r[kc[0]]); });
+    if (!pts.length) return;
+    if (uit.kolommen.length && !uit.kolommen.some(function (k) { return k.veld === kc[0]; })) return;
+    var x = pts.map(function (r) { return r[kc[0]]; });
+    uit.kandidaten.push({ naam: kc[1], r: pearson(x, pts.map(function (r) { return r.over; })),
+      rho: spearman(x, pts.map(function (r) { return r.over; })), n: pts.length });
+  });
 
   uit.ci = {
     score: bootstrap(function (s) { return pearson(s.map(function (r) { return r.score; }), s.map(function (r) { return r.over; })); }, rijen, syms, "score", 2000),
@@ -323,6 +349,9 @@ function tekstRapport(uit, meta) {
       ("r=" + f(g.r) + "  t=" + f(g.t, 2)).padEnd(20) +
       "r=" + f(p.r) + "  t=" + f(p.t, 2));
   });
+  uit.kandidaten.forEach(function (k) {
+    L.push("  kandidaat " + k.naam + "  r=" + f(k.r) + "  rho=" + f(k.rho) + "  n=" + k.n);
+  });
   L.push("  95%-interval (bootstrap per aandeel): score [" + f(uit.ci.score[0]) + " ; " + f(uit.ci.score[1]) +
     "], momentum [" + f(uit.ci.mom[0]) + " ; " + f(uit.ci.mom[1]) + "]");
   L.push("  binnen hetzelfde aandeel: score r=" + f(uit.binnen.score.r) + ", momentum r=" + f(uit.binnen.mom.r));
@@ -423,9 +452,10 @@ function zelftest() {
   var fouten = [];
   if (g.rijen.length !== 5) fouten.push("parser vond " + g.rijen.length + " rijen, verwacht 5");
   if (g.kolommen.length !== 20) fouten.push("parser vond " + g.kolommen.length + " kolommen, verwacht 20");
-  var a = analyse(g.rijen, { gewichten: meta.gewichten });
+  var a = analyse(g.rijen, { gewichten: meta.gewichten, kolommen: g.kolommen });
   if (a.uniek !== 3) fouten.push("uniek=" + a.uniek + ", verwacht 3");
   if (a.snapshots !== 2) fouten.push("snapshots=" + a.snapshots + ", verwacht 2");
+  if (a.kolommen.length !== 20) fouten.push("a.kolommen.length=" + a.kolommen.length + ", verwacht 20");
   var tekst = tekstRapport(a, meta);
   ["MEETKRACHT", "unieke effecten: 3", "OORDEEL", "NOG NIET TE ZEGGEN"].forEach(function (must) {
     if (tekst.indexOf(must) < 0) fouten.push("rapport mist: " + must);
@@ -463,7 +493,7 @@ function main() {
     gewichten = args[i + 1].split(",").map(function (x) { return num(x) || 0; });
     if (gewichten.length !== 4 || !gewichten.some(Boolean)) gewichten = meta.gewichten;
   }
-  var uit = analyse(g.rijen, { gewichten: gewichten });
+  var uit = analyse(g.rijen, { gewichten: gewichten, kolommen: g.kolommen });
   console.log(tekstRapport(uit, meta));
   return process.exit(0);
 }
