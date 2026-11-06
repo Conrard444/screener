@@ -2546,6 +2546,26 @@ function herstelRunParams(params,skipVelden){
 function runLimit(run){
   return parseInt((run&&run.params&&run.params.limit)||25,10);
 }
+function showLastRunFor(exchange){
+  if(!exchange)return Promise.resolve(false);
+  return loadLastRun('stocks_'+exchange).then(function(run){
+    if(!run||!run.data||!run.data.length){
+      CURRENT=[];SCORESET=null;render();
+      setStatus($('status'),'Nog geen screening bewaard voor deze selectie \u2014 klik <b>Screenen</b>.',false);
+      if(typeof showCostEstimate==="function")showCostEstimate();
+      return false;
+    }
+    SCORESET=run.data.slice();
+    buildPeers(SCORESET);
+    CURRENT=sorteerOpScore(SCORESET).slice(0,runLimit(run));
+    herstelRunParams(run.params,['exchange']);
+    render();
+    setStatus($('status'),'\ud83d\udcbe Bewaarde screening \u2014 '+describeRun(run)+
+      ' \u00b7 <span style="opacity:.7">geen API-calls verbruikt.</span>',false);
+    if(typeof showCostEstimate==="function")showCostEstimate();
+    return true;
+  }).catch(function(){return false;});
+}
 function valueTrap(d){
   var r=[],lvl=0;
   var cheap=(d.pe!=null&&d.pe<15)||(d.peg!=null&&d.peg<1)||(d.pb!=null&&d.pb<1.5);
