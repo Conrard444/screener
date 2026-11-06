@@ -195,6 +195,18 @@ function analyse(rijen, opties) {
       rho: spearman(x, pts.map(function (r) { return r.over; })), n: pts.length });
   });
 
+  var metVol = rijen.filter(function (r) { return r.vol != null && !isNaN(r.vol) && r.over != null && !isNaN(r.over); });
+  if (metVol.length >= 10) {
+    metVol.sort(function (a, b) { return a.vol - b.vol; });
+    uit.kwintielen = [];
+    for (var qv = 0; qv < 5; qv++) {
+      var bakje = metVol.slice(Math.floor(qv * metVol.length / 5), Math.floor((qv + 1) * metVol.length / 5));
+      if (!bakje.length) continue;
+      uit.kwintielen.push({ q: qv + 1, van: bakje[0].vol, tot: bakje[bakje.length - 1].vol, n: bakje.length,
+        gem: gem(bakje.map(function (r) { return r.over; })) });
+    }
+  }
+
   uit.ci = {
     score: bootstrap(function (s) { return pearson(s.map(function (r) { return r.score; }), s.map(function (r) { return r.over; })); }, rijen, syms, "score", 2000),
     mom: bootstrap(function (s) { return pearson(s.map(function (r) { return r.mom; }), s.map(function (r) { return r.over; })); }, rijen, syms, "mom", 2000)
@@ -352,6 +364,18 @@ function tekstRapport(uit, meta) {
   uit.kandidaten.forEach(function (k) {
     L.push("  kandidaat " + k.naam + "  r=" + f(k.r) + "  rho=" + f(k.rho) + "  n=" + k.n);
   });
+  (uit.kwintielen || []).forEach(function (k) {
+    L.push("  vol-kwintiel Q" + k.q + "  volatiliteit " + f(k.van, 1) + "-" + f(k.tot, 1) + "%  n=" + k.n +
+      "  overrendement " + f(k.gem, 1) + "pp");
+  });
+  if (uit.kwintielen && uit.kwintielen.length === 5) {
+    var vq = uit.kwintielen[0].gem - uit.kwintielen[4].gem;
+    L.push(vq > 1
+      ? "  laag-vol effect zichtbaar in deze meting: Q1 deed " + f(vq, 1) + "pp beter dan Q5"
+      : (vq < -1
+        ? "  in deze meting presteerde hoog-volaat beter: geen laag-vol-premie hier"
+        : "  geen duidelijk laag-vol-effect in deze meting"));
+  }
   L.push("  95%-interval (bootstrap per aandeel): score [" + f(uit.ci.score[0]) + " ; " + f(uit.ci.score[1]) +
     "], momentum [" + f(uit.ci.mom[0]) + " ; " + f(uit.ci.mom[1]) + "]");
   L.push("  binnen hetzelfde aandeel: score r=" + f(uit.binnen.score.r) + ", momentum r=" + f(uit.binnen.mom.r));

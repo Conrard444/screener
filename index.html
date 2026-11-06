@@ -856,6 +856,7 @@ details[open] > summary{margin-bottom:4px}
           <th data-k="chg" title="Hoeveel de koers vandaag is veranderd, in procent. Groen = gestegen, rood = gedaald.">&Delta; Dag<span class="q">?</span></th>
           <th data-k="mom" title="Momentum over circa 1 maand: hoe ver de koers boven of onder het gemiddelde van de laatste 50 handelsdagen ligt. Positief = stijgende trend, negatief = dalende trend.">Mom. 1M<span class="q">?</span></th>
           <th data-k="dd" title="Daling vanaf de hoogste koers van de afgelopen 52 weken, in procent. Een diepe daling kan een overdreven (macro-gedreven) afstraffing zijn óf een terecht signaal. Het label eronder vergelijkt met het sectorgemiddelde: 'met sector mee' wijst op een brede (macro) beweging, 'eigen probleem?' betekent dat dit aandeel veel harder viel dan sectorgenoten — dan weet de markt mogelijk iets bedrijfsspecifieks.">V.a. top<span class="q">?</span></th>
+          <th data-k="vol" title="Jaarlijkse koersvolatiliteit, berekend uit de dagelijkse koersbewegingen v&oacute;&oacute;r dit moment (dus niet over de houdperiode). In de accuratessemeting presteerde de laagst volatiele kwintiel duidelijk het best (correlatie -0,51 met overrendement): de laag-vol anomalie. Het label eronder vergelijkt met de mediaan van de getoonde set.">Volat.<span class="q">?</span></th>
           <th data-k="pe" title="Koers/winst-verhouding (Price/Earnings). Hoeveel je betaalt per euro winst. Lager = goedkoper gewaardeerd. Bv. 15 betekent: 15x de jaarwinst. Erg hoog kan duur of sterk groeiverwachting betekenen.">P/E<span class="q">?</span></th>
           <th data-k="peg" title="PEG-ratio: de P/E gedeeld door de winstgroei. Corrigeert de waardering voor groei. Onder 1 geldt klassiek als aantrekkelijk; boven 2-3 als duur t.o.v. de groei.">PEG<span class="q">?</span></th>
           <th data-k="pb" title="Koers/boekwaarde (Price/Book). De koers gedeeld door de nettowaarde van het bedrijf op de balans. Lager = je betaalt minder boven de boekwaarde. Bij tech vaak hoog, bij banken vaak laag.">K/B<span class="q">?</span></th>
@@ -3454,7 +3455,9 @@ function render(){
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
   });
     var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_c:compounderScore(d),_gc:gecombineerdeScore(d),_trap:t.level,_trapR:t.reason,_dek:dekkingAandeel(d)});});
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",comp:"_c",combi:"_gc",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
+  var volLijst=rows.map(function(d){return d.vol;}).filter(function(v){return v!=null;}).sort(function(a,b){return a-b;});
+  var medVol=volLijst.length?volLijst[Math.floor(volLijst.length/2)]:null;
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",vol:"vol",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",comp:"_c",combi:"_gc",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -3497,6 +3500,11 @@ function render(){
           }
         }
         return '<td class="num '+cls(d.dd)+'">'+v+lbl+'</td>';
+      })()+
+      (function(){
+        if(d.vol==null)return '<td class="num">\u2014</td>';
+        var lbl=medVol!=null?(d.vol<medVol?'<span style="display:block;font-size:9.5px;color:var(--muted)">rustig</span>':'<span style="display:block;font-size:9.5px;color:var(--muted)">beweeglijk</span>'):'';
+        return '<td class="num" title="Jaarlijkse koersvolatiliteit uit de koershistorie v&oacute;&oacute;r dit moment (trailing, dus niet over de houdperiode). In de accuratessemeting presteerde de laagst volatiele kwintiel duidelijk het best: de laag-vol anomalie.">'+d.vol.toFixed(1)+lbl+'</td>';
       })()+
       '<td class="num">'+fmt(d.pe)+'</td>'+
       '<td class="num">'+(d.peg==null?"\u2014":d.peg.toFixed(2))+'</td>'+
@@ -5830,6 +5838,8 @@ function enrichEulerpool(symbol,token){
     if(d && d.isin && EULER_CHARTING){
       return fetchOhlcvEuler(d.isin,token).then(function(k){
         if(k){ d.price=k.price; d.chg=k.chg; d.mom1m=k.mom1m; d.dd=k.dd;
+               if(k.vol!=null)d.vol=k.vol;
+               if(k.maxTerugval!=null)d.maxTerugval=k.maxTerugval;
                d.priceDerived=false; d._momSource="koershistorie ("+k.punten+" dagen)"; }
         return d;
       }).catch(function(){return d;});
@@ -8487,6 +8497,32 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
     r.push("  correlatie met overrendement \u2014 positief en |t|>2: kandidaat voor opname in totalScore; geen verband: laten wegvallen");
     kandUit.forEach(function(x){ r.push(x); });
     r.push("");
+  }
+  var metVol=pairs.filter(function(p){ return p.vol!=null&&!isNaN(p.vol); }).sort(function(a,b){ return a.vol-b.vol; });
+  if(metVol.length>=10){
+    var kw=[];
+    for(var qi=0;qi<5;qi++){
+      var bakje=metVol.slice(Math.floor(qi*metVol.length/5),Math.floor((qi+1)*metVol.length/5));
+      if(!bakje.length)continue;
+      kw.push({q:qi+1,van:bakje[0].vol,tot:bakje[bakje.length-1].vol,n:bakje.length,
+        gem:bakje.reduce(function(s,p){ return s+p.over; },0)/bakje.length});
+    }
+    if(kw.length){
+      r.push("VOLATILITEIT IN KWINTIELEN (laagste 20% koersvolatiliteit = Q1)");
+      kw.forEach(function(k){
+        r.push("  Q"+k.q+"  volatiliteit "+k.van.toFixed(1)+"-"+k.tot.toFixed(1)+"%  n="+k.n+
+          "  gem. overrendement "+(k.gem>0?"+":"")+k.gem.toFixed(1)+"pp");
+      });
+      if(kw.length===5){
+        var vq=kw[0].gem-kw[4].gem;
+        r.push(vq>1
+          ?"  laag-vol effect zichtbaar in deze meting: Q1 deed "+vq.toFixed(1)+"pp beter dan Q5"
+          :(vq<-1
+            ?"  in deze meting presteerde hoog-volaat beter: geen laag-vol-premie hier"
+            :"  geen duidelijk laag-vol-effect in deze meting"));
+      }
+      r.push("");
+    }
   }
   r.push("RUWE DATAPUNTEN");
   r.push("  sym; score; mom; waard; groei; kwal; rend%; overrend%; dagen; sector; P/E; K/B; PEG; ROE; omzetgr; winstgr; Piotroski; AltmanZ; divYld%; valstrik; verrassing; verrConsist; bijst; ramSpreid; uitgifte; vol; maxTerug; comp");
