@@ -262,5 +262,24 @@ C.archiefLaden().then(function () {
   check("de 429-herkansing levert het item alsnog", r.geslaagd === 1 && r.mislukt === 0,
     r.geslaagd + " geslaagd, " + r.mislukt + " mislukt");
 
+  console.log("\nJ. Kortetermijn-signaalfactoren");
+  check("signaal-factorregistry bevat de kortetermijn-factoren",
+    ["rsi", "dagzet", "dagpositie"].every(function (k) {
+      return C.SIGNAL_FACTOREN.some(function (f) { return f.k === k; });
+    }), JSON.stringify(C.SIGNAL_FACTOREN.map(function (f) { return f.k; })));
+  check("rsiScore(null) = null", C.rsiScore(null) === null);
+  check("rsiScore zonder waarden = null", C.rsiScore({ c: [] }) === null);
+  check("rsiScore(70) is omgekeerd: 30", C.rsiScore({ c: [50, 70] }) === 30, "werd " + C.rsiScore({ c: [50, 70] }));
+  check("rsiScore oververkocht (25) geeft hoge score", C.rsiScore({ c: [25] }) === 75, "werd " + C.rsiScore({ c: [25] }));
+  var kt = C.kortetermijnScores({ c: 11, h: 12, l: 10, dp: -4 });
+  check("dagzet: -4% op de dag geeft score 54 (omkeer)", kt.dagzet === 54, JSON.stringify(kt));
+  check("dagpositie: slot in het midden van het bereik geeft 50", kt.dagpositie === 50, JSON.stringify(kt));
+  check("kortetermijnScores zonder quote is leeg", Object.keys(C.kortetermijnScores(null)).length === 0);
+  check("dagpositie op een vlakke dag (h=l) ontbreekt", C.kortetermijnScores({ c: 10, h: 10, l: 10, dp: 0 }).dagpositie === undefined);
+  check("heeftSignaalScores({}) = false", C.heeftSignaalScores({}) === false);
+  check("heeftSignaalScores met alleen rsi = true", C.heeftSignaalScores({ rsi: 70 }) === true);
+  check("oude snapshot met alleen de vier klassieke factoren blijft geldig",
+    C.heeftSignaalScores({ sentiment: 60, insider: null, aanbeveling: 40, target: 55 }) === true);
+
   process.exit(teller.rapport("Logische audit") ? 1 : 0);
 });

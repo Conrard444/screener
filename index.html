@@ -2893,6 +2893,24 @@ function nieuwsDatumTijd(dt){
 // als score getoond; de eigenaar toetst ze zelf terug via de snapshot-module hieronder
 // voordat ze eventueel in totalScore worden opgenomen (AGENTS.md regel 6).
 var SIGNAL_HISTORY_KEY='signaalGeschiedenis';
+var SIGNAL_FACTOREN=[
+  {k:'sentiment',naam:'Nieuws-sentiment',uitleg:'Toon van het nieuws over dit bedrijf (Finnhub /news-sentiment), gewogen naar nieuwsdrukte (buzz). 50 = neutraal, hoger = positiever.'},
+  {k:'insider',naam:'Insider-transacties',uitleg:'Netto-aankopen door directie en bestuur (Finnhub /stock/insider-transactions). Boven 50 = insiders kochten netto, onder 50 = netto verkocht.'},
+  {k:'aanbeveling',naam:'Aanbevelingstrend',uitleg:'Aandeel koop-/sterke-koopaanbevelingen onder analisten (Finnhub /stock/recommendation). 100 = alle analisten koop/sterke koop.'},
+  {k:'target',naam:'Prijs-target',uitleg:'Waar de consensus-doelkoers zit binnen het bandbreedte van analisten (Finnhub /stock/price-target). Hoog = target zit aan de bovenkant van het band: analisten zijn zelfverzekerd.'},
+  {k:'rsi',naam:'RSI-14 (omgekeerd)',uitleg:'Relatieve Sterkte Index over 14 beursdagen (Finnhub /technical-indicator), omgekeerd gepresenteerd: hoge score = technisch oververkocht. Test de kortetermijn-omkeerhypothese (Jegadeesh 1990, Lehmann 1990): wat recent hard daalde, veert op dagen tot weken vaker terug.'},
+  {k:'dagzet',naam:'Dagzet (omgekeerd)',uitleg:'Koersbeweging van de laatste beursdag in procent (Finnhub /quote), omgekeerd gepresenteerd: hoge score = hard gevallen op de dag. Zelfde omkeerhypothese als bij RSI, maar op de allerkortste horizon.'},
+  {k:'dagpositie',naam:'Positie in dagbereik',uitleg:'Waar de slotkoers zit tussen de laagste en hoogste koers van de dag (Finnhub /quote). 100 = gesloten op de dagtop, 0 = op de dagbodem. Sterke slotpositie wijst op kopers die bleven doorbieden.'}
+];
+function signaalFactorNamen(){
+  var n={};
+  SIGNAL_FACTOREN.forEach(function(f){n[f.k]=f.naam;});
+  return n;
+}
+function heeftSignaalScores(s){
+  if(!s)return false;
+  return SIGNAL_FACTOREN.some(function(f){return s[f.k]!=null;});
+}
 function signaalSnapshotLezen(){
   var r=localStorage.getItem('kompas_'+SIGNAL_HISTORY_KEY);
   if(!r)return {};
@@ -2959,11 +2977,36 @@ function haalSignaalFactoren(sym){
 // Rendements-meting voor de accuratesse-toets: elke snapshot krijgt de koers van
 // het moment van opname mee. De knop 'Accuratesse meten' haalt daarna de actuele
 // koers op (1 call per positie) en vergelijkt factor-score met gerealiseerd rendement.
-function koersNu(sym){
+function koersQuote(sym){
   if(!MULTI_KEYS.finnhub)return Promise.resolve(null);
   return getJson(FINNHUB_BASE+'/quote?symbol='+encodeURIComponent(sym)+'&token='+encodeURIComponent(MULTI_KEYS.finnhub))
-    .then(function(q){ return q&&q.c!=null?q.c:null; })
+    .then(function(q){ return q&&q.c!=null?q:null; })
     .catch(function(){ return null; });
+}
+function koersNu(sym){
+  return koersQuote(sym).then(function(q){ return q?q.c:null; });
+}
+function rsiScore(data){
+  if(!data||!Array.isArray(data.c)||!data.c.length)return null;
+  var laatste=data.c[data.c.length-1];
+  if(laatste==null||isNaN(+laatste))return null;
+  return clampScore(100-(+laatste));
+}
+function haalRsiScore(sym){
+  if(!MULTI_KEYS.finnhub)return Promise.resolve(null);
+  var tk=encodeURIComponent(MULTI_KEYS.finnhub);
+  var s=encodeURIComponent(sym);
+  var tot=Math.floor(Date.now()/1000), vanaf=tot-45*24*60*60;
+  return getJson(FINNHUB_BASE+'/technical-indicator?symbol='+s+'&resolution=D&from='+vanaf+'&to='+tot+'&indicator=rsi&token='+tk)
+    .then(function(d){ return rsiScore(d); })
+    .catch(function(){ return null; });
+}
+function kortetermijnScores(q){
+  if(!q||q.c==null)return {};
+  var uit={};
+  if(q.dp!=null&&!isNaN(+q.dp))uit.dagzet=clampScore(50-(+q.dp));
+  if(q.h!=null&&q.l!=null&&(+q.h)>(+q.l))uit.dagpositie=clampScore((q.c-q.l)/(q.h-q.l)*100);
+  return uit;
 }
 function signaalSnapshotOpslaan(sym,scores,koers){
   var h=signaalSnapshotLezen();
@@ -2972,9 +3015,14 @@ function signaalSnapshotOpslaan(sym,scores,koers){
   if(h[sym].length>24)h[sym]=h[sym].slice(-24);
   signaalSnapshotBewaren(h);
 }
-function signaalSnapshotToevoegen(sym,koers){
-  return haalSignaalFactoren(sym).then(function(scores){
-    if(scores.sentiment==null&&scores.insider==null&&scores.aanbeveling==null&&scores.target==null)return;
+function signaalSnapshotToevoegen(sym,koers,quote,basisScores){
+  var basis=basisScores?Promise.resolve(basisScores):haalSignaalFactoren(sym);
+  return Promise.all([basis,haalRsiScore(sym)]).then(function(r){
+    var scores=r[0]||{};
+    if(r[1]!=null)scores.rsi=r[1];
+    var kort=kortetermijnScores(quote||null);
+    Object.keys(kort).forEach(function(k){ scores[k]=kort[k]; });
+    if(!heeftSignaalScores(scores))return;
     signaalSnapshotOpslaan(sym,scores,koers);
   });
 }
@@ -2993,7 +3041,7 @@ function signaalAccuratesseMeten(){
       var snap=h[sym][h[sym].length-1];
       return koersNu(sym).then(function(nu){
         var rend=snap.koers!=null&&nu?((nu/snap.koers-1)*100):null;
-        ['sentiment','insider','aanbeveling','target'].forEach(function(f){
+        Object.keys(snap.scores||{}).forEach(function(f){
           if(snap.scores[f]!=null)rijen.push({sym:sym,factor:f,score:snap.scores[f],rend:rend,datum:snap.datum});
         });
         klaar++;
@@ -3017,7 +3065,8 @@ var ACC_RAPPORTEN_KEY='accuratesseRapporten';
 var ACC_RAPPORTEN_MAX=40;
 function accuratesseRapportMaken(rijen){
   if(!rijen||!rijen.length)return null;
-  var factoren=['sentiment','insider','aanbeveling','target'];
+  var factoren=Object.keys(signaalFactorNamen());
+  rijen.forEach(function(r){ if(factoren.indexOf(r.factor)<0)factoren.push(r.factor); });
   var perFactor={};
   factoren.forEach(function(f){
     var rs=rijen.filter(function(r){return r.factor===f&&r.rend!=null;});
@@ -3064,7 +3113,7 @@ function accuratesseRapportenCloudMergen(){
 function renderAccuratesseHistorie(){
   var lijstRap=accuratesseRapportenLezen();
   if(!lijstRap.length)return '';
-  var faktorNamen={sentiment:"Sentiment",insider:"Insider",aanbeveling:"Aanbeveling",target:"Target"};
+  var faktorNamen=signaalFactorNamen();
   var uit='<div class="snap" style="margin-top:10px"><details><summary class="sub-kop">Bewaarde accuratesse-rapporten ('+lijstRap.length+')</summary>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:6px">Elke meting wordt als rapport bewaard (laatste '+ACC_RAPPORTEN_MAX+'), lokaal en in je account. Gebruik de geschiedenis om de weging van de signaalfactoren over langere periode te toetsen: één meting is ruis, een reeks metingen over maanden is een trend.</div>';
   lijstRap.slice().reverse().forEach(function(rap){
@@ -3073,7 +3122,7 @@ function renderAccuratesseHistorie(){
     uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px">'+
       '<b>'+datum+'</b> <span class="muted-tekst">(n='+rap.n+' waarnemingen)</span>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:3px">';
-    ['sentiment','insider','aanbeveling','target'].forEach(function(f){
+    ['sentiment','insider','aanbeveling','target','rsi','dagzet','dagpositie'].forEach(function(f){
       var p=rap.perFactor&&rap.perFactor[f];
       if(!p)return;
       var corr=p.corr==null?'\u2014':((p.corr>0?'+':'')+p.corr.toFixed(2));
@@ -3096,14 +3145,16 @@ function correlatie(rijen){
 }
 function renderSignaalAccuratesse(rijen){
   var metRend=rijen.filter(function(r){return r.rend!=null;});
-  var faktorNamen={sentiment:"Nieuws-sentiment",insider:"Insider-transacties",aanbeveling:"Aanbevelingstrend",target:"Prijs-target"};
-  var uit='<div class="snap"><b>Accuratesse van de signaalfactoren</b><div style="font-size:12px;color:var(--muted);margin-top:6px">Vergelijkt de factor-score op het moment van de momentopname met het gerealiseerde koersrendement sindsdien. Positieve correlatie = hogere score hing samen met hoger rendement. N<3 of ontbrekende koers wordt apart gemeld; dit is een indicatie, geen bewijs.</div>';
-  Object.keys(faktorNamen).forEach(function(f){
+  var faktorNamen=signaalFactorNamen();
+  var factoren=Object.keys(faktorNamen).concat(rijen.map(function(r){return r.factor;}).filter(function(f){return !(f in faktorNamen);}));
+  factoren=factoren.filter(function(f,i){return factoren.indexOf(f)===i;});
+  var uit='<div class="snap"><b>Accuratesse van de signaalfactoren</b><div style="font-size:12px;color:var(--muted);margin-top:6px">Vergelijkt de factor-score op het moment van de momentopname met het gerealiseerde koersrendement sindsdien. Positieve correlatie = hogere score hing samen met hoger rendement. De technisch factoren (RSI, dagzet, dagpositie) zijn omgekeerd gepresenteerd: een hoge score betekent technisch oververkocht — een positieve correlatie bevestigt dan de kortetermijn-omkeerhypothese. N<3 of ontbrekende koers wordt apart gemeld; dit is een indicatie, geen bewijs.</div>';
+  factoren.forEach(function(f){
     var rs=metRend.filter(function(r){return r.factor===f;});
     var c=correlatie(rs);
     var corr=c==null?'te weinig data':c.toFixed(2);
     var kleur=c==null?'var(--muted)':(c>0.2?'#1a7f37':(c<-0.2?'#c0392b':'var(--muted)'));
-    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;display:flex;justify-content:space-between"><span>'+faktorNamen[f]+'</span><span style="font-family:var(--mono,monospace)"><b style="color:'+kleur+'">'+corr+'</b> <span class="muted-tekst">(n='+rs.length+')</span></span></div>';
+    uit+='<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;display:flex;justify-content:space-between"><span>'+(faktorNamen[f]||f)+'</span><span style="font-family:var(--mono,monospace)"><b style="color:'+kleur+'">'+corr+'</b> <span class="muted-tekst">(n='+rs.length+')</span></span></div>';
   });
   uit+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Meet vaker (bijv. wekelijks) voor een betrouwbaarder beeld: correlaties onder n=10 zijn ruis.</div></div>';
   return uit;
@@ -3146,9 +3197,9 @@ function nieuwsOphalen(){
       return Promise.all([
         haalNieuws(t.sym,MULTI_KEYS.finnhub,7),
         haalSignaalFactoren(t.sym),
-        koersNu(t.sym)
+        koersQuote(t.sym)
       ]).then(function(results){
-        var items=results[0], scores=results[1], koers=results[2];
+        var items=results[0], scores=results[1], quote=results[2];
         var naam=NAAM.vol(t.pos);
         var relevant=items.map(function(a){
           return {a:a, rel:nieuwsRelevantie(a,t.sym,naam)};
@@ -3158,11 +3209,11 @@ function nieuwsOphalen(){
         if(relevant.length){
           if(!resultaat[t.pf])resultaat[t.pf]=[];
           resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:relevant.map(function(x){return x.a;}), scores:scores});
-        } else if(scores.sentiment!=null||scores.insider!=null||scores.aanbeveling!=null||scores.target!=null){
+        } else if(heeftSignaalScores(scores)){
           if(!resultaat[t.pf])resultaat[t.pf]=[];
           resultaat[t.pf].push({pos:t.pos, naam:naam||t.sym, items:[], scores:scores});
         }
-        signaalSnapshotToevoegen(t.sym,koers);
+        signaalSnapshotToevoegen(t.sym,quote?quote.c:null,quote,scores);
         klaar++;
         if(klaar%3===0)st.textContent="Nieuws ophalen\u2026 "+klaar+"/"+taken.length;
       });
@@ -3202,12 +3253,7 @@ function renderEuropeseLinks(ids){
 }
 
 function renderSignaalScores(s){
-  var defs=[
-    ['sentiment','Nieuws-sentiment','Toon van het nieuws over dit bedrijf (Finnhub /news-sentiment), gewogen naar nieuwsdrukte (buzz). 50 = neutraal, hoger = positiever.'],
-    ['insider','Insiders','Netto-aankopen door directie en bestuur (Finnhub /stock/insider-transactions). Boven 50 = insiders kochten netto, onder 50 = netto verkocht.'],
-    ['aanbeveling','Aanbevelingstrend','Aandeel koop-/sterke-koopaanbevelingen onder analisten (Finnhub /stock/recommendation). 100 = alle analisten koop/sterke koop.'],
-    ['target','Prijs-target','Waar het consensus-doelkoers zit binnen het bandbreedte van analisten (Finnhub /stock/price-target). Hoog = target zit aan de bovenkant van het band: analisten zijn zelfverzekerd.']
-  ];
+  var defs=SIGNAL_FACTOREN.map(function(f){ return [f.k,f.naam,f.uitleg]; });
   var uit='';
   defs.forEach(function(d){
     if(s[d[0]]==null)return;
