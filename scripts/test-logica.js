@@ -280,6 +280,26 @@ C.archiefLaden().then(function () {
   check("heeftSignaalScores met alleen rsi = true", C.heeftSignaalScores({ rsi: 70 }) === true);
   check("oude snapshot met alleen de vier klassieke factoren blijft geldig",
     C.heeftSignaalScores({ sentiment: 60, insider: null, aanbeveling: 40, target: 55 }) === true);
+  check("registry bevat ook MFI, verrassing en de kandidaat-kortetermijnscore",
+    ["mfi", "verrassing", "kortT"].every(function (k) {
+      return C.SIGNAL_FACTOREN.some(function (f) { return f.k === k; });
+    }));
+  check("omgekeerdeIndicatorScore(30) = 70", C.omgekeerdeIndicatorScore(30) === 70);
+  check("omgekeerdeIndicatorScore(null) = null", C.omgekeerdeIndicatorScore(null) === null);
+  check("verrassingScore: +10% verslaan geeft 60", C.verrassingScore({ verrassing: 10 }) === 60,
+    "werd " + C.verrassingScore({ verrassing: 10 }));
+  check("verrassingScore: -10% missen geeft 40", C.verrassingScore({ verrassing: -10 }) === 40);
+  check("verrassingScore zonder data = null", C.verrassingScore(null) === null);
+  check("kortetermijnTotaalScore: gemiddelde van beschikbare factoren",
+    C.kortetermijnTotaalScore({ rsi: 80, dagzet: 60 }) === 70,
+    "werd " + C.kortetermijnTotaalScore({ rsi: 80, dagzet: 60 }));
+  check("kortetermijnTotaalScore negeert de klassieke factoren",
+    C.kortetermijnTotaalScore({ sentiment: 100, rsi: 60, dagzet: 40 }) === 50,
+    "werd " + C.kortetermijnTotaalScore({ sentiment: 100, rsi: 60, dagzet: 40 }));
+  check("kortetermijnTotaalScore zonder kortetermijnfactoren = null",
+    C.kortetermijnTotaalScore({ sentiment: 60, target: 55 }) === null);
+  check("kortetermijnTotaalScore klemt in 0..100",
+    C.kortetermijnTotaalScore({ rsi: 100, dagzet: 100, dagpositie: 100, mfi: 100, verrassing: 100 }) === 100);
 
   process.exit(teller.rapport("Logische audit") ? 1 : 0);
 });

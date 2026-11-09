@@ -2900,8 +2900,12 @@ var SIGNAL_FACTOREN=[
   {k:'target',naam:'Prijs-target',uitleg:'Waar de consensus-doelkoers zit binnen het bandbreedte van analisten (Finnhub /stock/price-target). Hoog = target zit aan de bovenkant van het band: analisten zijn zelfverzekerd.'},
   {k:'rsi',naam:'RSI-14 (omgekeerd)',uitleg:'Relatieve Sterkte Index over 14 beursdagen (Finnhub /technical-indicator), omgekeerd gepresenteerd: hoge score = technisch oververkocht. Test de kortetermijn-omkeerhypothese (Jegadeesh 1990, Lehmann 1990): wat recent hard daalde, veert op dagen tot weken vaker terug.'},
   {k:'dagzet',naam:'Dagzet (omgekeerd)',uitleg:'Koersbeweging van de laatste beursdag in procent (Finnhub /quote), omgekeerd gepresenteerd: hoge score = hard gevallen op de dag. Zelfde omkeerhypothese als bij RSI, maar op de allerkortste horizon.'},
-  {k:'dagpositie',naam:'Positie in dagbereik',uitleg:'Waar de slotkoers zit tussen de laagste en hoogste koers van de dag (Finnhub /quote). 100 = gesloten op de dagtop, 0 = op de dagbodem. Sterke slotpositie wijst op kopers die bleven doorbieden.'}
+  {k:'dagpositie',naam:'Positie in dagbereik',uitleg:'Waar de slotkoers zit tussen de laagste en hoogste koers van de dag (Finnhub /quote). 100 = gesloten op de dagtop, 0 = op de dagbodem. Sterke slotpositie wijst op kopers die bleven doorbieden.'},
+  {k:'mfi',naam:'MFI-14 (omgekeerd)',uitleg:'Money Flow Index over 14 dagen (Finnhub /technical-indicator): een volumegewogen RSI, die meeweegt of een beweging op echte omzet gebeurde. Omgekeerd gepresenteerd: hoge score = veel geld stroomde eruit, technisch oververkocht.'},
+  {k:'verrassing',naam:'Winstverrassing (PEAD)',uitleg:'Laatste kwartaalverslag versus verwachting (Finnhub /stock/earnings). 50 = precies in lijn; boven = verslaan. Toetst post-earnings-announcement drift (Ball & Brown 1968; Bernard & Thomas 1989): koersen drijven weken door in de richting van de verrassing.'},
+  {k:'kortT',naam:'Kortetermijn-score (kandidaat)',uitleg:'Gemapt gemiddelde van de beschikbare kortetermijn-factoren (RSI, dagzet, dagpositie, MFI, verrassing). Nog geen onderdeel van de officiële score: eerst moet de accuratesse-meting uitwijzen of de onderliggende factoren samen iets voorspellen.'}
 ];
+var SIGNAL_KORTE_TERMIJN=['rsi','dagzet','dagpositie','mfi','verrassing'];
 function signaalFactorNamen(){
   var n={};
   SIGNAL_FACTOREN.forEach(function(f){n[f.k]=f.naam;});
@@ -2992,14 +2996,39 @@ function rsiScore(data){
   if(laatste==null||isNaN(+laatste))return null;
   return clampScore(100-(+laatste));
 }
+function omgekeerdeIndicatorScore(v){
+  if(v==null||isNaN(+v))return null;
+  return clampScore(100-(+v));
+}
 function haalRsiScore(sym){
+  return haalOmgekeerdeIndicator(sym,'rsi').then(omgekeerdeIndicatorScore);
+}
+function haalMfiScore(sym){
+  return haalOmgekeerdeIndicator(sym,'mfi').then(omgekeerdeIndicatorScore);
+}
+function haalOmgekeerdeIndicator(sym,indicator){
   if(!MULTI_KEYS.finnhub)return Promise.resolve(null);
   var tk=encodeURIComponent(MULTI_KEYS.finnhub);
   var s=encodeURIComponent(sym);
   var tot=Math.floor(Date.now()/1000), vanaf=tot-45*24*60*60;
-  return getJson(FINNHUB_BASE+'/technical-indicator?symbol='+s+'&resolution=D&from='+vanaf+'&to='+tot+'&indicator=rsi&token='+tk)
-    .then(function(d){ return rsiScore(d); })
+  return getJson(FINNHUB_BASE+'/technical-indicator?symbol='+s+'&resolution=D&from='+vanaf+'&to='+tot+'&indicator='+encodeURIComponent(indicator)+'&token='+tk)
+    .then(function(d){
+      if(!d||!Array.isArray(d.c)||!d.c.length)return null;
+      var laatste=d.c[d.c.length-1];
+      return laatste==null||isNaN(+laatste)?null:+laatste;
+    })
     .catch(function(){ return null; });
+}
+function verrassingScore(rap){
+  if(!rap||rap.verrassing==null||isNaN(+rap.verrassing))return null;
+  return clampScore(50+(+rap.verrassing));
+}
+function kortetermijnTotaalScore(scores){
+  if(!scores)return null;
+  var beschik=SIGNAL_KORTE_TERMIJN.filter(function(k){return scores[k]!=null;});
+  if(!beschik.length)return null;
+  var som=beschik.reduce(function(s,k){return s+scores[k];},0);
+  return clampScore(som/beschik.length);
 }
 function kortetermijnScores(q){
   if(!q||q.c==null)return {};
@@ -3017,11 +3046,22 @@ function signaalSnapshotOpslaan(sym,scores,koers){
 }
 function signaalSnapshotToevoegen(sym,koers,quote,basisScores){
   var basis=basisScores?Promise.resolve(basisScores):haalSignaalFactoren(sym);
-  return Promise.all([basis,haalRsiScore(sym)]).then(function(r){
+  var tk=MULTI_KEYS.finnhub;
+  return Promise.all([
+    basis,
+    haalRsiScore(sym),
+    haalMfiScore(sym),
+    tk?haalWinstverrassing(sym,tk,'finnhub'):Promise.resolve(null)
+  ]).then(function(r){
     var scores=r[0]||{};
     if(r[1]!=null)scores.rsi=r[1];
+    if(r[2]!=null)scores.mfi=r[2];
+    var v=verrassingScore(r[3]);
+    if(v!=null)scores.verrassing=v;
     var kort=kortetermijnScores(quote||null);
     Object.keys(kort).forEach(function(k){ scores[k]=kort[k]; });
+    var kt=kortetermijnTotaalScore(scores);
+    if(kt!=null)scores.kortT=kt;
     if(!heeftSignaalScores(scores))return;
     signaalSnapshotOpslaan(sym,scores,koers);
   });
