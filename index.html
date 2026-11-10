@@ -927,6 +927,7 @@ details[open] > summary{margin-bottom:4px}
         </div>
         <button class="btn-go" id="etfRun">Vergelijk ETF's</button>
         <button class="btn-ghost" id="etfLoadLast" title="Toon de laatste vergelijking opnieuw, zonder API-calls">Laatste tonen</button>
+        <button class="btn-ghost" id="etfSnapshot" title="Bewaart de opgehaalde kerndata van deze vergelijking (lokaal en in je account), zodat de ETF-scoremethodiek later op werkelijk rendement te toetsen is. Alleen kerndata: geen scores of wegingen, die zijn een afgeleide van een methodiek die wijzigt.">Vastleggen</button>
         <div class="field">
           <label>Broker</label>
           <select id="etfBroker" title="Toon alleen fondsen die deze broker volgens de beursdekking waarschijnlijk aanbiedt. Het is een indicatie op basis van de gepubliceerde marktendekking, geen garantie — controleer altijd in je eigen platform.">
@@ -1081,6 +1082,7 @@ details[open] > summary{margin-bottom:4px}
       <div class="control-row compact">
         <button class="btn-save" id="snapshot">Vastleggen</button>
         <button class="btn-ghost" id="measure">Meet accuratesse</button>
+        <button class="btn-ghost" id="measureEtf" title="Toetst de bewaarde ETF-momentopnamen op werkelijk rendement: herrekent de ETF-scores uit de kerndata en zet ze tegen de koersontwikkeling sinds de opname. Vereist een Finnhub-sleutel voor actuele koersen.">Meet ETF's</button>
         <button class="btn-ghost verborgen" id="analyseKnop" onclick="kopieerAnalyse()"
           title="Kopieert de meting inclusief ruwe data en voorbehouden, klaar om in een gesprek met Claude te plakken">
           Rapport kopi&euml;ren</button>
@@ -1106,6 +1108,7 @@ details[open] > summary{margin-bottom:4px}
 
     <h3 style="font-family:'Fraunces',serif;font-size:18px;margin:20px 0 8px">Opgeslagen momentopnamen</h3>
     <div id="snapList"><div class="empty">Nog niets vastgelegd. Draai een screening en klik op "Vastleggen".</div></div>
+    <div id="etfSnapList"></div>
 
     <details style="margin-top:20px">
       <summary class="sub-kop">Diagnose: waarom zie ik mijn momentopnamen niet?</summary>
@@ -1355,6 +1358,7 @@ details[open] > summary{margin-bottom:4px}
 //   14. ETF-beoordeling: compleetheid, fiscale last, index-groepering, efficiëntie  [Datacompleetheid: is er genoeg fundamentele data voor een betrouwbare score?]
 //   15. Portefeuille-analyse: alarms, verkoopsignalen, overlap-analyse, rendement, imports, spreiding  [Fiscale efficiëntie van een fonds]
 //       daarin: Tracking & momentopnamen + Accuratesse-meting (terugtoets van de scoremethodiek)  [Tracking & momentopnamen]
+//       daarin: ETF-momentopnamen (kerndata van fondsen bijhouden en op rendement toetsen)  [ETF-momentopnamen: kerndata van fondsen bijhouden en op rendement toetsen]
 //   16. Firebase-cloud-sync: inloggen, centrale cloud-lezer (loadCloud), instellingen- en sleutelopslag  [Firebase cloud-sync]
 //       daarin: Cloud-sync kern [Cloud-sync kern: \u00e9\u00e9n schrijver, \u00e9\u00e9n lezer, wachtrij + herpoging] \u2014 alle cloud-schrijfacties gaan uitsluitend via cloudSchrijf(): geserialiseerd, met herpoging en zichtbare foutmelding. De portefeuille-opslag is \u00e9\u00e9n atomaire schrijfactie (portfoliosJson met timestamp); de lezer lost conflicten op \u00e9\u00e9n timestamp-regel op en migreert de oude portfolios-structuur.
 <script>
@@ -6159,6 +6163,7 @@ function runEtf(){
   });
 }
 $('etfRun').onclick=runEtf;
+if($('etfSnapshot'))$('etfSnapshot').onclick=etfSnapshotNemen;
 if($('etfCategory'))$('etfCategory').onchange=function(){
   var custom=this.value==="custom";
   var f=$('etfTickers');
@@ -8111,15 +8116,217 @@ function importHistory(file){
   reader.readAsText(file);
 }
 function wisGeschiedenis(){
-  if(!HISTORY.length)return;
-  if(!confirm("Alle "+HISTORY.length+" momentopnamen wissen?"))return;
+  if(!HISTORY.length&&!ETF_HISTORY.length)return;
+  if(!confirm("Alle "+HISTORY.length+" aandeel- en "+ETF_HISTORY.length+" ETF-momentopnamen wissen?"))return;
   HISTORY=[];
+  ETF_HISTORY=[];
   renderSnapList();
+  renderEtfSnapList();
   $('kpiWrap').innerHTML=''; $('factorWrap').innerHTML=''; $('scatterWrap').innerHTML='';
   tStat("Geschiedenis gewist.");
   historyBewaren();
+  etfHistoryBewaren();
 }
 
+// ---- ETF-momentopnamen: kerndata van fondsen bijhouden en op rendement toetsen ----
+// Zelfde filosofie als de aandelen-momentopnamen: uitsluitend de opgehaalde kerndata
+// bewaren (geen scores, geen wegingen), lokaal én in Firestore. Zo blijft de
+// ETF-scoremethodiek (etfTotalScore, etfCompounderScore) achteraf op werkelijk rendement
+// te herrekenen en bij te sturen - de meting is leidend, niet de formule.
+var ETF_HISTORY=[];
+var ETF_HISTORY_KEY='etfHistory';
+var ETF_HISTORY_MAX=200;
+// De velden die de ETF-scorelogica daadwerkelijk uitleest (etfCostScore,
+// etfDiversityScore, etfLiquidityScore, etfTrackScore, etfVolatilityScore,
+// etfSharpeScore, etfCompounderScore, uitkeringsvorm, etfCloseRisk). Voeg je een veld
+// toe aan de scorelogica, zet het dan ook hier - anders is die factor achteraf niet
+// meer te herrekenen.
+var ETF_KERNVELDEN=[
+  'symbol','queriedAs','isin','name','longName','tickers',
+  'aum','ter','holdings','top10','yield','dividendYield','weightedPe',
+  'sharpe','maxDd','vol','hhi','nav','price','chg',
+  'trackingIndex','domicile','assetClass','etfCompany',
+  'isLeveraged','isInverse','return5Y','return3Y','inceptionDate',
+  'altTickers','_src'
+];
+// afgeleiden van de scoremethodiek mogen nooit in de opslag terechtkomen
+var ETF_KERNVELDEN_STRIP=['_s','_c','_gc','_dek','_opgehaald'];
+function etfKerngegevens(d){
+  var o={};
+  ETF_KERNVELDEN.forEach(function(k){
+    var v=d[k];
+    if(v!==undefined&&v!==null&&!(typeof v==="number"&&isNaN(v)))o[k]=v;
+  });
+  return o;
+}
+function etfHeeftKern(it){
+  return ETF_KERNVELDEN.some(function(k){
+    return k!=='symbol'&&k!=='name'&&k!=='queriedAs'&&k!=='isin'&&k!=='_src'&&it[k]!=null;
+  });
+}
+function etfSnapshotSaniteren(s){
+  if(!s||typeof s!=="object"||!Array.isArray(s.items))return null;
+  var schoon=s.items.map(function(it){
+    if(!it||typeof it!=="object")return null;
+    ETF_KERNVELDEN_STRIP.forEach(function(k){ delete it[k]; });
+    return etfHeeftKern(it)?it:null;
+  }).filter(Boolean);
+  if(!schoon.length)return null;
+  s.items=schoon;
+  return s;
+}
+function etfHistorySaniteren(lijst){
+  if(!Array.isArray(lijst))return [];
+  return lijst.map(etfSnapshotSaniteren).filter(Boolean);
+}
+function etfHistoryBewaren(){
+  try{ lsSafe(ETF_HISTORY_KEY,ETF_HISTORY); }catch(e){}
+  if(typeof cloudSchrijf==="function")cloudSchrijf((function(){ var upd={}; upd[ETF_HISTORY_KEY]=ETF_HISTORY; return upd; })(),'etf-momentopnamen');
+}
+function etfHistoryLaden(){
+  return LS.get(ETF_HISTORY_KEY).then(function(r){
+    if(r&&r.value){
+      try{
+        var d=JSON.parse(r.value);
+        if(Array.isArray(d)){
+          ETF_HISTORY=etfHistorySaniteren(d);
+          if(JSON.stringify(ETF_HISTORY)!==JSON.stringify(d))etfHistoryBewaren();
+        }
+      }catch(e){}
+    }
+  }).catch(function(){});
+}
+function etfHistoryCloudMergen(){
+  if(typeof FB==="undefined"||!FB.user||!FB.ready)return Promise.resolve(0);
+  return FB.db.collection("users").doc(FB.user.uid).get().then(function(doc){
+    var cloud=etfHistorySaniteren((doc.exists&&doc.data()[ETF_HISTORY_KEY])||[]);
+    if(!cloud.length)return 0;
+    var seen={}; ETF_HISTORY.forEach(function(s){ if(s.ts)seen[s.ts]=1; });
+    var voor=ETF_HISTORY.length;
+    cloud.forEach(function(s){ if(s.ts&&!seen[s.ts]){ ETF_HISTORY.push(s); seen[s.ts]=1; } });
+    ETF_HISTORY.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    if(ETF_HISTORY.length>voor){ etfHistoryBewaren(); renderEtfSnapList(); return ETF_HISTORY.length-voor; }
+    return 0;
+  }).catch(function(){ return 0; });
+}
+function etfSnapshotNemen(){
+  var st=$('etfStatus'); if(!st)return;
+  if(!ETF_CURRENT.length){ setStatus(st,"Nog niets om vast te leggen \u2014 vergelijk eerst ETF's.",true); return; }
+  var items=ETF_CURRENT.map(etfKerngegevens).filter(etfHeeftKern);
+  if(!items.length){ setStatus(st,"Geen kerndata om vast te leggen.",true); return; }
+  // Koers erbij halen waar de bron die niet gaf (SecuritiesDB en Finnhub leveren geen
+  // koers): zonder koers is een opname later niet op rendement te toetsen.
+  var zonderKoers=items.filter(function(it){ return it.price==null; });
+  var klaar=function(){
+    var nogZonder=items.filter(function(it){ return it.price==null; }).length;
+    ETF_HISTORY.push({date:new Date().toISOString().slice(0,10),ts:Date.now(),n:items.length,items:items});
+    if(ETF_HISTORY.length>ETF_HISTORY_MAX)ETF_HISTORY=ETF_HISTORY.slice(-ETF_HISTORY_MAX);
+    etfHistoryBewaren();
+    renderEtfSnapList();
+    setStatus(st,"\ud83d\udcbe Vastgelegd: <b>"+items.length+"</b> fondsen (alleen kerndata) op "+
+      new Date().toLocaleDateString('nl-NL')+
+      (nogZonder
+        ? " \u26a0\ufe0f "+nogZonder+" zonder koers \u2014 die zijn later niet op rendement te toetsen."
+        : " \u2014 te toetsen via Tracking \u2192 Meet ETF's."),nogZonder>0);
+  };
+  if(zonderKoers.length&&MULTI_KEYS.finnhub){
+    setStatus(st,null,false);
+    st.textContent="Koersen ophalen voor "+zonderKoers.length+" fondsen\u2026";
+    var i=0;
+    Promise.all(zonderKoers.map(function(it){
+      return koersNu(it.symbol).then(function(nu){ if(nu!=null&&nu>0)it.price=+nu.toFixed(4); })
+        .catch(function(){})
+        .then(function(){ i++; st.textContent="Koersen ophalen\u2026 "+i+"/"+zonderKoers.length; });
+    })).then(klaar);
+  } else klaar();
+}
+function renderEtfSnapList(){
+  var el=$('etfSnapList'); if(!el)return;
+  if(!ETF_HISTORY.length){ el.innerHTML=''; return; }
+  el.innerHTML='<div class="snap" style="margin-top:14px"><details open><summary class="sub-kop">ETF-momentopnamen ('+ETF_HISTORY.length+')</summary>'+
+    '<div style="font-size:12px;color:var(--muted);margin-top:6px">Kerndata van je fondsvergelijkingen, lokaal en in je account. Zonder koers bij de opname is een fonds later niet op rendement te toetsen \u2014 leg dus vast met een Finnhub-sleutel aanwezig (die vult de koers in).</div>'+
+    ETF_HISTORY.slice().reverse().map(function(s){
+      var d=new Date(s.ts||s.date);
+      var zonderKoers=(s.items||[]).filter(function(it){ return it.price==null; }).length;
+      return '<div class="snap"><h4>'+d.toLocaleDateString('nl-NL')+'</h4>'+
+        '<div class="meta">'+(s.items||[]).length+' fondsen \u00b7 kerndata'+
+        (zonderKoers?' \u00b7 <span style="color:var(--red)">'+zonderKoers+' zonder koers</span>':'')+'</div></div>';
+    }).join("")+
+    '</details></div>';
+}
+// ETF-scores herrekenen uit de bewaarde kerndata en zetten tegen het rendement sinds
+// de opname. Zelfde rapportvorm en opslag als de aandelenmeting, met de ETF-deelscores
+// als factoren, zodat de weging van elke factor op langere termijn toetsbaar is.
+var ETF_FACTOR_NAMEN={
+  etfTotaal:'ETF-totaalscore', etfCompounder:'ETF-compounder', etfKosten:'Kosten (TER)',
+  etfSpreiding:'Spreiding', etfLiquiditeit:'Liquiditeit (AUM)', etfTrack:'Track record',
+  etfVolatiliteit:'Volatiliteit', etfSharpe:'Sharpe'
+};
+function meetEtfAccuratesse(){
+  if(!MULTI_KEYS.finnhub){ tStat("Voor de ETF-meting zijn actuele koersen nodig \u2014 vul een Finnhub-sleutel in bij Instellingen.",true); return; }
+  if(!ETF_HISTORY.length){ tStat("Nog geen ETF-momentopnamen. Vergelijk ETF's en leg die vast (knop 'Vastleggen' in het ETF-tabblad).",true); return; }
+  var syms={}, zonderKoers=0;
+  ETF_HISTORY.forEach(function(s){ (s.items||[]).forEach(function(it){
+    if(it.price!=null&&it.price>0)syms[it.symbol]=1; else zonderKoers++;
+  });});
+  var symList=Object.keys(syms);
+  if(!symList.length){
+    tStat("Geen van je "+ETF_HISTORY.length+" ETF-momentopnamen bevat een koers ("+zonderKoers+" fondsen zonder). "+
+      "SecuritiesDB geeft geen koers; leg vast met een Finnhub-sleutel aanwezig, of vergelijk Europese fondsen via Eulerpool (die leveren w\u00e9l een koers).",true);
+    return;
+  }
+  tStat("Actuele koersen ophalen voor "+symList.length+" fondsen\u2026");
+  var prijzen={},mislukt=0,tot=symList.length;
+  Promise.all(symList.map(function(sym,i){
+    return koersNu(sym).then(function(nu){ if(nu!=null&&nu>0)prijzen[sym]=nu; else mislukt++; })
+      .catch(function(){ mislukt++; })
+      .then(function(){ if(i%4===0||i===tot-1)tStat("Koersen ophalen\u2026 "+(i+1)+"/"+tot); });
+  })).then(function(){
+    if(!Object.keys(prijzen).length){ tStat("Geen actuele koersen ontvangen ("+mislukt+" mislukt). Europese fondsen noteert Finnhub niet op ISIN; die vallen buiten deze meting.",true); return; }
+    var rijen=[];
+    ETF_HISTORY.forEach(function(s){
+      (s.items||[]).forEach(function(it){
+        if(it.price==null||it.price<=0||prijzen[it.symbol]==null)return;
+        var leeftijdDagen=(Date.now()-(s.ts||0))/86400000;
+        if(leeftijdDagen<2)return;
+        var koersRendement=((prijzen[it.symbol]-it.price)/it.price)*100;
+        var dy=it.yield!=null?it.yield:it.dividendYield;
+        var dividendDeel=(dy!=null&&dy>0&&dy<25)?dy*(leeftijdDagen/365):0;
+        var rend=koersRendement+dividendDeel;
+        var datum=new Date(s.ts||0).toISOString().slice(0,10);
+        var push=function(factor,score){ if(score!=null)rijen.push({sym:it.symbol,factor:factor,score:score,rend:rend,datum:datum}); };
+        push('etfTotaal',etfTotalScore(it));
+        push('etfCompounder',etfCompounderScore(it));
+        if(it.ter!=null)push('etfKosten',etfCostScore(it));
+        if(it.holdings!=null||it.top10!=null)push('etfSpreiding',etfDiversityScore(it));
+        if(it.aum!=null)push('etfLiquiditeit',etfLiquidityScore(it));
+        if(it.return5Y!=null||it.return3Y!=null||it.inceptionDate)push('etfTrack',etfTrackScore(it));
+        if(it.vol!=null)push('etfVolatiliteit',etfVolatilityScore(it));
+        if(it.sharpe!=null)push('etfSharpe',etfSharpeScore(it));
+      });
+    });
+    if(!rijen.length){ tStat("Meting gaf geen waarnemingen: momentopnamen moeten minstens twee dagen oud zijn en een koers bevatten.",true); return; }
+    var rap=accuratesseRapportMaken(rijen);
+    if(rap)accuratesseRapportOpslaan(rap);
+    tStat("ETF-meting klaar \u2014 "+rijen.length+" factor-waarnemingen over "+Object.keys(prijzen).length+" fondsen.");
+    var el=$('etfSnapList');
+    if(el&&rap)el.innerHTML+=renderEtfMeting(rap);
+  });
+}
+function renderEtfMeting(rap){
+  if(!rap)return '';
+  var d=new Date(rap.ts);
+  var uit='<div class="snap" style="margin-top:10px"><h4>ETF-meting '+d.toLocaleDateString('nl-NL')+'</h4>'+
+    '<div class="meta">'+rap.n+' waarnemingen \u00b7 correlatie factor-score met rendement sinds de opname</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">';
+  Object.keys(rap.perFactor||{}).forEach(function(f){
+    var p=rap.perFactor[f];
+    var corr=p.corr==null?'\u2014':((p.corr>0?'+':'')+p.corr.toFixed(2));
+    var kleur=p.corr==null?'var(--muted)':(p.corr>0.2?'#1a7f37':(p.corr<-0.2?'#c0392b':'var(--muted)'));
+    uit+='<span>'+(ETF_FACTOR_NAMEN[f]||f)+': <b style="color:'+kleur+'">'+corr+'</b> <span class="muted-tekst">(n='+p.n+')</span></span>';
+  });
+  return uit+'</div></div>';
+}
 function cloudDiagnose(){
   var uit=$('diagUit'), ta=$('diagJson'); if(!uit)return;
   var regels=[];
@@ -8169,6 +8376,8 @@ historyLaden().then(function(){
   renderSnapList();
   if($('snapshot'))$('snapshot').onclick=takeSnapshot;
   if($('measure'))$('measure').onclick=meetAccuratesse;
+  if($('measureEtf'))$('measureEtf').onclick=meetEtfAccuratesse;
+  etfHistoryLaden().then(function(){ return etfHistoryCloudMergen(); }).then(function(){ renderEtfSnapList(); });
   if($('export'))$('export').onclick=exportHistory;
   if($('importBtn'))$('importBtn').onclick=function(){ $('importFile').click(); };
   if($('importFile'))$('importFile').onchange=function(e){ if(e.target.files[0])importHistory(e.target.files[0]); };
@@ -9220,6 +9429,9 @@ function loadCloud(){
       function(){ if(typeof accuratesseRapportenCloudMergen=="function")return accuratesseRapportenCloudMergen(); },
       function(){ if(typeof historyCloudMergen=="function")return historyCloudMergen().then(function(opgehaald){
         if(opgehaald>0)tStat("\u2601\ufe0f "+opgehaald+" momentopname(n) uit je account toegevoegd.");
+      }); },
+      function(){ if(typeof etfHistoryCloudMergen==="function")return etfHistoryCloudMergen().then(function(opgehaald){
+        if(opgehaald>0)tStat("\u2601\ufe0f "+opgehaald+" ETF-momentopname(n) uit je account toegevoegd.");
       }); }
     ].forEach(function(mod){
       try{ var uit=mod(); if(uit&&uit.catch)uit.catch(function(e){ moduleFouten.push(e&&e.message||String(e)); }); }
