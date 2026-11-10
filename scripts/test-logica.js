@@ -32,6 +32,15 @@ check("clampScore(-5) = 0", C.clampScore(-5) === 0);
 check("clampScore(150) = 100", C.clampScore(150) === 100);
 check("clampScore(50.6) = 51", C.clampScore(50.6) === 51);
 
+// ---------------- A2. Kandidaat-factor volatiliteit
+console.log("\nA2. Kandidaat-factor volatiliteit");
+check("volScore(null) = null", C.volScore(null) === null);
+check("volScore zonder vol = null", C.volScore({}) === null);
+check("volScore: lage volatiliteit scoort hoger", C.volScore({ vol: 15 }) > C.volScore({ vol: 40 }),
+  "werd " + C.volScore({ vol: 15 }) + " vs " + C.volScore({ vol: 40 }));
+check("volScore klemt in 0..100", inBereik(C.volScore({ vol: 120 })), "werd " + C.volScore({ vol: 120 }));
+check("volScore(35) = 50 (neutraal midden)", C.volScore({ vol: 35 }) === 50, "werd " + C.volScore({ vol: 35 }));
+
 var leeg = {};
 // ontbrekende factordata valt terug op 40 (norm/pctRank-conventie in deze app), niet 50;
 // belangrijkste invariant is dat de score bestaat en binnen de schaal blijft

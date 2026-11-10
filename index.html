@@ -1610,6 +1610,15 @@ function momentumScore(d){
   var m=0;parts.forEach(function(p){m+=p[0]*p[1];});
   return Math.round(m/sum);
 }
+// Kandidaat-factor: de laag-vol anomalie. In de accuratessemeting presteerde de laagst
+// volatiele kwintiel duidelijk het best (correlatie -0,26 met overrendement, t=-2,79),
+// en in onderzoek is het effect breed gedocumenteerd. Nog geen onderdeel van totalScore:
+// eerst moet de accuratesse-meting de gemapte score zelf bevestigen (AGENTS.md regel 6).
+// Lineaire mapping op jaarvolatiliteit: 10% = 100, 35% = 50, 60% = 0.
+function volScore(d){
+  if(d==null||d.vol==null||isNaN(d.vol)||d.vol<=0)return null;
+  return clampScore(100-(d.vol-10)*2);
+}
 // Is dit "goedkoop" of "goedkoop met reden"? Bij financiële nood of krimpende winst is een lage
 // waardering geen koopje maar een waarschuwing - de markt prijst het risico in.
 // Ongeldige waarderingscijfers eruit filteren vóór ze gescoord worden.
@@ -3614,7 +3623,9 @@ function render(){
       (function(){
         if(d.vol==null)return '<td class="num">\u2014</td>';
         var lbl=medVol!=null?(d.vol<medVol?'<span style="display:block;font-size:9.5px;color:var(--muted)">rustig</span>':'<span style="display:block;font-size:9.5px;color:var(--muted)">beweeglijk</span>'):'';
-        return '<td class="num" title="Jaarlijkse koersvolatiliteit uit de koershistorie v&oacute;&oacute;r dit moment (trailing, dus niet over de houdperiode). In de accuratessemeting presteerde de laagst volatiele kwintiel duidelijk het best: de laag-vol anomalie.">'+d.vol.toFixed(1)+lbl+'</td>';
+        var vs=volScore(d);
+        var lbl2=vs!=null?'<span style="display:block;font-size:9.5px;color:var(--muted)" title="Kandidaat-score uit de jaarvolatiliteit (10%=100, 35%=50, 60%=0). Nog niet in de totaalscore: eerst via de accuratesse-meting toetsen.">vol-score '+vs+'</span>':'';
+        return '<td class="num" title="Jaarlijkse koersvolatiliteit uit de koershistorie v&oacute;&oacute;r dit moment (trailing, dus niet over de houdperiode). In de accuratessemeting presteerde de laagst volatiele kwintiel duidelijk het best: de laag-vol anomalie.">'+d.vol.toFixed(1)+lbl+lbl2+'</td>';
       })()+
       '<td class="num">'+fmt(d.pe)+'</td>'+
       '<td class="num">'+(d.peg==null?"\u2014":d.peg.toFixed(2))+'</td>'+
@@ -8537,6 +8548,7 @@ function berekenEnToonAccuratesse(snaps,prices){
         piotroski:it.piotroski,altmanZ:it.altmanZ,
         verrassing:it.verrassing,verrassingConsistentie:it.verrassingConsistentie,
         vol:it.vol,maxTerugval:it.maxTerugval,uitgifte:it.uitgifte,
+        volScore:volScore(it),
         ramingSpreiding:it.ramingSpreiding,bijstelling:it.bijstelling});
     });
   });
@@ -8798,7 +8810,7 @@ function bouwAnalyseRapport(pairs,snaps,cTot,cM,cV,cG,cQ,hiRet,loRet){
   var kandidaten=[
     ["winstverrassing","verrassing"],["verr.-consistentie","verrassingConsistentie"],
     ["ramingsbijstelling","bijstelling"],["raming-spreiding","ramingSpreiding"],
-    ["aandelenuitgifte","uitgifte"],["volatiliteit","vol"],["max. terugval","maxTerugval"],
+    ["aandelenuitgifte","uitgifte"],["volatiliteit","vol"],["volatiliteit-score","volScore"],["max. terugval","maxTerugval"],
     ["compounder-profiel","comp"]
   ];
   var kandUit=[];
