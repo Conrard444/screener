@@ -1388,7 +1388,11 @@ function norm(v,lo,hi,invert){
 // --- Relatieve scoring: rangschik elk aandeel t.o.v. de peers in het universum ---
 // percentielrang van waarde v binnen array arr (0..100); invert=true -> lager is beter
 function pctRank(v,arr,invert){
-  if(v==null||isNaN(v))return 40;
+  // Ontbrekende waarde is géén data, geen verzonnen 40: null laten we de callers
+  // hun eigen null-check en fallback afhandelen (neutrale 50 bij momentum, absolute
+  // norm-schaal bij waardering, uitsluiting bij kwaliteit). Vroeger vulde dit stilletjes
+  // 40 in, waardoor elke "if(a!=null&&b!=null)"-tak doorging op data die er niet was.
+  if(v==null||isNaN(v))return null;
   var vals=arr.filter(function(x){return x!=null&&!isNaN(x);});
   if(vals.length<4) return null; // te weinig peers -> signaleer fallback
   var below=0,equal=0;
@@ -1402,16 +1406,16 @@ var PEERS=null, SECTOR_PEERS=null, SECTOR_DD=null;
 function fieldArr(set,f){return set.map(function(d){return d[f];});}
 function buildPeers(set){
   PEERS={
-    chg:fieldArr(set,'chg'),mom1m:fieldArr(set,'mom1m'),pe:fieldArr(set,'pe'),
-    peg:fieldArr(set,'peg'),pb:fieldArr(set,'pb'),revG:fieldArr(set,'revG'),epsG:fieldArr(set,'epsG'),
+    chg:fieldArr(set,'chg'),mom1m:fieldArr(set,'mom1m'),mom3m:fieldArr(set,'mom3m'),mom6m:fieldArr(set,'mom6m'),
+    pe:fieldArr(set,'pe'),peg:fieldArr(set,'peg'),pb:fieldArr(set,'pb'),revG:fieldArr(set,'revG'),epsG:fieldArr(set,'epsG'),
     roe:fieldArr(set,'roe'),margin:fieldArr(set,'margin'),de:fieldArr(set,'de'),dd:fieldArr(set,'dd')
   };
   // groepeer per sector
   SECTOR_PEERS={};
   set.forEach(function(d){
     var s=d.sector||"Overig";
-    if(!SECTOR_PEERS[s])SECTOR_PEERS[s]={pe:[],peg:[],pb:[],revG:[],epsG:[],chg:[],mom1m:[],roe:[],margin:[],de:[],dd:[]};
-    ['pe','peg','pb','revG','epsG','chg','mom1m','roe','margin','de','dd'].forEach(function(f){SECTOR_PEERS[s][f].push(d[f]);});
+    if(!SECTOR_PEERS[s])SECTOR_PEERS[s]={pe:[],peg:[],pb:[],revG:[],epsG:[],chg:[],mom1m:[],mom3m:[],mom6m:[],roe:[],margin:[],de:[],dd:[]};
+    ['pe','peg','pb','revG','epsG','chg','mom1m','mom3m','mom6m','roe','margin','de','dd'].forEach(function(f){SECTOR_PEERS[s][f].push(d[f]);});
   });
   // gemiddelde daling per sector (voor macro-vs-eigen-probleem indicator)
   SECTOR_DD={};
@@ -1427,7 +1431,9 @@ function peerArr(d,f){
     var arr=SECTOR_PEERS[s][f].filter(function(x){return x!=null&&!isNaN(x);});
     if(arr.length>=4) return SECTOR_PEERS[s][f];
   }
-  return PEERS?PEERS[f]:[];
+  // veilige fallback: onbekend veld geeft een lege array, zodat pctRank netjes
+  // null (te weinig peers) kan teruggeven in plaats van te crashen op undefined
+  return (PEERS&&Array.isArray(PEERS[f]))?PEERS[f]:[];
 }
 
 function currentHorizon(){var el=document.getElementById('horizon');return el?el.value:'kort';}
@@ -2392,6 +2398,7 @@ function rawScore(d){
     // zonder koersfeed onterecht een lagere score dan een Amerikaans.
     if(mom==null){
       var rest=w.wv+w.wg+w.wq;
+      if(!(rest>0))return null; // al het gewicht zit in momentum maar er is geen momentumdata: geen eerlijke score mogelijk
       base = (val*w.wv + gro*w.wg + qual*w.wq)/rest;
       var t0=valueTrap(d);
       return Math.round(base*(t0.level===2?0.75:(t0.level===1?0.90:1)));
