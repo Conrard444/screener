@@ -41,6 +41,19 @@ check("volScore: lage volatiliteit scoort hoger", C.volScore({ vol: 15 }) > C.vo
 check("volScore klemt in 0..100", inBereik(C.volScore({ vol: 120 })), "werd " + C.volScore({ vol: 120 }));
 check("volScore(35) = 50 (neutraal midden)", C.volScore({ vol: 35 }) === 50, "werd " + C.volScore({ vol: 35 }));
 
+// ---------------- A3. Groei-tempo: tastbare groeisnelheid (verdubbelingstijd van de winst)
+console.log("\nA3. Groei-tempo");
+var GT = C.VELD.groeiTempo;
+check("groeiTempo: 7% winstgroei verdubbelt in 10 jaar", GT.tekst({ epsG: 7 }) === "\u00d72 in 10 j", "werd " + GT.tekst({ epsG: 7 }));
+check("groeiTempo: krimpende winst halveert", GT.tekst({ epsG: -10 }) === "\u00bd in 7 j", "werd " + GT.tekst({ epsG: -10 }));
+check("groeiTempo: ~0% is stagnatie", GT.tekst({ epsG: 0 }) === "stagnatie", "werd " + GT.tekst({ epsG: 0 }));
+check("groeiTempo: zonder enkele groeidata een streepje", GT.tekst({}) === "\u2014", "werd " + GT.tekst({}));
+check("groeiTempo: 5-jaars winstgroei gaat voor 1-jaars", GT.waarde({ epsG5Y: 12, epsG: 3 }).v === 12, JSON.stringify(GT.waarde({ epsG5Y: 12, epsG: 3 })));
+check("groeiTempo: valt terug op ingeprijste groei (DCF) zonder gerealiseerde", GT.waarde({ impliedGrowth: 8 }).v === 8 && GT.waarde({ impliedGrowth: 8 }).impl === true);
+check("groeiTempo: kleur groen >= 7%, rood < 0%, neutraal ertussen", GT.kleur({ epsG: 9 }) === "pos" && GT.kleur({ epsG: -2 }) === "neg" && GT.kleur({ epsG: 4 }) === "", JSON.stringify([GT.kleur({ epsG: 9 }), GT.kleur({ epsG: -2 }), GT.kleur({ epsG: 4 })]));
+check("groeiTempo: traag groeier krijgt langer tempo dan snelle groeier", (70 / 3 > 70 / 14) === (GT.verdubbeling(GT.waarde({ epsG: 3 })) > GT.verdubbeling(GT.waarde({ epsG: 14 }))));
+check("groeiTempo: uitleg noemt de vuistregel van 70", GT.uitleg({ epsG: 5, impliedGrowth: 3, divYield: 3.5 }).indexOf("70") > -1);
+
 var leeg = {};
 // ontbrekende factordata valt terug op 40 (norm/pctRank-conventie in deze app), niet 50;
 // belangrijkste invariant is dat de score bestaat en binnen de schaal blijft

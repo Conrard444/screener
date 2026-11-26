@@ -201,6 +201,52 @@ var VELD={
       }
       return "Verwacht rendement volgens de databron \u00b7 modeluitkomst, geen voorspelling";
     }
+  },
+  groeiTempo:{
+    label:"Groei-tempo",
+    waarde:function(d){
+      if(!d)return null;
+      if(d.epsG5Y!=null)return {v:d.epsG5Y,bron:"gerealiseerde winstgroei, 5-jaars gemiddelde (Eulerpool)"};
+      if(d.epsG!=null)return {v:d.epsG,bron:"gerealiseerde winstgroei (Eulerpool 3-jaars, Finnhub jaar-op-jaar)"};
+      if(d.impliedGrowth!=null)return {v:d.impliedGrowth,bron:"ingeprijste winstgroei volgens de markt (DCF, SecuritiesDB)",impl:true};
+      return null;
+    },
+    verdubbeling:function(w){
+      if(!w||w.v==null||isNaN(w.v))return null;
+      if(w.v>0.5)return Math.round(70/w.v);
+      if(w.v<-0.5)return -Math.round(70/Math.abs(w.v));
+      return 0;
+    },
+    tekst:function(d){
+      var w=this.waarde(d),j=this.verdubbeling(w);
+      if(j==null)return "\u2014";
+      if(j>0)return "\u00d72 in "+j+" j";
+      if(j<0)return "\u00bd in "+(-j)+" j";
+      return "stagnatie";
+    },
+    kleur:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      return w.v>=7?"pos":(w.v<0?"neg":"");
+    },
+    uitleg:function(d){
+      var w=this.waarde(d);
+      if(!w)return "";
+      var j=this.verdubbeling(w);
+      var t="Winstgroei "+(w.v>0?"+":"")+w.v+"% per jaar ("+w.bron+"). "+
+        "Vuistregel van 70: bij dit tempo "+
+        (j>0?"verdubbelt de winst in ongeveer "+j+" jaar":
+         j<0?"halveert de winst in ongeveer "+(-j)+" jaar":
+         "staat de winst stil: geen verdubbeling op termijn")+".";
+      if(d.impliedGrowth!=null&&!w.impl)
+        t+=" De markt prijst "+d.impliedGrowth+"% per jaar in "+
+           (d.impliedGrowth>w.v?"\u2014 meer dan er gerealiseerd werd":"\u2014 minder dan er gerealiseerd werd")+".";
+      if(d.divYield!=null)
+        t+=" Plus een dividendrendement van "+d.divYield+"% geeft een ruwe indicatie van het totaalrendement.";
+      t+" Let op: de totaalscore weegt kwaliteit en waardering zwaarder dan groei \u2014 een traag groeiend " +
+        "kwaliteitsaandeel kan hoog scoren op kracht en prijs terwijl het tempo laag is. Deze kolom maakt dat onderscheid zichtbaar.";
+      return t;
+    }
   }
 };
 
@@ -863,6 +909,7 @@ details[open] > summary{margin-bottom:4px}
           <th data-k="divYield" title="Dividendrendement op jaarbasis, in procent. — onbekend betekent: niet teruggevonden bij de databron. Dan telt dit aandeel in de accuratesse-meting alleen het koersrendement (uitkerende aandelen worden daarin onderschat) en kan het compounder-profiel de herbeleggingsruimte niet berekenen. 0% met 'geen uitkering' betekent: de bron meldt expliciet dat er niets wordt uitgekeerd — rendement nul is een meting, geen ontbrekend gegeven.">Div.<span class="q">?</span></th>
           <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
           <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
+          <th data-k="tempo" title="Hoe snel de winst groeit, vertaald naar jaren: bij 7% winstgroei per jaar verdubbelt de winst in tien jaar (\u00d72 in 10 j), bij -10% halveert ze (\u00bd in 7 j). Genoteerd tempo = gerealiseerde 5-jaars winstgroei waar beschikbaar, anders 3-jaars/jaar-op-jaar, anders wat de markt inprijst (DCF). Muis over de waarde voor de onderliggende percentages. Dit maakt tastbaar dat een hoge totaalscore iets anders zegt dan snelheid: een traag groeiend kwaliteitsaandeel kan hoog scoren op kracht en prijs.">Tempo<span class="q">?</span></th>
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
           <th data-k="upside" title="Wat de markt aan winstgroei inprijst (impl.), afgezet tegen wat het bedrijf werkelijk realiseert. Groen = het bedrijf haalt die groei; rood = de markt verwacht meer dan er tot nu toe gerealiseerd werd. Bij Europese aandelen staat hier het verwachte rendement van Eulerpool. LET OP: dit komt uit een DCF-model. Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Ingeprijsd<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
@@ -1294,7 +1341,12 @@ details[open] > summary{margin-bottom:4px}
         <b>kwaliteit</b> (winstgevendheid, marges, lage schulden) en <b>groei</b>.<br><br>
         Groei is de zwakst onderbouwde van de vier: snelgroeiende bedrijven leveren historisch
         g&eacute;&eacute;n premie, winstg&eacute;vende w&eacute;l. Daarom staat groei laag gewogen
-        en kwaliteit hoog.<br><br>
+        en kwaliteit hoog. De kolom <b>Tempo</b> maakt de groeisnelheid los van de score tastbaar:
+        het vertaalt de winstgroei naar de tijd waarin de winst verdubbelt (vuistregel van 70:
+        70 gedeeld door het groeipercentage). Zo zie je direct dat een aandeel hoog kan scoren
+        op kwaliteit en waardering &mdash; zoals een groot, stabiel farmacie-aandeel &mdash;
+        terwijl de winst er traag verdubbelt. Waar beschikbaar wordt de gerealiseerde 5-jaars
+        winstgroei genomen, anders de 3-jaars/jaar-op-jaar, anders wat de markt inprijst (DCF).<br><br>
         <b>Wat het model niet weet:</b> een lopend overnamebod, een rechtszaak, een bestuurswissel.
         Sectoren met eigen logica &mdash; vastgoedfondsen, biotech zonder omzet &mdash; worden met
         dezelfde meetlat gemeten. Holdings en banken krijgen wel een aangepaste behandeling.
@@ -2677,7 +2729,7 @@ var COL_PRESETS={
   minimaal:  ["symbol","price","chg","trap","score"],
   essentie:  ["symbol","sector","price","chg","score"],
   waardering:["symbol","price","pe","peg","pb","divYield","dd","upside","score"],
-  kwaliteit: ["symbol","sector","divYield","revG","epsG","qual","trap","score"],
+  kwaliteit: ["symbol","sector","divYield","revG","epsG","tempo","qual","trap","score"],
   alles:     null
 };
 function applyColumnPreset(containerSel,presetKey){
@@ -3612,10 +3664,10 @@ function render(){
     var o=portfolioOverlapFor(d);
     return !o || o.level==="low"; // sectoroverlap mag blijven, echte dubbelingen niet
   });
-    var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_c:compounderScore(d),_gc:gecombineerdeScore(d),_trap:t.level,_trapR:t.reason,_dek:dekkingAandeel(d)});});
+    var rows=source.map(function(d){var t=valueTrap(d);var gtW=VELD.groeiTempo.waarde(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_c:compounderScore(d),_gc:gecombineerdeScore(d),_trap:t.level,_trapR:t.reason,_dek:dekkingAandeel(d),_tempo:(gtW?gtW.v:null)});});
   var volLijst=rows.map(function(d){return d.vol;}).filter(function(v){return v!=null;}).sort(function(a,b){return a-b;});
   var medVol=volLijst.length?volLijst[Math.floor(volLijst.length/2)]:null;
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",vol:"vol",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",vol:"vol",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",tempo:"_tempo",qual:"_q",trap:"_trap",score:"_s",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -3672,6 +3724,14 @@ function render(){
       dividendCel(d,false)+
       '<td class="num '+cls(d.revG)+'">'+signed(d.revG)+'</td>'+
       '<td class="num '+cls(d.epsG)+'">'+signed(d.epsG)+'</td>'+
+      (function(){
+        var w=VELD.groeiTempo.waarde(d);
+        var tip=VELD.groeiTempo.uitleg(d);
+        if(!w)return '<td class="num">\u2014</td>';
+        return '<td class="num '+VELD.groeiTempo.kleur(d)+'" title="'+tip.replace(/"/g,"&quot;")+'" style="cursor:help">'+
+          VELD.groeiTempo.tekst(d)+
+          '<span style="display:block;font-size:9.5px;color:var(--muted)">'+(w.v>0?"+":"")+w.v.toFixed(1)+"%/j"+(w.impl?" (markt)":"")+'</span></td>';
+      })()+
       '<td class="num" title="'+
         (d.aaqs!=null?'AAQS: '+d.aaqs+'/10 \u00b7 ':'')+
         (d.roce!=null?'ROCE: '+d.roce+'% \u00b7 ':'')+
@@ -5007,11 +5067,12 @@ if($('demo'))$('demo').onclick=function(){DEMO_ACTIVE=true;CURRENT=DEMO;render()
 $('csv').onclick=function(){
   if(!CURRENT.length){setStatus($('status'),'Niets te exporteren \u2014 draai eerst een screening.',false);return;}
   buildPeers(SCORESET&&SCORESET.length?SCORESET:CURRENT);
-  var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","dividend_pct","omzetgroei_pct","winstgroei_pct","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","potentieel_pct","valtrap","totaalscore"];
+  var head=["symbool","isin","naam","markt","sector","koers","dag_pct","momentum_1m","daling_52w_pct","pe","peg","koers_boekwaarde","dividend_pct","omzetgroei_pct","winstgroei_pct","groei_tempo_pct_jaar","verdubbeling_winst_jaar","roe_pct","marge_pct","schuld_ev","score_momentum","score_waardering","score_groei","score_kwaliteit","potentieel_pct","valtrap","totaalscore"];
   function esc(v){if(v==null)return"";var s=String(v);return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
   var rows=CURRENT.map(function(d){
     var t=valueTrap(d);
-    return [d.symbol,isinOf(d),d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.divYield,d.revG,d.epsG,d.roe,d.margin,d.de,
+    var gtW=VELD.groeiTempo.waarde(d);
+    return [d.symbol,isinOf(d),d.name,d.market,d.sector,d.price,d.chg,d.mom1m,d.dd,d.pe,d.peg,d.pb,d.divYield,d.revG,d.epsG,(gtW?gtW.v:null),VELD.groeiTempo.verdubbeling(gtW),d.roe,d.margin,d.de,
       momentumScore(d),valuationScore(d),growthScore(d),qualityScore(d),
       (d.upside!=null?d.upside:(d.expectedReturn!=null?d.expectedReturn:null)),
       (t.level===2?"val-trap":t.level===1?"let op":"consistent"),totalScore(d)].map(esc).join(";");
