@@ -864,8 +864,6 @@ details[open] > summary{margin-bottom:4px}
           <th data-k="revG" title="Omzetgroei jaar-op-jaar, in procent. Hoeveel de totale verkoop is gegroeid t.o.v. een jaar eerder. Positief = groeiend bedrijf.">Omzet&nbsp;gr.<span class="q">?</span></th>
           <th data-k="epsG" title="Winstgroei per aandeel jaar-op-jaar, in procent. Hoeveel de nettowinst per aandeel is gegroeid. Belangrijker dan omzetgroei: het zegt of het bedrijf ook winstgevender wordt.">Winst&nbsp;gr.<span class="q">?</span></th>
           <th data-k="qual" title="Kwaliteitsscore 0-100 (sector-relatief): combineert rendement op eigen vermogen (ROE), nettowinstmarge en schuldgraad. Hoge winstgevendheid met lage schulden is de academisch best onderbouwde fundamentele factor. Muis over de waarde voor de onderliggende cijfers.">Kwal.<span class="q">?</span></th>
-          <th data-k="comp" title="Compounder-profiel 0-100: rendement-op-rendement. Toetst de drie academisch onderbouwde voorwaarden (Damodaran; Morgan Stanley Equity Compounders): (1) waardecreatie per jaar (ROIC boven de kapitaalkost, of hoge ROE), (2) herbeleggingsruimte (wat niet wordt uitgekeerd kan tegen het eigen rendement compounden), (3) persistentie (10-jaars winstcontinuïteit). Muis over de waarde voor de onderliggende cijfers en de toets ROE \u00d7 herbelegging versus gerealiseerde groei. Staat los van de gewone score: een traag maar gestaag compoundend bedrijf scoort hier hoog zonder momentum.">Comp.<span class="q">?</span></th>
-          <th data-k="combi" title="Gecombineerde score 0-100: het gemiddelde van de gewone score (momentum/waardering/groei/kwaliteit) en het compounder-profiel. Balans tussen \u2018stijgt dit nu tegen een redelijke prijs?\u2019 en \u2018kan dit jarenlang rendement op rendement opleveren?\u2019. Sorteer hierop voor de beste totaalplaat.">Combi.<span class="q">?</span></th>
           <th data-k="upside" title="Wat de markt aan winstgroei inprijst (impl.), afgezet tegen wat het bedrijf werkelijk realiseert. Groen = het bedrijf haalt die groei; rood = de markt verwacht meer dan er tot nu toe gerealiseerd werd. Bij Europese aandelen staat hier het verwachte rendement van Eulerpool. LET OP: dit komt uit een DCF-model. Europese: Eulerpool's verwacht rendement. Anders afgeleid uit de P/E t.o.v. de eigen 5-jaarshistorie. LET OP: een DCF-uitkomst hangt volledig af van aannames over groei en kapitaalkost &mdash; dezelfde berekening kan bij realistische alternatieve aannames een twee keer zo hoge of lage waarde geven. Een \u00b1-teken betekent dat de bandbreedte erg breed is. Gebruik dit als gespreksstarter, niet als oordeel.">Ingeprijsd<span class="q">?</span></th>
           <th data-k="trap" title="Waarschuwing voor tegenstrijdige signalen. Val-trap = oogt goedkoop maar de winst of omzet krimpt (een 'waardeval'). Let op = één tegenstrijdig signaal. Consistent = de cijfers wijzen dezelfde kant op.">Val-trap<span class="q">?</span></th>
           <th data-k="_opgehaald" title="Wanneer de cijfers van dit effect zijn opgehaald. Bij een gemengd universum zie je zo welke gegevens vers zijn en welke van een eerdere screening komen — belangrijk als je scores over universa heen vergelijkt.">Opgehaald<span class="q">?</span></th>
@@ -887,7 +885,7 @@ details[open] > summary{margin-bottom:4px}
     <span class="trap danger">in bezit</span> (exact deze positie), <span class="trap danger">duplicaat</span> (zelfde effect, andere beursnotering),
     <span class="trap warn">via ETF</span> (zit als grote positie in een fonds dat je hebt) of <span class="trap">sector</span> (je hebt er al meerdere in deze sector).
     Met het Type-filter kun je alles wat je al hebt in &eacute;&eacute;n klik verbergen.<br>
-    <b>Compounder-profiel (Comp.):</b> rendement-op-rendement draait op drie academisch onderbouwde voorwaarden (Damodaran's determinanten van groei; Morgan Stanley \u2018Equity Compounders\u2019): <b>waardecreatie per jaar</b> (ROIC boven de kapitaalkost via SecuritiesDB, terugval hoge ROE), <b>herbeleggingsruimte</b> (wat niet wordt uitgekeerd kan tegen het eigen rendement compounden — benaderd als winstdeel dat niet als dividend vertrekt) en <b> persistentie</b> (10-jaars winstcontinuïteit via Eulerpool; zonder moat valt het rendement in \u00e9\u00e9n \u00e9n ~5 jaar terug naar het gemiddelde, Nissim &amp; Penman 2001). Muis over de kolom toont de toets van Damodaran: verwachte groei = ROE \u00d7 herbeleggingsgraad, afgezet tegen de gerealiseerde winstgroei. Holdings scoren hier \u2014: hun winstcijfers zijn portefeuille-herwaarderingen, geen compounder-engine. <b>Combi.</b> is het gemiddelde van beide scores: de balans tussen \u2018stijgt dit nu tegen een redelijke prijs?\u2019 en \u2018kan dit jarenlang rendement op rendement opleveren?\u2019.<br>
+    <b>Compounder-profiel:</b> niet langer als kolom zichtbaar. De accuratessemeting (24-11-2026: Pearson -0,057, Spearman -0,304 over 205 datapunten) liet geen verband zien met overrendement \u2014 uitgerekend de grootste dalers van de periode scoorden er hoog op, doordat het profiel betaalbare kwaliteit op papier beloont maar geen bescherming biedt tegen te hoge marktverwachtingen. De factor blijft door de <b>Meet accuratesse</b>-knop als kandidaat gemeten: keert er ooit een consistent verband terug, dan verdient hij opnieuw een plek in de tabellen. Achterliggende idee (rendement-op-rendement) blijft academisch onderbouwd: waardecreatie per jaar (ROIC boven de kapitaalkost), herbeleggingsruimte (wat niet wordt uitgekeerd kan tegen het eigen rendement compounden) en persistentie (10-jaars winstcontinuiteit; Nissim &amp; Penman 2001).<br>
     <b>Belangrijk:</b> ook gedocumenteerde factoren zijn historische gemiddelden met lange periodes van tegenwind &mdash; geen voorspelling. De score rangschikt aandelen op publieke cijfers die de markt al kent; het blijft een onderzoeksfilter, geen koopsignaal.
   </p>
 
@@ -968,8 +966,6 @@ details[open] > summary{margin-bottom:4px}
             <th data-k="weightedPe" title="Gewogen gemiddelde koers/winst-verhouding van alle onderliggende posities. Zegt of het fonds als geheel duur of goedkoop geprijsd is. Alleen beschikbaar via SecuritiesDB.">Geweg. P/E<span class="q">?</span></th>
             <th data-k="vol" title="Jaarlijkse volatiliteit in procent: hoe sterk de koers gemiddeld schommelt. Hoger = beweeglijker, dus grotere uitslagen in beide richtingen. Alleen beschikbaar via SecuritiesDB.">Volat.<span class="q">?</span></th>
             <th data-k="chg" title="Koersverandering vandaag, in procent.">&Delta; Dag<span class="q">?</span></th>
-            <th data-k="comp" title="Compounder-profiel 0-100: hoe goed dit fonds zelf rendement-op-rendement laat ontstaan. Bij fondsen compoundeert niet de winst maar de kostenrem (30%), de uitkeringsvorm (20%: herbeleggend = dividenden worden automatisch intern herbelegd), risico-gecorrigeerd rendement (25%, Sharpe) en track record (25%). Hefboom- en inverse fondsen scoren laag: dagelijkse herbalancering vernietigt compoundering. Muis over de waarde voor de onderliggende cijfers.">Comp.<span class="q">?</span></th>
-            <th data-k="combi" title="Gecombineerde score 0-100: het gemiddelde van de gewone fondsscore (kosten, spreiding, liquiditeit, track record) en het compounder-profiel. Balans tussen \u2018verstandig fonds?\u2019 en \u2018compoundt dit optimaal?\u2019.">Combi.<span class="q">?</span></th>
             <th data-k="_opgehaald" title="Wanneer de gegevens van dit fonds zijn opgehaald.">Opgehaald<span class="q">?</span></th>
             <th data-k="score">Score &#9662;</th>
           </tr>
@@ -2656,7 +2652,7 @@ var COL_PRESETS={
   minimaal:  ["symbol","price","chg","trap","score"],
   essentie:  ["symbol","sector","price","chg","score"],
   waardering:["symbol","price","pe","peg","pb","divYield","dd","upside","score"],
-  kwaliteit: ["symbol","sector","divYield","revG","epsG","qual","comp","combi","trap","score"],
+  kwaliteit: ["symbol","sector","divYield","revG","epsG","qual","trap","score"],
   alles:     null
 };
 function applyColumnPreset(containerSel,presetKey){
@@ -3594,7 +3590,7 @@ function render(){
     var rows=source.map(function(d){var t=valueTrap(d);return Object.assign({},d,{_m:momentumScore(d),_v:valuationScore(d),_g:growthScore(d),_q:qualityScore(d),_s:totalScore(d),_c:compounderScore(d),_gc:gecombineerdeScore(d),_trap:t.level,_trapR:t.reason,_dek:dekkingAandeel(d)});});
   var volLijst=rows.map(function(d){return d.vol;}).filter(function(v){return v!=null;}).sort(function(a,b){return a-b;});
   var medVol=volLijst.length?volLijst[Math.floor(volLijst.length/2)]:null;
-  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",vol:"vol",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",comp:"_c",combi:"_gc",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
+  var km={symbol:"symbol",isin:"isin",sector:"sector",price:"price",chg:"chg",mom:"mom1m",dd:"dd",vol:"vol",pe:"pe",peg:"peg",pb:"pb",revG:"revG",epsG:"epsG",upside:"upside",_opgehaald:"_opgehaald",qual:"_q",trap:"_trap",score:"_s",altmanZ:"altmanZ",piotroski:"piotroski",divYield:"divYield",mcap:"_mcap"};
   var k=km[sortKey]||"_s";
   rows.sort(function(a,b){var x=a[k],y=b[k];if(typeof x==="string")return sortDir*x.localeCompare(y);if(x==null)x=-Infinity;if(y==null)y=-Infinity;return sortDir*(x-y);});
   $('tbody').innerHTML=rows.map(function(d){
@@ -3663,12 +3659,6 @@ function render(){
         (d.aaqs!=null?'<span style="display:block;font-size:9px;color:var(--muted)">AAQS '+d.aaqs+'/10</span>':
          d.piotroski!=null?'<span style="display:block;font-size:9px;color:var(--muted)">F'+d.piotroski+(d.altmanZ!=null?' Z'+d.altmanZ:'')+'</span>':'')+
         '</td>'+
-      (function(){
-        var c=d._c;
-        return '<td class="num" title="'+compounderDetail(d).replace(/"/g,"&quot;")+'" style="cursor:help">'+
-          (c==null?'\u2014':c)+(c!=null?scoreBadge(c):'')+'</td>'+
-          '<td class="num" title="Gemiddelde van de gewone score ('+d._s+') en het compounder-profiel ('+(d._c==null?'\u2014':d._c)+').">'+d._gc+'</td>';
-      })()+
       (function(){
         var tip=VELD.ingeprijsd.uitleg(d);
         var cls=VELD.ingeprijsd.kleur(d);
@@ -5596,7 +5586,7 @@ function renderEtf(){
     return Object.assign({},d,{_s:(s==null?null:s),_c:etfCompounderScore(d),_gc:etfGecombineerdeScore(d),_dek:det?det.basedOn:null});
   });
   if(ETF_SORT&&ETF_SORT.k){
-    var kk=ETF_SORT.k==="score"?"_s":(ETF_SORT.k==="comp"?"_c":(ETF_SORT.k==="combi"?"_gc":ETF_SORT.k));
+    var kk=ETF_SORT.k==="score"?"_s":ETF_SORT.k;
     rows.sort(function(a,b){return tabelSortVergelijk(a[kk],b[kk],ETF_SORT.dir||-1);});
   }else rows.sort(function(a,b){return b._s-a._s;});
   $('etfBody').innerHTML=rows.map(function(d){
@@ -5619,8 +5609,6 @@ function renderEtf(){
       dividendCel(d,true)+
       '<td class="num">'+num(d.weightedPe,function(v){return v.toFixed(1);})+'</td>'+
       '<td class="num"'+(d.maxDd!=null?' title="Grootste terugval 3 jaar: '+d.maxDd+'%'+(d.sharpe!=null?" \u00b7 Sharpe 1j: "+d.sharpe:"")+'" style="cursor:help"':'')+'>'+num(d.vol,function(v){return v.toFixed(1)+"%";})+'</td>'+
-      '<td class="num" title="'+etfCompounderDetail(d).replace(/"/g,"&quot;")+'" style="cursor:help">'+d._c+scoreBadge(d._c)+'</td>'+
-      '<td class="num" title="Gemiddelde van de gewone score ('+d._s+') en het compounder-profiel ('+d._c+').">'+d._gc+'</td>'+
       '<td class="num '+(d.chg>0?"pos":d.chg<0?"neg":"")+'">'+num(d.chg,function(v){return (v>0?"+":"")+v.toFixed(1)+"%";})+'</td>'+
       opgehaaldCel(d._opgehaald,false)+
       scoreCel(d._s,badge,dekkingBadge({pct:d._dek}))+
